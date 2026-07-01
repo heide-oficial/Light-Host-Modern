@@ -4,6 +4,16 @@ Light Host Modern is a Windows-focused fork of the original [Light Host](https:/
 
 The project keeps the original goal of being a small, practical audio plugin host, but removes the old cross-platform tray-menu workflow and replaces it with a native Windows application experience.
 
+<p align="center">
+  <img src="https://i.imgur.com/sEBRC3e.png" alt="Light Host Modern dashboard" width="48%" />
+  <img src="https://i.imgur.com/S0SbkSI.png" alt="Light Host Modern audio settings" width="48%" />
+</p>
+
+<p align="center">
+  <img src="https://i.imgur.com/0NKJ9mP.png" alt="Light Host Modern plugins view" width="48%" />
+  <img src="https://i.imgur.com/r4lECTa.png" alt="Light Host Modern settings view" width="48%" />
+</p>
+
 ## What Light Host Modern Is
 
 Light Host Modern is a standalone audio plugin host for Windows. It can load VST/VST3 effects, route audio through an active plugin chain, and run from a lightweight tray-host process with a dedicated WinUI 3 interface.
