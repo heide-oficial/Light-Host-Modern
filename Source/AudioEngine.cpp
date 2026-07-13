@@ -2,6 +2,7 @@
 #include "AudioEngine.h"
 #include "PluginWindow.h"
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 void lightHostLog(const String& message);
@@ -194,6 +195,48 @@ namespace
 			return role.toLowerCase();
 
 		return "device";
+	}
+
+	bool backendCanUsePracticalBufferChoices(const String& backendName)
+	{
+		return backendName.startsWithIgnoreCase("Windows Audio")
+			|| backendName.equalsIgnoreCase("DirectSound");
+	}
+
+	void addUniqueSampleRate(std::vector<double>& sampleRates, double sampleRate)
+	{
+		if (sampleRate <= 0.0)
+			return;
+
+		const int roundedRate = roundToInt(sampleRate);
+		const auto alreadyExists = std::any_of(sampleRates.begin(), sampleRates.end(), [roundedRate](double existing)
+		{
+			return roundToInt(existing) == roundedRate;
+		});
+
+		if (!alreadyExists)
+			sampleRates.push_back(sampleRate);
+	}
+
+	void addUniqueBufferSize(std::vector<int>& bufferSizes, int bufferSize)
+	{
+		if (bufferSize <= 0)
+			return;
+
+		if (std::find(bufferSizes.begin(), bufferSizes.end(), bufferSize) == bufferSizes.end())
+			bufferSizes.push_back(bufferSize);
+	}
+
+	void addPracticalSharedAudioBufferChoices(std::vector<int>& bufferSizes)
+	{
+		static constexpr int practicalSizes[] =
+		{
+			32, 64, 96, 128, 160, 192, 224, 256, 320, 384, 448, 512,
+			640, 768, 896, 1024, 1536, 2048, 4096
+		};
+
+		for (const auto size : practicalSizes)
+			addUniqueBufferSize(bufferSizes, size);
 	}
 }
 
@@ -394,8 +437,7 @@ AudioEngine::~AudioEngine()
 	deviceManager.removeAudioCallback(&player);
 	player.setProcessor(nullptr);
 
-	savePluginStates();
-	flushPendingSaves();
+	saveActivePluginChain(true);
 	hostProcessor.publishSnapshot(nullptr);
 }
 
@@ -538,10 +580,21 @@ AudioDeviceConfiguration AudioEngine::getAudioDeviceConfiguration()
 		const auto outputNames = currentDevice->getOutputChannelNames();
 		const auto activeInputs = currentDevice->getActiveInputChannels();
 		const auto activeOutputs = currentDevice->getActiveOutputChannels();
+
+		addUniqueSampleRate(config.sampleRates, currentDevice->getCurrentSampleRate());
 		for (auto rate : rates)
-			config.sampleRates.push_back(rate);
+			addUniqueSampleRate(config.sampleRates, rate);
+
+		addUniqueBufferSize(config.bufferSizes, currentDevice->getCurrentBufferSizeSamples());
 		for (auto size : sizes)
-			config.bufferSizes.push_back(size);
+			addUniqueBufferSize(config.bufferSizes, size);
+
+		if (backendCanUsePracticalBufferChoices(currentDevice->getTypeName()))
+			addPracticalSharedAudioBufferChoices(config.bufferSizes);
+
+		std::sort(config.sampleRates.begin(), config.sampleRates.end());
+		std::sort(config.bufferSizes.begin(), config.bufferSizes.end());
+
 		for (int i = 0; i < inputNames.size(); ++i)
 		{
 			config.inputChannelNames.push_back(inputNames[i]);
@@ -1704,22 +1757,61 @@ bool AudioEngine::setAudioDeviceChoiceEnabledByIndex(int index, bool enabled)
 bool AudioEngine::setAudioSampleRate(double sampleRate)
 {
 	if (sampleRate <= 0.0)
-		return false;
-
-	AudioDeviceManager::AudioDeviceSetup setup;
-	deviceManager.getAudioDeviceSetup(setup);
-	if ((int) setup.sampleRate == (int) sampleRate)
-		return true;
-
-	setup.sampleRate = sampleRate;
-	const String error = deviceManager.setAudioDeviceSetup(setup, true);
-	if (error.isNotEmpty())
 	{
-		Logger::writeToLog("Light Host Modern: failed to set sample rate: " + error);
+		lastAudioConfigurationError = "Invalid sample rate: " + String(sampleRate, 0);
 		return false;
 	}
 
+	lastAudioConfigurationError.clear();
+	const int requestedRate = roundToInt(sampleRate);
+
+	AudioDeviceManager::AudioDeviceSetup previousSetup;
+	deviceManager.getAudioDeviceSetup(previousSetup);
+	if (auto* currentDevice = deviceManager.getCurrentAudioDevice())
+	{
+		if (roundToInt(currentDevice->getCurrentSampleRate()) == requestedRate)
+		{
+			rememberLastSelectedAudioDevice();
+			return true;
+		}
+	}
+	else if (roundToInt(previousSetup.sampleRate) == requestedRate)
+	{
+		return true;
+	}
+
+	AudioDeviceManager::AudioDeviceSetup setup = previousSetup;
+	setup.sampleRate = sampleRate;
+	const String error = deviceManager.setAudioDeviceSetup(setup, true);
+	AudioIODevice* selectedDevice = deviceManager.getCurrentAudioDevice();
+	const bool deviceOpen = selectedDevice != nullptr && selectedDevice->isOpen();
+	const int actualRate = selectedDevice != nullptr ? roundToInt(selectedDevice->getCurrentSampleRate()) : 0;
+
+	if (error.isNotEmpty() || !deviceOpen || actualRate != requestedRate)
+	{
+		lastAudioConfigurationError = "Failed to set sample rate to " + String(requestedRate) + " Hz";
+		if (error.isNotEmpty())
+			lastAudioConfigurationError += ": " + error;
+		else if (!deviceOpen)
+			lastAudioConfigurationError += ": audio device did not open";
+		else
+			lastAudioConfigurationError += ": driver kept " + String(actualRate) + " Hz";
+
+		Logger::writeToLog("Light Host Modern: " + lastAudioConfigurationError);
+		lightHostLog("AudioEngine setAudioSampleRate failed: " + lastAudioConfigurationError);
+		const String restoreError = deviceManager.setAudioDeviceSetup(previousSetup, true);
+		if (restoreError.isNotEmpty())
+			lightHostLog("AudioEngine setAudioSampleRate restore failed: " + restoreError);
+		return false;
+	}
+
+	lightHostLog("AudioEngine setAudioSampleRate succeeded requested=" + String(requestedRate)
+		+ " actual=" + String(actualRate));
 	saveAudioDeviceState();
+	rememberLastSelectedAudioDevice();
+	failedAudioRecoveryAttempts = 0;
+	audioRecoveryState = "running";
+	audioRecoveryMessage.clear();
 	audioConfigVersion++;
 	loadActivePlugins();
 	return true;
@@ -1728,22 +1820,60 @@ bool AudioEngine::setAudioSampleRate(double sampleRate)
 bool AudioEngine::setAudioBufferSize(int bufferSize)
 {
 	if (bufferSize <= 0)
-		return false;
-
-	AudioDeviceManager::AudioDeviceSetup setup;
-	deviceManager.getAudioDeviceSetup(setup);
-	if (setup.bufferSize == bufferSize)
-		return true;
-
-	setup.bufferSize = bufferSize;
-	const String error = deviceManager.setAudioDeviceSetup(setup, true);
-	if (error.isNotEmpty())
 	{
-		Logger::writeToLog("Light Host Modern: failed to set buffer size: " + error);
+		lastAudioConfigurationError = "Invalid audio buffer size: " + String(bufferSize);
 		return false;
 	}
 
+	lastAudioConfigurationError.clear();
+
+	AudioDeviceManager::AudioDeviceSetup previousSetup;
+	deviceManager.getAudioDeviceSetup(previousSetup);
+	if (auto* currentDevice = deviceManager.getCurrentAudioDevice())
+	{
+		if (currentDevice->getCurrentBufferSizeSamples() == bufferSize)
+		{
+			rememberLastSelectedAudioDevice();
+			return true;
+		}
+	}
+	else if (previousSetup.bufferSize == bufferSize)
+	{
+		return true;
+	}
+
+	AudioDeviceManager::AudioDeviceSetup setup = previousSetup;
+	setup.bufferSize = bufferSize;
+	const String error = deviceManager.setAudioDeviceSetup(setup, true);
+	AudioIODevice* selectedDevice = deviceManager.getCurrentAudioDevice();
+	const bool deviceOpen = selectedDevice != nullptr && selectedDevice->isOpen();
+	const int actualBufferSize = selectedDevice != nullptr ? selectedDevice->getCurrentBufferSizeSamples() : 0;
+
+	if (error.isNotEmpty() || !deviceOpen || actualBufferSize != bufferSize)
+	{
+		lastAudioConfigurationError = "Failed to set audio buffer size to " + String(bufferSize) + " samples";
+		if (error.isNotEmpty())
+			lastAudioConfigurationError += ": " + error;
+		else if (!deviceOpen)
+			lastAudioConfigurationError += ": audio device did not open";
+		else
+			lastAudioConfigurationError += ": driver kept " + String(actualBufferSize) + " samples";
+
+		Logger::writeToLog("Light Host Modern: " + lastAudioConfigurationError);
+		lightHostLog("AudioEngine setAudioBufferSize failed: " + lastAudioConfigurationError);
+		const String restoreError = deviceManager.setAudioDeviceSetup(previousSetup, true);
+		if (restoreError.isNotEmpty())
+			lightHostLog("AudioEngine setAudioBufferSize restore failed: " + restoreError);
+		return false;
+	}
+
+	lightHostLog("AudioEngine setAudioBufferSize succeeded requested=" + String(bufferSize)
+		+ " actual=" + String(actualBufferSize));
 	saveAudioDeviceState();
+	rememberLastSelectedAudioDevice();
+	failedAudioRecoveryAttempts = 0;
+	audioRecoveryState = "running";
+	audioRecoveryMessage.clear();
 	audioConfigVersion++;
 	loadActivePlugins();
 	return true;
@@ -2285,6 +2415,7 @@ bool AudioEngine::addKnownPluginByIndex(int sortedIndex)
 		const auto loadedMessage = "Light Host Modern: plugin loaded successfully '" + plugin.name + "'";
 		Logger::writeToLog(loadedMessage);
 		lightHostLog(loadedMessage);
+		saveActivePluginChain(true);
 		return true;
 	}
 
@@ -2298,7 +2429,7 @@ bool AudioEngine::addKnownPluginByIndex(int sortedIndex)
 	activePluginList.removeType(plugin);
 	markSettingsDirty();
 	loadActivePlugins();
-	flushPendingSaves();
+	saveActivePluginChain(false);
 	return false;
 }
 
@@ -2345,6 +2476,7 @@ void AudioEngine::duplicatePlugin(int sortedIndex)
 	markSettingsDirty();
 	activePluginList.addType(plugin);
 	loadActivePlugins();
+	saveActivePluginChain(true);
 }
 
 int AudioEngine::removeKnownPluginByIndex(int sortedIndex)
@@ -2377,7 +2509,7 @@ int AudioEngine::removeKnownPluginByIndex(int sortedIndex)
 		markSettingsDirty();
 		loadActivePlugins();
 	}
-	flushPendingSaves();
+	saveActivePluginChain(activeRemoved > 0);
 	return activeRemoved;
 }
 
@@ -2405,7 +2537,7 @@ int AudioEngine::clearKnownPlugins()
 		loadActivePlugins();
 	}
 
-	flushPendingSaves();
+	saveActivePluginChain(!activeTypes.isEmpty());
 	return activeTypes.size();
 }
 
@@ -2453,6 +2585,7 @@ void AudioEngine::removePlugin(int sortedIndex)
 
 	activePluginList.removeType(pluginToDelete);
 	loadActivePlugins();
+	saveActivePluginChain(false);
 }
 
 void AudioEngine::movePluginUp(int sortedIndex)
@@ -2471,6 +2604,7 @@ void AudioEngine::movePluginUp(int sortedIndex)
 
 	markSettingsDirty();
 	loadActivePlugins();
+	saveActivePluginChain(false);
 }
 
 void AudioEngine::movePluginDown(int sortedIndex)
@@ -2486,6 +2620,7 @@ void AudioEngine::movePluginDown(int sortedIndex)
 
 	markSettingsDirty();
 	loadActivePlugins();
+	saveActivePluginChain(false);
 }
 
 void AudioEngine::movePluginToIndex(int fromSortedIndex, int toSortedIndex)
@@ -2511,6 +2646,7 @@ void AudioEngine::movePluginToIndex(int fromSortedIndex, int toSortedIndex)
 
 	markSettingsDirty();
 	loadActivePlugins();
+	saveActivePluginChain(false);
 }
 
 void AudioEngine::setPluginBypassed(int sortedIndex, bool shouldBypass)
@@ -2526,6 +2662,8 @@ void AudioEngine::setPluginBypassed(int sortedIndex, bool shouldBypass)
 
 	if (auto* const slot = findActiveSlotFor(timeSorted[(size_t) sortedIndex]))
 		slot->bypassed.store(shouldBypass, std::memory_order_release);
+
+	saveActivePluginChain(false);
 }
 
 void AudioEngine::deletePluginStates()
@@ -2535,6 +2673,7 @@ void AudioEngine::deletePluginStates()
 		pluginStateStore.removeValue("state", plugin);
 
 	markSettingsDirty();
+	flushPendingSaves();
 }
 
 void AudioEngine::savePluginStates()
@@ -2571,6 +2710,26 @@ void AudioEngine::savePluginStates()
 		markSettingsDirty();
 		flushPendingSaves();
 	}
+}
+
+void AudioEngine::saveActivePluginList()
+{
+	std::unique_ptr<XmlElement> savedPluginList(activePluginList.createXml());
+	if (savedPluginList == nullptr)
+		return;
+
+	getAppProperties().getUserSettings()->setValue("pluginListActive", savedPluginList.get());
+	lightHostLog("AudioEngine saved active plugin list count=" + String(activePluginList.getNumTypes()));
+	markSettingsDirty();
+}
+
+void AudioEngine::saveActivePluginChain(bool saveProcessorStates)
+{
+	if (saveProcessorStates)
+		savePluginStates();
+
+	saveActivePluginList();
+	flushPendingSaves();
 }
 
 void AudioEngine::saveAudioDeviceState()
@@ -2776,12 +2935,7 @@ void AudioEngine::changeListenerCallback(ChangeBroadcaster* changed)
 	else if (changed == &activePluginList)
 	{
 		chainVersion++;
-		std::unique_ptr<XmlElement> savedPluginList(activePluginList.createXml());
-		if (savedPluginList != nullptr)
-		{
-			getAppProperties().getUserSettings()->setValue("pluginListActive", savedPluginList.get());
-			markSettingsDirty();
-		}
+		saveActivePluginList();
 	}
 	else if (changed == &deviceManager)
 	{

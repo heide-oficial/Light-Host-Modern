@@ -209,6 +209,8 @@ private:
 	void recordProcessFailures();
 	void logDiagnosticsSnapshot();
 	std::unique_ptr<XmlElement> getXmlValueOrClear(const String& key);
+	void saveActivePluginList();
+	void saveActivePluginChain(bool saveProcessorStates);
 	void rememberLastSelectedAudioDevice();
 	bool applyPreferredAudioDevice(AudioRecoveryConfiguration const& recoveryConfig, bool manualRetry);
 	bool isAudioBackendBlocked(const String& backendName) const;

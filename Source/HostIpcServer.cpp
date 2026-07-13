@@ -463,12 +463,32 @@ String HostIpcServer::processRequest(const String& request)
 
 	if (command == "set-sample-rate")
 	{
-		return commandResult(engine.setAudioSampleRate(payload.getDoubleValue()));
+		const bool changed = engine.setAudioSampleRate(payload.getDoubleValue());
+		if (!changed)
+		{
+			const String message = engine.getLastAudioConfigurationError().isNotEmpty()
+				? engine.getLastAudioConfigurationError()
+				: "Sample rate could not be changed";
+			lightHostLog("IPC set-sample-rate failed value='" + payload + "' message='" + message + "'");
+			return "{\"status\":\"error\",\"message\":" + quote(message) + "}";
+		}
+
+		return commandOk();
 	}
 
 	if (command == "set-buffer-size")
 	{
-		return commandResult(engine.setAudioBufferSize(index));
+		const bool changed = engine.setAudioBufferSize(index);
+		if (!changed)
+		{
+			const String message = engine.getLastAudioConfigurationError().isNotEmpty()
+				? engine.getLastAudioConfigurationError()
+				: "Audio buffer size could not be changed";
+			lightHostLog("IPC set-buffer-size failed value='" + payload + "' message='" + message + "'");
+			return "{\"status\":\"error\",\"message\":" + quote(message) + "}";
+		}
+
+		return commandOk();
 	}
 
 	if (command == "set-input-channels")
