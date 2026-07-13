@@ -518,7 +518,7 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                             <TextBlock Text="Light Host Modern" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <TextBlock Text="v1.1.0" Foreground="{ThemeResource AppTextSecondaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Text="v1.1.1" Foreground="{ThemeResource AppTextSecondaryBrush}" VerticalAlignment="Center" />
                                         </StackPanel>
                                         <Button x:Name="RepositoryButton" Grid.Column="1" AutomationProperties.Name="Go to Light Host Modern repository" Width="36" MinWidth="36" MinHeight="36" Padding="0" Click="RepositoryButton_Click">
                                             <Button.Content>

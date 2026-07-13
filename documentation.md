@@ -132,7 +132,7 @@ The host supports the following command-line options:
 | `--reset-settings` / `-reset-settings` | Deletes saved settings and the recent crashed plugin list before normal startup. |
 | `--clear-failed-plugins` / `-clear-failed-plugins` | Clears failed plugin quarantine keys from the settings file. |
 | `--safe-mode` / `-safe-mode` | Starts without restoring potentially unsafe plugin state. Useful when a saved chain crashes on startup. |
-| `--restore-active-plugins` | Restores the active plugin chain at startup. |
+| `--no-restore-active-plugins` | Skips active plugin chain restore at startup. Safe mode also skips active chain restore. |
 | `-multi-instance=<suffix>` | Starts an isolated instance using a settings suffix. This is an advanced/test path. |
 
 Recovery options are intentionally available from the executable itself so users can repair broken settings or failed plugin states without manually editing files.

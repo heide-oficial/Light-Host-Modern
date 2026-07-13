@@ -112,7 +112,7 @@ private:
 class DeviceController
 {
 public:
-	String initialise(AudioDeviceManager& deviceManager, const XmlElement* savedAudioState);
+	String initialise(AudioDeviceManager& deviceManager, const XmlElement* savedAudioState, bool allowDefaultFallback);
 	void recoverIfNeeded(AudioDeviceManager& deviceManager, AudioRecoveryConfiguration const& recoveryConfig,
 		int& failedAudioRecoveryAttempts, String& recoveryState, String& recoveryMessage);
 	DiagnosticsSnapshot createDiagnosticsSnapshot(AudioDeviceManager& deviceManager) const;
@@ -216,6 +216,7 @@ private:
 	bool isAudioDeviceChoiceAllowed(const String& backendName,
 	                                const String& inputDeviceName,
 	                                const String& outputDeviceName) const;
+	bool currentAudioDeviceMatchesPreferred(AudioRecoveryConfiguration const& recoveryConfig) const;
 	void closeCurrentAudioDeviceIfBlocked(const String& context);
 
 	bool safeMode = false;

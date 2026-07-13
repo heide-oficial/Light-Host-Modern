@@ -251,16 +251,24 @@ void PluginStateStore::flushIfDirty()
 	getAppProperties().getUserSettings()->saveIfNeeded();
 }
 
-String DeviceController::initialise(AudioDeviceManager& deviceManager, const XmlElement* savedAudioState)
+String DeviceController::initialise(AudioDeviceManager& deviceManager, const XmlElement* savedAudioState, bool allowDefaultFallback)
 {
-	String audioError = deviceManager.initialise(256, 256, savedAudioState, true);
+	String audioError = deviceManager.initialise(256, 256, savedAudioState, allowDefaultFallback);
 	if (audioError.isNotEmpty())
 	{
 		Logger::writeToLog("Light Host Modern: audio device initialisation failed: " + audioError);
 		getAppProperties().getUserSettings()->removeValue("audioDeviceState");
-		audioError = deviceManager.initialiseWithDefaultDevices(256, 256);
-		if (audioError.isNotEmpty())
-			Logger::writeToLog("Light Host Modern: default audio device initialisation failed: " + audioError);
+		if (allowDefaultFallback)
+		{
+			audioError = deviceManager.initialiseWithDefaultDevices(256, 256);
+			if (audioError.isNotEmpty())
+				Logger::writeToLog("Light Host Modern: default audio device initialisation failed: " + audioError);
+		}
+		else
+		{
+			Logger::writeToLog("Light Host Modern: default audio fallback is disabled while device persistence is active");
+			deviceManager.initialise(0, 0, nullptr, false);
+		}
 	}
 
 	return audioError;
@@ -329,9 +337,28 @@ AudioEngine::AudioEngine(bool startInSafeMode, bool shouldRestoreActivePluginsOn
 {
 	addEnabledPluginFormats(formatManager);
 
-	std::unique_ptr<XmlElement> savedAudioState(safeMode ? nullptr : getXmlValueOrClear("audioDeviceState"));
-	deviceController.initialise(deviceManager, savedAudioState.get());
-	closeCurrentAudioDeviceIfBlocked("startup");
+	const auto startupRecoveryConfig = getAudioRecoveryConfiguration();
+	const String startupRecoveryMode = normaliseAudioPersistenceMode(startupRecoveryConfig.mode);
+	const bool audioPersistenceEnabled = !safeMode && startupRecoveryMode != "disabled";
+	std::unique_ptr<XmlElement> savedAudioState((safeMode || audioPersistenceEnabled) ? nullptr : getXmlValueOrClear("audioDeviceState"));
+	deviceController.initialise(deviceManager, savedAudioState.get(), !audioPersistenceEnabled);
+	if (audioPersistenceEnabled)
+	{
+		audioRecoveryState = "retrying";
+		audioRecoveryMessage = "Restoring preferred audio device.";
+		if (!applyPreferredAudioDevice(startupRecoveryConfig, false))
+		{
+			failedAudioRecoveryAttempts = 0;
+			audioRecoveryState = "retrying";
+			if (audioRecoveryMessage.isEmpty())
+				audioRecoveryMessage = "Waiting for preferred audio device.";
+			lightHostLog("AudioEngine startup preferred audio restore pending: " + audioRecoveryMessage);
+		}
+	}
+	else
+	{
+		closeCurrentAudioDeviceIfBlocked("startup");
+	}
 
 	player.setProcessor(&hostProcessor);
 	deviceManager.addAudioCallback(&player);
@@ -676,6 +703,49 @@ bool AudioEngine::isAudioDeviceChoiceAllowed(const String& backendName,
 		&& !isAudioDeviceBlocked(backendName, "output", outputDeviceName);
 }
 
+bool AudioEngine::currentAudioDeviceMatchesPreferred(AudioRecoveryConfiguration const& recoveryConfig) const
+{
+	const String mode = normaliseAudioPersistenceMode(recoveryConfig.mode);
+	if (mode == "disabled")
+		return true;
+
+	AudioIODevice* currentDevice = deviceManager.getCurrentAudioDevice();
+	if (currentDevice == nullptr || !currentDevice->isOpen())
+		return false;
+
+	const String targetBackend = mode == "custom" ? recoveryConfig.customBackend : recoveryConfig.lastBackend;
+	String targetInput = mode == "custom" ? recoveryConfig.customInputDevice : recoveryConfig.lastInputDevice;
+	String targetOutput = mode == "custom" ? recoveryConfig.customOutputDevice : recoveryConfig.lastOutputDevice;
+
+	if (targetBackend.isEmpty() || !currentDevice->getTypeName().equalsIgnoreCase(targetBackend))
+		return false;
+
+	const bool isAsioBackend = targetBackend.equalsIgnoreCase("ASIO");
+	if (isAsioBackend)
+	{
+		const String targetDevice = targetOutput.isNotEmpty() ? targetOutput : targetInput;
+		if (targetDevice.isEmpty())
+			return false;
+
+		return currentDevice->getName().equalsIgnoreCase(targetDevice)
+			&& isAudioDeviceChoiceAllowed(targetBackend, targetDevice, targetDevice);
+	}
+
+	AudioDeviceManager::AudioDeviceSetup setup;
+	const_cast<AudioDeviceManager&>(deviceManager).getAudioDeviceSetup(setup);
+
+	if (targetInput.isEmpty() && targetOutput.isEmpty())
+		return false;
+
+	if (targetInput.isNotEmpty() && !setup.inputDeviceName.equalsIgnoreCase(targetInput))
+		return false;
+
+	if (targetOutput.isNotEmpty() && !setup.outputDeviceName.equalsIgnoreCase(targetOutput))
+		return false;
+
+	return isAudioDeviceChoiceAllowed(targetBackend, setup.inputDeviceName, setup.outputDeviceName);
+}
+
 void AudioEngine::closeCurrentAudioDeviceIfBlocked(const String& context)
 {
 	AudioIODevice* currentDevice = deviceManager.getCurrentAudioDevice();
@@ -827,16 +897,31 @@ bool AudioEngine::applyPreferredAudioDevice(AudioRecoveryConfiguration const& re
 
 	const String error = deviceManager.setAudioDeviceSetup(setup, true);
 	AudioIODevice* selectedDevice = deviceManager.getCurrentAudioDevice();
+	AudioDeviceManager::AudioDeviceSetup selectedSetup;
+	deviceManager.getAudioDeviceSetup(selectedSetup);
+	const bool selectedBackendMismatch = selectedDevice == nullptr
+		|| !selectedDevice->getTypeName().equalsIgnoreCase(targetBackend);
 	const bool selectedDeviceMismatch = isAsioBackend
 		&& selectedDevice != nullptr
 		&& targetOutput.isNotEmpty()
-		&& selectedDevice->getName() != targetOutput;
+		&& !selectedDevice->getName().equalsIgnoreCase(targetOutput);
+	const bool selectedSetupMismatch = !isAsioBackend
+		&& ((targetInput.isNotEmpty() && !selectedSetup.inputDeviceName.equalsIgnoreCase(targetInput))
+			|| (targetOutput.isNotEmpty() && !selectedSetup.outputDeviceName.equalsIgnoreCase(targetOutput)));
 
-	if (error.isNotEmpty() || selectedDevice == nullptr || !selectedDevice->isOpen() || selectedDeviceMismatch)
+	if (error.isNotEmpty()
+		|| selectedDevice == nullptr
+		|| !selectedDevice->isOpen()
+		|| selectedBackendMismatch
+		|| selectedDeviceMismatch
+		|| selectedSetupMismatch)
 	{
 		lastAudioConfigurationError = "Failed to reconnect preferred audio device '"
 			+ quotedTarget(targetBackend, targetInput, targetOutput) + "': "
-			+ (error.isNotEmpty() ? error : (selectedDeviceMismatch ? "selected ASIO device did not match requested device" : "device did not open"));
+			+ (error.isNotEmpty() ? error
+				: (selectedBackendMismatch ? "selected backend did not match requested backend"
+					: (selectedDeviceMismatch ? "selected ASIO device did not match requested device"
+						: (selectedSetupMismatch ? "selected input/output device did not match requested device" : "device did not open"))));
 		audioRecoveryMessage = lastAudioConfigurationError;
 		lightHostLog("AudioEngine audio persistence failed: " + lastAudioConfigurationError);
 		return false;
@@ -2618,10 +2703,23 @@ void AudioEngine::timerCallback(int timerId)
 			if (device == nullptr || !device->isOpen() || !device->isPlaying())
 				return;
 
-			failedAudioRecoveryAttempts = 0;
-			audioRecoveryState = "running";
-			audioRecoveryMessage.clear();
-			return;
+			if (mode != "disabled" && !currentAudioDeviceMatchesPreferred(recoveryConfig))
+			{
+				AudioDeviceManager::AudioDeviceSetup setup;
+				deviceManager.getAudioDeviceSetup(setup);
+				audioRecoveryState = "retrying";
+				audioRecoveryMessage = "Current audio device does not match the preferred device; reconnecting.";
+				lightHostLog("AudioEngine audio persistence rejected fallback device current='"
+					+ quotedTarget(device->getTypeName(), setup.inputDeviceName, setup.outputDeviceName) + "'");
+				deviceManager.closeAudioDevice();
+			}
+			else
+			{
+				failedAudioRecoveryAttempts = 0;
+				audioRecoveryState = "running";
+				audioRecoveryMessage.clear();
+				return;
+			}
 		}
 
 		if (mode == "disabled")
@@ -2687,6 +2785,34 @@ void AudioEngine::changeListenerCallback(ChangeBroadcaster* changed)
 	}
 	else if (changed == &deviceManager)
 	{
+		const auto recoveryConfig = getAudioRecoveryConfiguration();
+		const String mode = normaliseAudioPersistenceMode(recoveryConfig.mode);
+		if (mode != "disabled")
+		{
+			AudioIODevice* device = deviceManager.getCurrentAudioDevice();
+			if (device == nullptr || !device->isOpen())
+			{
+				audioRecoveryState = "retrying";
+				audioRecoveryMessage = "Preferred audio device is unavailable; waiting to reconnect.";
+				audioConfigVersion++;
+				startTimer(audioWatchdogTimerId, 250);
+				return;
+			}
+
+			if (!currentAudioDeviceMatchesPreferred(recoveryConfig))
+			{
+				AudioDeviceManager::AudioDeviceSetup setup;
+				deviceManager.getAudioDeviceSetup(setup);
+				audioRecoveryState = "retrying";
+				audioRecoveryMessage = "Audio device changed away from the preferred device; waiting to reconnect.";
+				audioConfigVersion++;
+				lightHostLog("AudioEngine audio persistence ignored non-preferred device change current='"
+					+ quotedTarget(device->getTypeName(), setup.inputDeviceName, setup.outputDeviceName) + "'");
+				startTimer(audioWatchdogTimerId, 250);
+				return;
+			}
+		}
+
 		failedAudioRecoveryAttempts = 0;
 		audioRecoveryState = "running";
 		audioRecoveryMessage.clear();

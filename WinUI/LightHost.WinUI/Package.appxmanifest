@@ -8,7 +8,7 @@
   <Identity
     Name="LightHost.WinUI"
     Publisher="CN=Light Host"
-    Version="1.1.0.0" />
+    Version="1.1.1.0" />
 
   <Properties>
     <DisplayName>Light Host Modern</DisplayName>

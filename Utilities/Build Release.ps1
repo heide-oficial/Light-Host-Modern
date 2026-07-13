@@ -23,7 +23,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $appName = "Light Host Modern"
-$appVersion = "1.1.0"
+$appVersion = "1.1.1"
 $exeName = "Light Host Modern.exe"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $outRoot = Join-Path $repoRoot "out\release"
@@ -565,7 +565,7 @@ if (Test-Path -LiteralPath `$installRoot) { Remove-Item -LiteralPath `$installRo
     $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\LightHostModern"
     New-Item -Path $uninstallKey -Force | Out-Null
     Set-ItemProperty -Path $uninstallKey -Name DisplayName -Value $appName
-    Set-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value "1.1.0"
+    Set-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value $appVersion
     Set-ItemProperty -Path $uninstallKey -Name Publisher -Value "Light Host Modern"
     Set-ItemProperty -Path $uninstallKey -Name InstallLocation -Value $installRoot
     Set-ItemProperty -Path $uninstallKey -Name DisplayIcon -Value $exePath

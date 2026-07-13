@@ -47,7 +47,9 @@ public:
         LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
 
         const bool safeMode = hasParameter("--safe-mode") || hasParameter("-safe-mode");
-        const bool restoreActivePlugins = hasParameter("--restore-active-plugins");
+        const bool restoreActivePlugins = !safeMode
+            && !hasParameter("--no-restore-active-plugins")
+            && !hasParameter("-no-restore-active-plugins");
         mainWindow = std::make_unique<IconMenu>(safeMode, debugEnabled, restoreActivePlugins);
     }
 
