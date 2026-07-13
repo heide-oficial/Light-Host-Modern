@@ -4,9 +4,13 @@
 namespace
 {
 	bool debugEnabled = false;
+	std::wstring debugFilePath;
 
 	std::wstring debugLogPath()
 	{
+		if (!debugFilePath.empty())
+			return debugFilePath;
+
 		wchar_t tempPath[MAX_PATH] = {};
 		if (GetTempPathW(MAX_PATH, tempPath) == 0)
 			return L"LightHostWinUI-debug.log";
@@ -32,6 +36,11 @@ void setWinUIDebugEnabled(bool enabled)
 	debugEnabled = enabled;
 }
 
+void setWinUIDebugLogPath(std::wstring const& path)
+{
+	debugFilePath = path;
+}
+
 void initialiseWinUIDebugConsole()
 {
 	if (!debugEnabled || GetConsoleWindow() != nullptr)
@@ -55,6 +64,8 @@ void initialiseWinUIDebugConsole()
 	std::clog.clear();
 
 	winUILog(attachedToParent ? "Debug console attached to LightHost." : "Debug console opened.");
+	if (!debugLogPath().empty())
+		winUILog("Debug log file: " + winrt::to_string(debugLogPath()));
 }
 
 void winUILog(std::string const& message)

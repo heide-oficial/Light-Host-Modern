@@ -212,6 +212,7 @@ private:
 	void saveActivePluginList();
 	void saveActivePluginChain(bool saveProcessorStates);
 	void rememberLastSelectedAudioDevice();
+	void rememberManualSelectedAudioDevice();
 	bool applyPreferredAudioDevice(AudioRecoveryConfiguration const& recoveryConfig, bool manualRetry);
 	bool isAudioBackendBlocked(const String& backendName) const;
 	bool isAudioDeviceBlocked(const String& backendName, const String& role, const String& deviceName) const;
@@ -226,6 +227,8 @@ private:
 	bool settingsDirty = false;
 	bool audioDeviceStateDirty = false;
 	int failedAudioRecoveryAttempts = 0;
+	uint32 lastManualAudioConfigurationChangeMs = 0;
+	bool manualAudioSelectionInProgress = false;
 	String audioRecoveryState = "running";
 	String audioRecoveryMessage;
 	uint64 chainReloadCount = 0;

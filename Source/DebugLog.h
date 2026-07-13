@@ -5,6 +5,7 @@
 
 void setLightHostDebugEnabled(bool enabled);
 bool isLightHostDebugEnabled();
+String getLightHostDebugLogPath();
 void openLightHostDebugConsoleIfNeeded();
 void lightHostLog(const String& message);
 void installLightHostCrashDiagnostics();

@@ -841,6 +841,34 @@ void AudioEngine::rememberLastSelectedAudioDevice()
 	markSettingsDirty();
 }
 
+void AudioEngine::rememberManualSelectedAudioDevice()
+{
+	lastManualAudioConfigurationChangeMs = Time::getMillisecondCounter();
+	rememberLastSelectedAudioDevice();
+
+	const auto recoveryConfig = getAudioRecoveryConfiguration();
+	if (normaliseAudioPersistenceMode(recoveryConfig.mode) != "custom")
+		return;
+
+	AudioIODevice* currentDevice = deviceManager.getCurrentAudioDevice();
+	AudioDeviceManager::AudioDeviceSetup setup;
+	deviceManager.getAudioDeviceSetup(setup);
+
+	const String backend = currentDevice != nullptr ? currentDevice->getTypeName()
+		: (deviceManager.getCurrentDeviceTypeObject() != nullptr ? deviceManager.getCurrentDeviceTypeObject()->getTypeName() : String());
+
+	if (backend.isEmpty())
+		return;
+
+	auto* settings = getAppProperties().getUserSettings();
+	settings->setValue("audioPersistenceCustomBackend", backend);
+	settings->setValue("audioPersistenceCustomInputDevice", setup.inputDeviceName);
+	settings->setValue("audioPersistenceCustomOutputDevice", setup.outputDeviceName);
+	markSettingsDirty();
+	lightHostLog("AudioEngine manual audio selection updated custom persistence target='"
+		+ quotedTarget(backend, setup.inputDeviceName, setup.outputDeviceName) + "'");
+}
+
 bool AudioEngine::applyPreferredAudioDevice(AudioRecoveryConfiguration const& recoveryConfig, bool manualRetry)
 {
 	const String mode = normaliseAudioPersistenceMode(recoveryConfig.mode);
@@ -992,6 +1020,8 @@ bool AudioEngine::applyPreferredAudioDevice(AudioRecoveryConfiguration const& re
 
 bool AudioEngine::setAudioBackendByIndex(int backendIndex)
 {
+	ScopedValueSetter<bool> manualAudioSelectionScope(manualAudioSelectionInProgress, true);
+	lastManualAudioConfigurationChangeMs = Time::getMillisecondCounter();
 	auto& deviceTypes = deviceManager.getAvailableDeviceTypes();
 	lastAudioConfigurationError.clear();
 	lightHostLog("AudioEngine setAudioBackendByIndex requested index=" + String(backendIndex)
@@ -1043,7 +1073,7 @@ bool AudioEngine::setAudioBackendByIndex(int backendIndex)
 		if (currentDevice->getTypeName() == typeName)
 		{
 			lightHostLog("AudioEngine setAudioBackendByIndex no-op; already using backend '" + typeName + "'");
-			rememberLastSelectedAudioDevice();
+			rememberManualSelectedAudioDevice();
 			return true;
 		}
 	}
@@ -1162,7 +1192,7 @@ bool AudioEngine::setAudioBackendByIndex(int backendIndex)
 			&& selectedDevice->isOpen())
 		{
 			saveAudioDeviceState();
-			rememberLastSelectedAudioDevice();
+			rememberManualSelectedAudioDevice();
 			failedAudioRecoveryAttempts = 0;
 			audioRecoveryState = "running";
 			audioRecoveryMessage.clear();
@@ -1201,6 +1231,8 @@ bool AudioEngine::setAudioBackendByIndex(int backendIndex)
 
 bool AudioEngine::setAudioInputDeviceByIndex(int deviceIndex)
 {
+	ScopedValueSetter<bool> manualAudioSelectionScope(manualAudioSelectionInProgress, true);
+	lastManualAudioConfigurationChangeMs = Time::getMillisecondCounter();
 	lastAudioConfigurationError.clear();
 	lightHostLog("AudioEngine setAudioInputDeviceByIndex requested index=" + String(deviceIndex));
 
@@ -1253,14 +1285,14 @@ bool AudioEngine::setAudioInputDeviceByIndex(int deviceIndex)
 		&& setup.outputDeviceName == requestedInputDevice)
 	{
 		lightHostLog("AudioEngine setAudioInputDeviceByIndex no-op; already using ASIO device='" + requestedInputDevice + "'");
-		rememberLastSelectedAudioDevice();
+		rememberManualSelectedAudioDevice();
 		return true;
 	}
 
 	if (!isAsioBackend && setup.inputDeviceName == requestedInputDevice)
 	{
 		lightHostLog("AudioEngine setAudioInputDeviceByIndex no-op; already using input='" + setup.inputDeviceName + "'");
-		rememberLastSelectedAudioDevice();
+		rememberManualSelectedAudioDevice();
 		return true;
 	}
 
@@ -1326,7 +1358,7 @@ bool AudioEngine::setAudioInputDeviceByIndex(int deviceIndex)
 	}
 
 	saveAudioDeviceState();
-	rememberLastSelectedAudioDevice();
+	rememberManualSelectedAudioDevice();
 	failedAudioRecoveryAttempts = 0;
 	audioRecoveryState = "running";
 	audioRecoveryMessage.clear();
@@ -1337,6 +1369,8 @@ bool AudioEngine::setAudioInputDeviceByIndex(int deviceIndex)
 
 bool AudioEngine::setAudioOutputDeviceByIndex(int deviceIndex)
 {
+	ScopedValueSetter<bool> manualAudioSelectionScope(manualAudioSelectionInProgress, true);
+	lastManualAudioConfigurationChangeMs = Time::getMillisecondCounter();
 	lastAudioConfigurationError.clear();
 	lightHostLog("AudioEngine setAudioOutputDeviceByIndex requested index=" + String(deviceIndex));
 
@@ -1389,14 +1423,14 @@ bool AudioEngine::setAudioOutputDeviceByIndex(int deviceIndex)
 		&& setup.outputDeviceName == requestedOutputDevice)
 	{
 		lightHostLog("AudioEngine setAudioOutputDeviceByIndex no-op; already using ASIO device='" + requestedOutputDevice + "'");
-		rememberLastSelectedAudioDevice();
+		rememberManualSelectedAudioDevice();
 		return true;
 	}
 
 	if (!isAsioBackend && setup.outputDeviceName == requestedOutputDevice)
 	{
 		lightHostLog("AudioEngine setAudioOutputDeviceByIndex no-op; already using output='" + setup.outputDeviceName + "'");
-		rememberLastSelectedAudioDevice();
+		rememberManualSelectedAudioDevice();
 		return true;
 	}
 
@@ -1462,7 +1496,7 @@ bool AudioEngine::setAudioOutputDeviceByIndex(int deviceIndex)
 	}
 
 	saveAudioDeviceState();
-	rememberLastSelectedAudioDevice();
+	rememberManualSelectedAudioDevice();
 	failedAudioRecoveryAttempts = 0;
 	audioRecoveryState = "running";
 	audioRecoveryMessage.clear();
@@ -2853,6 +2887,16 @@ void AudioEngine::timerCallback(int timerId)
 		const String mode = normaliseAudioPersistenceMode(recoveryConfig.mode);
 		startTimer(audioWatchdogTimerId, recoveryConfig.retrySeconds * 1000);
 
+		const uint32 now = Time::getMillisecondCounter();
+		const bool manualSelectionGraceActive = manualAudioSelectionInProgress
+			|| (lastManualAudioConfigurationChangeMs != 0
+				&& now - lastManualAudioConfigurationChangeMs < 15000);
+		if (manualSelectionGraceActive)
+		{
+			lightHostLog("AudioEngine watchdog skipped during manual audio selection grace period");
+			return;
+		}
+
 		AudioIODevice* device = deviceManager.getCurrentAudioDevice();
 		const bool isRunning = device != nullptr && device->isOpen() && device->isPlaying();
 		if (isRunning)
@@ -2939,6 +2983,13 @@ void AudioEngine::changeListenerCallback(ChangeBroadcaster* changed)
 	}
 	else if (changed == &deviceManager)
 	{
+		if (manualAudioSelectionInProgress)
+		{
+			audioConfigVersion++;
+			lightHostLog("AudioEngine deviceManager change ignored during manual audio selection");
+			return;
+		}
+
 		const auto recoveryConfig = getAudioRecoveryConfiguration();
 		const String mode = normaliseAudioPersistenceMode(recoveryConfig.mode);
 		if (mode != "disabled")

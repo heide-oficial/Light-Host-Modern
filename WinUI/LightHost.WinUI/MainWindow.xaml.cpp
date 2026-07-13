@@ -504,8 +504,6 @@ namespace
     {
         if (!values.empty())
         {
-            if (selectedIndex < 0)
-                selectedIndex = 0;
             if (selectedIndex >= (int) values.size())
                 selectedIndex = (int) values.size() - 1;
         }
@@ -545,10 +543,7 @@ namespace
             combo.Items().Append(item);
         }
 
-        if (!values.empty())
-            combo.SelectedIndex(selectedIndex);
-        else
-            combo.SelectedIndex(-1);
+        combo.SelectedIndex(selectedIndex);
 
         combo.IsEnabled(!values.empty());
     }

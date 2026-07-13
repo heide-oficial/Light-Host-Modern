@@ -180,7 +180,12 @@ void IconMenu::openWinUI()
 
 	String parameters = "--host-pipe=\"" + ipcServer->getPipeName() + "\"";
 	if (debugMode)
+	{
 		parameters << " --debug";
+		const auto logPath = getLightHostDebugLogPath();
+		if (logPath.isNotEmpty())
+			parameters << " --debug-log=\"" << logPath << "\"";
+	}
 
 	const auto executableName = "LightHostWinUI.exe";
 	Array<File> searchRoots;

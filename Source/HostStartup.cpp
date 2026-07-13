@@ -55,9 +55,11 @@ public:
 
     void shutdown() override
     {
+        lightHostLog("shutdown()");
         mainWindow = nullptr;
         appProperties = nullptr;
         LookAndFeel::setDefaultLookAndFeel (nullptr);
+        lightHostLog("Debug log saved to: " + getLightHostDebugLogPath());
     }
 
     void systemRequestedQuit() override

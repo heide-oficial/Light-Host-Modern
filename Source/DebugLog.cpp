@@ -19,8 +19,53 @@ namespace
 	bool consoleOpened = false;
 	bool crashDiagnosticsInstalled = false;
 	CriticalSection crashContextLock;
+	CriticalSection debugFileLock;
 	String crashContext;
+	File debugLogFile;
 	std::atomic<bool> fatalCrashLogged { false };
+
+	File createDebugLogFile()
+	{
+		auto logsDirectory = File::getSpecialLocation(File::userApplicationDataDirectory)
+			.getChildFile("LightHostModern")
+			.getChildFile("Logs");
+
+		logsDirectory.createDirectory();
+
+		const auto timestamp = Time::getCurrentTime().formatted("%Y%m%d-%H%M%S");
+		return logsDirectory.getChildFile("LightHostModern-debug-" + timestamp + "-host-" + String((int) GetCurrentProcessId()) + ".txt");
+	}
+
+	void appendDebugLogLine(const String& line)
+	{
+		if (!debugEnabled)
+			return;
+
+		const ScopedLock lock(debugFileLock);
+
+		if (debugLogFile == File())
+			debugLogFile = createDebugLogFile();
+
+		debugLogFile.appendText(line + newLine, false, false, "\n");
+	}
+
+	class LightHostDebugLogger final : public Logger
+	{
+	public:
+		void logMessage(const String& message) override
+		{
+			if (!debugEnabled)
+				return;
+
+			const auto line = "[LightHostLogger] " + message;
+			appendDebugLogLine(line);
+
+			if (consoleOpened)
+				std::cout << line << std::endl;
+		}
+	};
+
+	LightHostDebugLogger debugLogger;
 
 	void writeFatalCrashLog(const String& reason, void* address = nullptr, uint32 code = 0)
 	{
@@ -28,16 +73,16 @@ namespace
 			return;
 
 		const ScopedLock lock(crashContextLock);
-		std::cout << "[LightHost] Fatal crash diagnostic: " << reason << std::endl;
+		lightHostLog("Fatal crash diagnostic: " + reason);
 
 		if (code != 0)
-			std::cout << "[LightHost] Fatal crash exception code: 0x" << std::hex << code << std::dec << std::endl;
+			lightHostLog("Fatal crash exception code: 0x" + String::toHexString((int) code));
 
 		if (address != nullptr)
-			std::cout << "[LightHost] Fatal crash address: " << address << std::endl;
+			lightHostLog("Fatal crash address: " + String::toHexString((pointer_sized_int) address));
 
 		if (crashContext.isNotEmpty())
-			std::cout << "[LightHost] Fatal crash context: " << crashContext << std::endl;
+			lightHostLog("Fatal crash context: " + crashContext);
 
 		std::cout.flush();
 	}
@@ -69,11 +114,36 @@ namespace
 void setLightHostDebugEnabled(bool enabled)
 {
 	debugEnabled = enabled;
+
+	if (debugEnabled)
+	{
+		const ScopedLock lock(debugFileLock);
+		if (debugLogFile == File())
+		{
+			debugLogFile = createDebugLogFile();
+			debugLogFile.replaceWithText("Light Host Modern debug log" + newLine, false, false, "\n");
+			debugLogFile.appendText("Started: " + Time::getCurrentTime().toString(true, true, true, true) + newLine, false, false, "\n");
+			debugLogFile.appendText("Process: " + File::getSpecialLocation(File::currentExecutableFile).getFullPathName() + newLine, false, false, "\n");
+			debugLogFile.appendText(newLine, false, false, "\n");
+		}
+
+		Logger::setCurrentLogger(&debugLogger);
+	}
+	else if (Logger::getCurrentLogger() == &debugLogger)
+	{
+		Logger::setCurrentLogger(nullptr);
+	}
 }
 
 bool isLightHostDebugEnabled()
 {
 	return debugEnabled;
+}
+
+String getLightHostDebugLogPath()
+{
+	const ScopedLock lock(debugFileLock);
+	return debugLogFile.getFullPathName();
 }
 
 void openLightHostDebugConsoleIfNeeded()
@@ -99,6 +169,7 @@ void openLightHostDebugConsoleIfNeeded()
 	std::clog.clear();
 
 	lightHostLog("Debug console opened.");
+	lightHostLog("Debug log file: " + getLightHostDebugLogPath());
 #endif
 }
 
@@ -122,7 +193,9 @@ void lightHostLog(const String& message)
 	if (!debugEnabled)
 		return;
 
-	std::cout << "[LightHost] " << message << std::endl;
+	const auto line = "[LightHost] " + message;
+	appendDebugLogLine(line);
+	std::cout << line << std::endl;
 }
 
 void setLightHostCrashContext(const String& context)

@@ -11,6 +11,7 @@ namespace winrt::LightHostWinUI::implementation
     App::App()
     {
         setWinUIDebugEnabled(commandLineHasFlag(L"--debug") || commandLineHasFlag(L"-debug"));
+        setWinUIDebugLogPath(commandLineOptionValue(L"--debug-log"));
         initialiseWinUIDebugConsole();
         winUILog("App constructed.");
 
