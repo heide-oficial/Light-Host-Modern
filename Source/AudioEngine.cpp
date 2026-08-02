@@ -2263,13 +2263,10 @@ void AudioEngine::loadActivePlugins()
 
 		if (plugin.numInputChannels <= 0 || plugin.numOutputChannels <= 0)
 		{
-			const String errorMessage = "Plugin does not expose audio input and output channels";
-			const auto message = "Light Host Modern: failed to load plugin '" + plugin.name + "': " + errorMessage;
-			Logger::writeToLog(message);
-			lightHostLog(message);
-			pluginStateStore.setValue("failed", plugin, errorMessage);
-			markSettingsDirty();
-			continue;
+			// Mirrors addKnownPluginByIndex: zero-channel scan descriptions are not authoritative.
+			const auto warningMessage = "Light Host Modern: plugin reports no audio input/output channels; attempting load anyway '" + plugin.name + "'";
+			Logger::writeToLog(warningMessage);
+			lightHostLog(warningMessage);
 		}
 
 		const bool bypass = pluginStateStore.getValue("bypass", plugin).getIntValue() != 0;
@@ -2415,10 +2412,11 @@ bool AudioEngine::addKnownPluginByIndex(int sortedIndex)
 
 	if (plugin.numInputChannels <= 0 || plugin.numOutputChannels <= 0)
 	{
-		const auto rejectMessage = "Light Host Modern: rejected plugin without audio input/output before load '" + plugin.name + "'";
-		Logger::writeToLog(rejectMessage);
-		lightHostLog(rejectMessage);
-		return false;
+		// Zero-channel scan descriptions are not authoritative (e.g. RNNoise VST3);
+		// instantiation exposes real buses, so let the instance path be the gate.
+		const auto warningMessage = "Light Host Modern: plugin reports no audio input/output channels before load; attempting load anyway '" + plugin.name + "'";
+		Logger::writeToLog(warningMessage);
+		lightHostLog(warningMessage);
 	}
 
 	const auto activeTypes = activePluginList.getTypes();
