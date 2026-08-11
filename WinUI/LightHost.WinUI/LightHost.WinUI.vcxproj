@@ -121,6 +121,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Localization.h" />
     <ClInclude Include="WinUIDebug.h" />
     <ClInclude Include="App.xaml.h">
       <DependentUpon>App.xaml</DependentUpon>
@@ -141,10 +142,16 @@
       <DependentUpon>App.xaml</DependentUpon>
     </ClCompile>
     <ClCompile Include="WinUIDebug.cpp" />
+    <ClCompile Include="Localization.cpp" />
     <ClCompile Include="MainWindow.xaml.cpp">
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </ClCompile>
     <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Locales\en-us.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <Midl Include="MainWindow.idl">
@@ -206,6 +213,9 @@
     </AppxPackagePayload>
     <AppxPackagePayload Include="Assets\logo-black.ico">
       <TargetPath>Assets\logo-black.ico</TargetPath>
+    </AppxPackagePayload>
+    <AppxPackagePayload Include="Locales\en-us.json">
+      <TargetPath>Locales\en-us.json</TargetPath>
     </AppxPackagePayload>
   </ItemGroup>
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">

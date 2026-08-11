@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MainWindow.g.h"
+#include "Localization.h"
 
 namespace winrt::LightHostWinUI::implementation
 {
@@ -20,6 +21,12 @@ namespace winrt::LightHostWinUI::implementation
         void Preferences_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void Plugins_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void Config_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void Support_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void KoFi_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void DownloadUpdate_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void HideSupportTabSwitch_Toggled(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void LanguageBox_SelectionChanged(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
+        void PluginSearchBox_TextChanged(Microsoft::UI::Xaml::Controls::AutoSuggestBox const&, Microsoft::UI::Xaml::Controls::AutoSuggestBoxTextChangedEventArgs const&);
         void SidebarToggle_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void Refresh_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void ThemeModeBox_SelectionChanged(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
@@ -133,6 +140,16 @@ namespace winrt::LightHostWinUI::implementation
         bool pluginDragInProgress = false;
         bool asioDeviceMode = false;
         bool sidebarCollapsed = false;
+        bool syncingLanguageControls = false;
+        bool hideSupportTab = false;
+        int runningPluginSortMode = 0;
+        int installedPluginSortMode = 1;
+        std::wstring runningPluginSearch;
+        std::wstring installedPluginSearch;
+        std::wstring latestReleaseUrl;
+        std::wstring latestReleaseTag;
+        std::wstring currentSection = L"Dashboard";
+        ::LightHostWinUI::LocalizationCatalog localization;
         int draggedPluginSourceIndex = -1;
         int draggedPluginTargetIndex = -1;
         int draggedPluginDropIndex = -1;
@@ -235,6 +252,10 @@ namespace winrt::LightHostWinUI::implementation
         void syncEnabledAudioChoicesSummary();
         void resetRunningPluginDragVisuals();
         void showPluginSubsection(std::wstring const& section);
+        void configurePluginSortMenus();
+        void localizeVisualTree(Microsoft::UI::Xaml::DependencyObject const& root);
+        void applyLocalization();
+        winrt::fire_and_forget checkForUpdatesAsync();
         void updateDebugControls();
         void resetDefaultPluginScanPaths();
     };

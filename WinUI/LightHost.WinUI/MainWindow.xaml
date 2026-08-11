@@ -32,6 +32,7 @@
                     <Button x:Name="DashboardButton" Content="Dashboard" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
                     <Button x:Name="PreferencesButton" Content="Audio" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
                     <Button x:Name="PluginsButton" Content="Plugins" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+                    <Button x:Name="SupportButton" Content="Support me" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
                     <Button x:Name="ConfigButton" Content="Settings" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
                 </StackPanel>
 
@@ -269,6 +270,24 @@
                         </Grid>
 
                         <StackPanel x:Name="RunningPluginsPanel" Spacing="10">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <AutoSuggestBox x:Name="RunningPluginSearchBox"
+                                                PlaceholderText="Search plugins"
+                                                QueryIcon="Find"
+                                                AutomationProperties.Name="Search running plugins" />
+                                <Button x:Name="RunningPluginSortButton"
+                                        Grid.Column="1"
+                                        Width="44"
+                                        MinWidth="44"
+                                        Padding="0"
+                                        AutomationProperties.Name="Sort running plugins">
+                                    <FontIcon Glyph="&#xE8CB;" FontSize="16" />
+                                </Button>
+                            </Grid>
                             <TextBlock x:Name="RunningPluginsEmptyText" Text="No plugins running" Visibility="Collapsed" FontSize="16" Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,42,0,0" HorizontalAlignment="Center" />
                             <StackPanel x:Name="RunningPluginsListCard" Spacing="8">
                                 <Grid Padding="22,0,22,0" ColumnSpacing="18" MinHeight="28">
@@ -293,6 +312,24 @@
                         </StackPanel>
 
                         <StackPanel x:Name="InstalledPluginsPanel" Visibility="Collapsed" Spacing="16">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <AutoSuggestBox x:Name="InstalledPluginSearchBox"
+                                                PlaceholderText="Search plugins"
+                                                QueryIcon="Find"
+                                                AutomationProperties.Name="Search installed plugins" />
+                                <Button x:Name="InstalledPluginSortButton"
+                                        Grid.Column="1"
+                                        Width="44"
+                                        MinWidth="44"
+                                        Padding="0"
+                                        AutomationProperties.Name="Sort installed plugins">
+                                    <FontIcon Glyph="&#xE8CB;" FontSize="16" />
+                                </Button>
+                            </Grid>
                             <TextBlock x:Name="InstalledPluginsEmptyText" Text="No plugins installed" Visibility="Collapsed" FontSize="16" Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,42,0,0" HorizontalAlignment="Center" />
                             <StackPanel x:Name="InstalledPluginsListCard" Spacing="8">
                                 <Grid Padding="22,0,22,0" ColumnSpacing="18" MinHeight="28">
@@ -320,12 +357,61 @@
                         </StackPanel>
                     </StackPanel>
 
+                    <StackPanel x:Name="SupportPanel" Visibility="Collapsed" Spacing="18">
+                        <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="28">
+                            <StackPanel Spacing="22" MaxWidth="760" HorizontalAlignment="Left">
+                                <TextBlock x:Name="SupportMessageText"
+                                           Text="Please consider supporting my work. There are many hours of work, thinking and effort behind it. The two easiest ways to support the app are either by starring the repository or by donating any amount on Ko-fi. Thank you!"
+                                           FontSize="17"
+                                           TextWrapping="Wrap" />
+                                <Button x:Name="KoFiButton"
+                                        Padding="0"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="Support me on Ko-fi">
+                                    <Image Source="https://camo.githubusercontent.com/ccbceaf50e27134b48a85cbc14fc0cbabfa7c91d011b916e4f9d557682f40b8a/68747470733a2f2f73746f726167652e6b6f2d66692e636f6d2f63646e2f6272616e6461737365742f76322f737570706f72745f6d655f6f6e5f62656967652e706e67"
+                                           Width="218"
+                                           Stretch="Uniform" />
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
                     <StackPanel x:Name="ConfigPanel" Visibility="Collapsed" Spacing="18">
+                        <Border x:Name="UpdateAvailableCard"
+                                Visibility="Collapsed"
+                                Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="24">
+                            <Grid ColumnSpacing="24">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="4">
+                                    <TextBlock x:Name="UpdateAvailableTitleText" Text="Update available" FontSize="17" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="UpdateAvailableBodyText" Text="A newer version of Light Host Modern is available." TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button x:Name="DownloadUpdateButton" Grid.Column="1" Content="Download update" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
                         <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
                             <StackPanel Spacing="14">
                                 <TextBlock Text="General" FontSize="17" FontWeight="SemiBold" />
                                 <StackPanel x:Name="StartWithWindowsCheckBoxHost" />
                                 <StackPanel x:Name="CloseToTraySwitchHost" />
+                                <Grid ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock x:Name="HideSupportTitleText" Text="Hide the Support me tab" />
+                                        <TextBlock x:Name="HideSupportDescriptionText" Text="Keep support links out of the sidebar." Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="HideSupportTabSwitch" Grid.Column="1" VerticalAlignment="Center" AutomationProperties.Name="Hide the Support me tab" />
+                                </Grid>
                                 <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -486,6 +572,17 @@
                                     </StackPanel>
                                     <StackPanel x:Name="IconModeBoxHost" Grid.Column="1" />
                                 </Grid>
+                                <Grid ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="360" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock x:Name="LanguageTitleText" Text="Language" />
+                                        <TextBlock x:Name="LanguageDescriptionText" Text="Choose the language used by the app." Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <ComboBox x:Name="LanguageBox" Grid.Column="1" HorizontalAlignment="Stretch" MinHeight="42" AutomationProperties.Name="App language" />
+                                </Grid>
                             </StackPanel>
                         </Border>
 
@@ -518,7 +615,7 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                             <TextBlock Text="Light Host Modern" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <TextBlock Text="v1.1.1" Foreground="{ThemeResource AppTextSecondaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Text="v1.2.0" Foreground="{ThemeResource AppTextSecondaryBrush}" VerticalAlignment="Center" />
                                         </StackPanel>
                                         <Button x:Name="RepositoryButton" Grid.Column="1" AutomationProperties.Name="Go to Light Host Modern repository" Width="36" MinWidth="36" MinHeight="36" Padding="0" Click="RepositoryButton_Click">
                                             <Button.Content>

@@ -650,6 +650,33 @@ namespace
         WritePrivateProfileStringW(L"Appearance", L"BackdropMode", value.c_str(), settingsFile.c_str());
     }
 
+    std::wstring loadUiSetting(wchar_t const* section, wchar_t const* key, wchar_t const* fallback = L"")
+    {
+        std::wstring value(2048, L'\0');
+        const auto settingsFile = uiSettingsFilePath();
+        const auto length = GetPrivateProfileStringW(section, key, fallback, value.data(), static_cast<DWORD>(value.size()), settingsFile.c_str());
+        value.resize(length);
+        return value;
+    }
+
+    void saveUiSetting(wchar_t const* section, wchar_t const* key, std::wstring const& value)
+    {
+        const auto settingsFile = uiSettingsFilePath();
+        WritePrivateProfileStringW(section, key, value.c_str(), settingsFile.c_str());
+    }
+
+    std::array<int, 3> semanticVersion(std::wstring value)
+    {
+        if (!value.empty() && (value.front() == L'v' || value.front() == L'V'))
+            value.erase(value.begin());
+
+        std::array<int, 3> result {};
+        std::wistringstream stream(value);
+        wchar_t separator = 0;
+        stream >> result[0] >> separator >> result[1] >> separator >> result[2];
+        return result;
+    }
+
     void appendPathIfAvailable(std::vector<std::string>& paths, std::wstring const& base, wchar_t const* suffix)
     {
         if (base.empty())
@@ -802,7 +829,52 @@ namespace
         std::string path;
         std::string status;
         bool bypassed = false;
+        int originalIndex = -1;
     };
+
+    std::vector<PluginRowData> filterAndSortPluginRows(std::vector<PluginRowData> rows,
+                                                       std::wstring const& query,
+                                                       int sortMode,
+                                                       bool running)
+    {
+        const auto normalizedQuery = toLower(wideToUtf8(query));
+        if (!normalizedQuery.empty())
+        {
+            std::erase_if(rows, [&normalizedQuery](PluginRowData const& row)
+            {
+                return toLower(row.name).find(normalizedQuery) == std::string::npos;
+            });
+        }
+
+        auto compareText = [](std::string const& left, std::string const& right)
+        {
+            return toLower(left) < toLower(right);
+        };
+        auto statusRank = [running](PluginRowData const& row, bool primary)
+        {
+            if (running)
+                return primary ? (row.bypassed ? 1 : 0) : (row.bypassed ? 0 : 1);
+            const bool isRunning = row.status.rfind("Running", 0) == 0;
+            return primary ? (isRunning ? 1 : 0) : (isRunning ? 0 : 1);
+        };
+
+        std::stable_sort(rows.begin(), rows.end(), [&](PluginRowData const& left, PluginRowData const& right)
+        {
+            switch (sortMode)
+            {
+                case 1: return compareText(left.name, right.name);
+                case 2: return compareText(right.name, left.name);
+                case 3: return compareText(left.manufacturer, right.manufacturer);
+                case 4: return compareText(right.manufacturer, left.manufacturer);
+                case 5: return statusRank(left, true) < statusRank(right, true);
+                case 6: return statusRank(left, false) < statusRank(right, false);
+                case 7: return left.format == right.format ? false : left.format == "VST3";
+                case 8: return left.format == right.format ? false : left.format != "VST3";
+                default: return false;
+            }
+        });
+        return rows;
+    }
 
     std::string pluginRowKey(PluginRowData const& row)
     {
@@ -880,6 +952,7 @@ namespace
             row.path = extractString(object, "path", "");
             row.bypassed = extractBool(object, "bypassed", false);
             row.status = row.bypassed ? "Bypassed" : "Active";
+            row.originalIndex = static_cast<int>(rows.size());
             rows.push_back(row);
             pos = objectEnd + 1;
         }
@@ -912,6 +985,7 @@ namespace
             row.format = extractString(object, "format", "");
             row.path = extractString(object, "path", "");
             row.status = row.name.empty() || row.name == "Unknown" ? "Error" : "Available";
+            row.originalIndex = static_cast<int>(rows.size());
             rows.push_back(row);
             pos = objectEnd + 1;
         }
@@ -1116,7 +1190,7 @@ namespace
         return label;
     }
 
-    Border pill(std::string const& text)
+    Border pill(std::string const& text, std::string const& displayText = {})
     {
         auto status = Border();
         status.CornerRadius(CornerRadiusHelper::FromUniformRadius(8));
@@ -1163,7 +1237,7 @@ namespace
         }
 
         row.Children().Append(dot);
-        auto label = rowText(text, 14);
+        auto label = rowText(displayText.empty() ? text : displayText, 14);
         label.Foreground(foreground);
         row.Children().Append(label);
         status.Child(row);
@@ -1809,15 +1883,18 @@ namespace winrt::LightHostWinUI::implementation
             throw;
         }
 
+        localization.load(loadUiSetting(L"Localization", L"Language", L"en-us"));
         createDynamicControls();
 
         setNavButtonContent(DashboardButton(), L"\xE80F", L"Dashboard");
         setNavButtonContent(PreferencesButton(), L"\xE995", L"Audio");
         setNavButtonContent(PluginsButton(), L"\xEA86", L"Plugins");
+        setNavButtonContent(SupportButton(), L"\xEB51", L"Support me");
         setNavButtonContent(ConfigButton(), L"\xE713", L"Settings");
         styleNavButton(DashboardButton());
         styleNavButton(PreferencesButton());
         styleNavButton(PluginsButton());
+        styleNavButton(SupportButton());
         styleNavButton(ConfigButton());
         styleIconOnlyButton(SidebarToggleButton());
         styleButton(RefreshButton());
@@ -1827,6 +1904,10 @@ namespace winrt::LightHostWinUI::implementation
         styleButton(RunningPluginsTabButton());
         styleButton(InstalledPluginsTabButton());
         styleButton(PluginActionsButton());
+        styleIconOnlyButton(RunningPluginSortButton());
+        styleIconOnlyButton(InstalledPluginSortButton());
+        styleButton(DownloadUpdateButton());
+        styleButton(KoFiButton());
         styleButton(ScanDefaultPluginsButton());
         styleButton(RemoveMissingPluginsButton());
         styleButton(ClearPluginDatabaseButton());
@@ -1878,12 +1959,19 @@ namespace winrt::LightHostWinUI::implementation
         DashboardButton().Click({ this, &MainWindow::Dashboard_Click });
         PreferencesButton().Click({ this, &MainWindow::Preferences_Click });
         PluginsButton().Click({ this, &MainWindow::Plugins_Click });
+        SupportButton().Click({ this, &MainWindow::Support_Click });
         ConfigButton().Click({ this, &MainWindow::Config_Click });
         SidebarToggleButton().Click({ this, &MainWindow::SidebarToggle_Click });
         RefreshButton().Click({ this, &MainWindow::Refresh_Click });
         OpenWindowsSoundSettingsButton().Click({ this, &MainWindow::OpenWindowsSoundSettings_Click });
         RunningPluginsTabButton().Click({ this, &MainWindow::RunningPluginsTab_Click });
         InstalledPluginsTabButton().Click({ this, &MainWindow::InstalledPluginsTab_Click });
+        RunningPluginSearchBox().TextChanged({ this, &MainWindow::PluginSearchBox_TextChanged });
+        InstalledPluginSearchBox().TextChanged({ this, &MainWindow::PluginSearchBox_TextChanged });
+        KoFiButton().Click({ this, &MainWindow::KoFi_Click });
+        DownloadUpdateButton().Click({ this, &MainWindow::DownloadUpdate_Click });
+        HideSupportTabSwitch().Toggled({ this, &MainWindow::HideSupportTabSwitch_Toggled });
+        LanguageBox().SelectionChanged({ this, &MainWindow::LanguageBox_SelectionChanged });
         ScanDefaultPluginsButton().Click({ this, &MainWindow::ScanDefaultPlugins_Click });
         RemoveMissingPluginsButton().Click({ this, &MainWindow::RemoveMissingPlugins_Click });
         ClearPluginDatabaseButton().Click({ this, &MainWindow::ClearPluginDatabase_Click });
@@ -1904,6 +1992,27 @@ namespace winrt::LightHostWinUI::implementation
         OutputChannelsToggleAllButton().Click({ this, &MainWindow::OutputChannelsToggleAll_Click });
         CloseQuitsAppRadioButton().Checked({ this, &MainWindow::CloseBehaviorRadioButton_Checked });
         CloseToTrayRadioButton().Checked({ this, &MainWindow::CloseBehaviorRadioButton_Checked });
+
+        configurePluginSortMenus();
+        syncingLanguageControls = true;
+        const auto languages = ::LightHostWinUI::LocalizationCatalog::availableLanguages();
+        int selectedLanguage = 0;
+        for (size_t index = 0; index < languages.size(); ++index)
+        {
+            auto item = ComboBoxItem();
+            item.Content(box_value(hstring(languages[index].second)));
+            item.Tag(box_value(hstring(languages[index].first)));
+            LanguageBox().Items().Append(item);
+            if (_wcsicmp(languages[index].first.c_str(), localization.languageCode().c_str()) == 0)
+                selectedLanguage = static_cast<int>(index);
+        }
+        LanguageBox().SelectedIndex(selectedLanguage);
+        syncingLanguageControls = false;
+
+        hideSupportTab = loadUiSetting(L"General", L"HideSupportTab", L"0") == L"1";
+        HideSupportTabSwitch().IsOn(hideSupportTab);
+        SupportButton().Visibility(hideSupportTab ? Visibility::Collapsed : Visibility::Visible);
+        applyLocalization();
         AudioBackendBox().SelectionChanged({ this, &MainWindow::AudioBackendBox_SelectionChanged });
         InputBox().SelectionChanged({ this, &MainWindow::InputBox_SelectionChanged });
         OutputBox().SelectionChanged({ this, &MainWindow::OutputBox_SelectionChanged });
@@ -1982,12 +2091,63 @@ namespace winrt::LightHostWinUI::implementation
         showPluginSubsection(L"Running");
         winUILog("Initial snapshot deferred until first timer tick.");
         winUILog("MainWindow ready.");
+        checkForUpdatesAsync();
     }
 
     void MainWindow::Dashboard_Click(IInspectable const&, RoutedEventArgs const&) { showSection(L"Dashboard"); }
     void MainWindow::Preferences_Click(IInspectable const&, RoutedEventArgs const&) { showSection(L"Audio"); }
     void MainWindow::Plugins_Click(IInspectable const&, RoutedEventArgs const&) { showSection(L"Plugins"); }
+    void MainWindow::Support_Click(IInspectable const&, RoutedEventArgs const&) { showSection(L"Support me"); }
     void MainWindow::Config_Click(IInspectable const&, RoutedEventArgs const&) { showSection(L"Settings"); }
+
+    void MainWindow::KoFi_Click(IInspectable const&, RoutedEventArgs const&)
+    {
+        ShellExecuteW(nullptr, L"open", L"https://ko-fi.com/heide_oficial", nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
+    void MainWindow::DownloadUpdate_Click(IInspectable const&, RoutedEventArgs const&)
+    {
+        if (!latestReleaseUrl.empty())
+            ShellExecuteW(nullptr, L"open", latestReleaseUrl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
+    void MainWindow::HideSupportTabSwitch_Toggled(IInspectable const&, RoutedEventArgs const&)
+    {
+        hideSupportTab = HideSupportTabSwitch().IsOn();
+        saveUiSetting(L"General", L"HideSupportTab", hideSupportTab ? L"1" : L"0");
+        SupportButton().Visibility(hideSupportTab ? Visibility::Collapsed : Visibility::Visible);
+        if (hideSupportTab && SupportPanel().Visibility() == Visibility::Visible)
+            showSection(L"Settings");
+    }
+
+    void MainWindow::LanguageBox_SelectionChanged(IInspectable const&, SelectionChangedEventArgs const&)
+    {
+        if (syncingLanguageControls || LanguageBox().SelectedIndex() < 0)
+            return;
+        const auto item = LanguageBox().SelectedItem().try_as<ComboBoxItem>();
+        if (!item)
+            return;
+        const auto language = unbox_value_or<hstring>(item.Tag(), L"en-us");
+        saveUiSetting(L"Localization", L"Language", language.c_str());
+        localization.load(language.c_str());
+        applyLocalization();
+        renderedRunningPluginLabels.clear();
+        renderedInstalledPluginLabels.clear();
+        refreshSnapshot();
+    }
+
+    void MainWindow::PluginSearchBox_TextChanged(AutoSuggestBox const& sender, AutoSuggestBoxTextChangedEventArgs const& args)
+    {
+        if (args.Reason() != AutoSuggestionBoxTextChangeReason::UserInput)
+            return;
+        if (sender == RunningPluginSearchBox())
+            runningPluginSearch = sender.Text().c_str();
+        else
+            installedPluginSearch = sender.Text().c_str();
+        renderedRunningPluginLabels.clear();
+        renderedInstalledPluginLabels.clear();
+        refreshSnapshot();
+    }
     void MainWindow::SidebarToggle_Click(IInspectable const&, RoutedEventArgs const&)
     {
         sidebarCollapsed = !sidebarCollapsed;
@@ -2426,29 +2586,216 @@ namespace winrt::LightHostWinUI::implementation
 
     void MainWindow::showSection(std::wstring const& section)
     {
+        currentSection = section;
         DashboardPanel().Visibility(section == L"Dashboard" ? Visibility::Visible : Visibility::Collapsed);
         PreferencesPanel().Visibility(section == L"Audio" ? Visibility::Visible : Visibility::Collapsed);
         PluginsPanel().Visibility(section == L"Plugins" ? Visibility::Visible : Visibility::Collapsed);
+        SupportPanel().Visibility(section == L"Support me" ? Visibility::Visible : Visibility::Collapsed);
         ConfigPanel().Visibility(section == L"Settings" ? Visibility::Visible : Visibility::Collapsed);
         ContentScrollViewer().VerticalScrollBarVisibility(ScrollBarVisibility::Hidden);
 
-        PageTitleText().Text(hstring(section.c_str()));
+        if (section == L"Dashboard")
+            PageTitleText().Text(localization.text("nav.dashboard", L"Dashboard"));
+        else if (section == L"Audio")
+            PageTitleText().Text(localization.text("nav.audio", L"Audio"));
+        else if (section == L"Plugins")
+            PageTitleText().Text(localization.text("nav.plugins", L"Plugins"));
+        else if (section == L"Support me")
+            PageTitleText().Text(localization.text("nav.support", L"Support me"));
+        else
+            PageTitleText().Text(localization.text("nav.settings", L"Settings"));
 
         if (section == L"Dashboard")
-            PageSubtitleText().Text(L"Live audio host status and current routing.");
+            PageSubtitleText().Text(localization.text("page.dashboard.subtitle", L"Live audio host status and current routing."));
         else if (section == L"Audio")
-            PageSubtitleText().Text(L"Configure audio devices and stream format.");
+            PageSubtitleText().Text(localization.text("page.audio.subtitle", L"Configure audio devices and stream format."));
         else if (section == L"Plugins")
-            PageSubtitleText().Text(L"Manage the running chain and installed plugin database.");
+            PageSubtitleText().Text(localization.text("page.plugins.subtitle", L"Manage the running chain and installed plugin database."));
+        else if (section == L"Support me")
+            PageSubtitleText().Text(localization.text("page.support.subtitle", L"Support the continued development of Light Host Modern."));
         else
-            PageSubtitleText().Text(L"Basic app preferences.");
+            PageSubtitleText().Text(localization.text("page.settings.subtitle", L"Basic app preferences."));
 
         const auto selectedBrush = resourceBrush(L"SubtleFillColorSecondaryBrush", themedFallback(makeColorA(24, 0, 0, 0), makeColorA(42, 255, 255, 255)));
         const auto transparentBrush = resourceBrush(L"SubtleFillColorTransparentBrush", makeColorA(0, 0, 0, 0));
         DashboardButton().Background(section == L"Dashboard" ? selectedBrush : transparentBrush);
         PreferencesButton().Background(section == L"Audio" ? selectedBrush : transparentBrush);
         PluginsButton().Background(section == L"Plugins" ? selectedBrush : transparentBrush);
+        SupportButton().Background(section == L"Support me" ? selectedBrush : transparentBrush);
         ConfigButton().Background(section == L"Settings" ? selectedBrush : transparentBrush);
+    }
+
+    void MainWindow::configurePluginSortMenus()
+    {
+        auto configure = [this](Button const& button, bool running)
+        {
+            auto flyout = MenuFlyout();
+            auto add = [this, &flyout, running](std::wstring const& label, int mode)
+            {
+                auto item = MenuFlyoutItem();
+                item.Text(label);
+                item.Click([this, running, mode](IInspectable const&, RoutedEventArgs const&)
+                {
+                    if (running)
+                        runningPluginSortMode = mode;
+                    else
+                        installedPluginSortMode = mode;
+                    renderedRunningPluginLabels.clear();
+                    renderedInstalledPluginLabels.clear();
+                    refreshSnapshot();
+                });
+                flyout.Items().Append(item);
+            };
+
+            if (running)
+                add(localization.text("plugins.sort.chain", L"Chain order").c_str(), 0);
+            add(localization.text("plugins.sort.pluginAsc", L"Plugin name (A-Z)").c_str(), 1);
+            add(localization.text("plugins.sort.pluginDesc", L"Plugin name (Z-A)").c_str(), 2);
+            add(localization.text("plugins.sort.manufacturerAsc", L"Manufacturer (A-Z)").c_str(), 3);
+            add(localization.text("plugins.sort.manufacturerDesc", L"Manufacturer (Z-A)").c_str(), 4);
+            add(localization.text(running ? "plugins.sort.activeFirst" : "plugins.sort.availableFirst",
+                                  running ? L"Active first" : L"Available first").c_str(), 5);
+            add(localization.text(running ? "plugins.sort.disabledFirst" : "plugins.sort.runningFirst",
+                                  running ? L"Disabled first" : L"Running first").c_str(), 6);
+            add(localization.text("plugins.sort.vst3First", L"VST3 then VST2").c_str(), 7);
+            add(localization.text("plugins.sort.vst2First", L"VST2 then VST3").c_str(), 8);
+            button.Flyout(flyout);
+        };
+
+        configure(RunningPluginSortButton(), true);
+        configure(InstalledPluginSortButton(), false);
+    }
+
+    void MainWindow::applyLocalization()
+    {
+        localizeVisualTree(RootLayout());
+        BrandTitleText().Text(localization.text("app.title", L"Light Host Modern"));
+        setNavButtonContent(DashboardButton(), L"\xE80F", localization.text("nav.dashboard", L"Dashboard").c_str(), sidebarCollapsed);
+        setNavButtonContent(PreferencesButton(), L"\xE995", localization.text("nav.audio", L"Audio").c_str(), sidebarCollapsed);
+        setNavButtonContent(PluginsButton(), L"\xEA86", localization.text("nav.plugins", L"Plugins").c_str(), sidebarCollapsed);
+        setNavButtonContent(SupportButton(), L"\xEB51", localization.text("nav.support", L"Support me").c_str(), sidebarCollapsed);
+        setNavButtonContent(ConfigButton(), L"\xE713", localization.text("nav.settings", L"Settings").c_str(), sidebarCollapsed);
+        RunningPluginSearchBox().PlaceholderText(localization.text("plugins.search.placeholder", L"Search plugins"));
+        InstalledPluginSearchBox().PlaceholderText(localization.text("plugins.search.placeholder", L"Search plugins"));
+        RunningPluginsEmptyText().Text(localization.text("plugins.empty.running", L"No plugins running"));
+        InstalledPluginsEmptyText().Text(localization.text("plugins.empty.installed", L"No plugins installed"));
+        SupportMessageText().Text(localization.text("support.message"));
+        UpdateAvailableTitleText().Text(localization.text("settings.update.title", L"Update available"));
+        if (!latestReleaseTag.empty())
+        {
+            std::wstring message = localization.text("settings.update.body", L"A newer version of Light Host Modern is available.").c_str();
+            message += L" ";
+            message += latestReleaseTag;
+            UpdateAvailableBodyText().Text(message);
+        }
+        DownloadUpdateButton().Content(box_value(localization.text("settings.update.download", L"Download update")));
+        HideSupportTitleText().Text(localization.text("settings.support.hide", L"Hide the Support me tab"));
+        HideSupportDescriptionText().Text(localization.text("settings.support.hideDescription", L"Keep support links out of the sidebar."));
+        LanguageTitleText().Text(localization.text("settings.language.title", L"Language"));
+        LanguageDescriptionText().Text(localization.text("settings.language.description", L"Choose the language used by the app."));
+        ScanDefaultPluginsMenuItem().Text(localization.text("plugins.scan", L"Scan"));
+        ScanPathsMenuItem().Text(localization.text("plugins.scanPaths", L"Scan paths"));
+        RemoveMissingPluginsMenuItem().Text(localization.text("plugins.removeMissing", L"Remove missing"));
+        ClearPluginDatabaseMenuItem().Text(localization.text("common.clear", L"Clear"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(KoFiButton(), localization.text("support.kofi", L"Support me on Ko-fi"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(RunningPluginSearchBox(), localization.text("plugins.search.running", L"Search running plugins"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(InstalledPluginSearchBox(), localization.text("plugins.search.installed", L"Search installed plugins"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(RunningPluginSortButton(), localization.text("plugins.sort.label", L"Sort plugins"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(InstalledPluginSortButton(), localization.text("plugins.sort.label", L"Sort plugins"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(HideSupportTabSwitch(), localization.text("settings.support.hide", L"Hide the Support me tab"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(LanguageBox(), localization.text("settings.language.automation", L"App language"));
+        configurePluginSortMenus();
+        showSection(currentSection);
+    }
+
+    void MainWindow::localizeVisualTree(DependencyObject const& root)
+    {
+        if (!root)
+            return;
+
+        if (const auto textBlock = root.try_as<TextBlock>())
+            textBlock.Text(localization.translatedSource(textBlock.Text()));
+
+        if (const auto contentControl = root.try_as<ContentControl>())
+        {
+            const auto content = contentControl.Content();
+            if (const auto value = content.try_as<Windows::Foundation::IPropertyValue>();
+                value && value.Type() == Windows::Foundation::PropertyType::String)
+            {
+                contentControl.Content(box_value(localization.translatedSource(value.GetString())));
+            }
+        }
+
+        if (const auto toggle = root.try_as<ToggleSwitch>())
+        {
+            const auto localizeValue = [this](IInspectable const& value) -> IInspectable
+            {
+                if (const auto property = value.try_as<Windows::Foundation::IPropertyValue>();
+                    property && property.Type() == Windows::Foundation::PropertyType::String)
+                    return box_value(localization.translatedSource(property.GetString()));
+                return value;
+            };
+            toggle.Header(localizeValue(toggle.Header()));
+            toggle.OnContent(localizeValue(toggle.OnContent()));
+            toggle.OffContent(localizeValue(toggle.OffContent()));
+        }
+
+        if (const auto numberBox = root.try_as<NumberBox>())
+        {
+            if (const auto property = numberBox.Header().try_as<Windows::Foundation::IPropertyValue>();
+                property && property.Type() == Windows::Foundation::PropertyType::String)
+                numberBox.Header(box_value(localization.translatedSource(property.GetString())));
+        }
+
+        if (const auto comboBox = root.try_as<ComboBox>())
+        {
+            for (auto const& item : comboBox.Items())
+            {
+                if (const auto comboItem = item.try_as<ComboBoxItem>())
+                {
+                    if (const auto property = comboItem.Content().try_as<Windows::Foundation::IPropertyValue>();
+                        property && property.Type() == Windows::Foundation::PropertyType::String)
+                        comboItem.Content(box_value(localization.translatedSource(property.GetString())));
+                }
+            }
+        }
+
+        const auto childCount = VisualTreeHelper::GetChildrenCount(root);
+        for (int childIndex = 0; childIndex < childCount; ++childIndex)
+            localizeVisualTree(VisualTreeHelper::GetChild(root, childIndex));
+    }
+
+    fire_and_forget MainWindow::checkForUpdatesAsync()
+    {
+        auto lifetime = get_strong();
+        try
+        {
+            Windows::Web::Http::HttpClient client;
+            client.DefaultRequestHeaders().UserAgent().ParseAdd(L"LightHostModern/1.2.0");
+            const auto response = co_await client.GetStringAsync(Windows::Foundation::Uri(L"https://api.github.com/repos/heide-oficial/Light-Host-Modern/releases/latest"));
+            const auto json = Windows::Data::Json::JsonObject::Parse(response);
+            const auto latestTag = json.GetNamedString(L"tag_name", L"");
+            const auto releaseUrl = json.GetNamedString(L"html_url", L"");
+            if (semanticVersion(latestTag.c_str()) > semanticVersion(L"1.2.0") && !releaseUrl.empty())
+            {
+                latestReleaseUrl = releaseUrl.c_str();
+                latestReleaseTag = latestTag.c_str();
+                std::wstring message = localization.text("settings.update.body", L"A newer version of Light Host Modern is available.").c_str();
+                message += L" ";
+                message += latestTag.c_str();
+                UpdateAvailableBodyText().Text(message);
+                UpdateAvailableCard().Visibility(Visibility::Visible);
+                winUILog("Update available: " + to_string(latestTag));
+            }
+        }
+        catch (hresult_error const& error)
+        {
+            winUILog("Update check failed: " + to_string(error.message()));
+        }
+        catch (...)
+        {
+            winUILog("Update check failed with an unknown error.");
+        }
     }
 
     void MainWindow::showPluginSubsection(std::wstring const& section)
@@ -2665,6 +3012,7 @@ namespace winrt::LightHostWinUI::implementation
             setNavButtonContent(DashboardButton(), L"\xE80F", L"Dashboard", true);
             setNavButtonContent(PreferencesButton(), L"\xE995", L"Audio", true);
             setNavButtonContent(PluginsButton(), L"\xEA86", L"Plugins", true);
+            setNavButtonContent(SupportButton(), L"\xEB51", L"Support me", true);
             setNavButtonContent(ConfigButton(), L"\xE713", L"Settings", true);
         }
         else
@@ -2681,6 +3029,7 @@ namespace winrt::LightHostWinUI::implementation
             setNavButtonContent(DashboardButton(), L"\xE80F", L"Dashboard");
             setNavButtonContent(PreferencesButton(), L"\xE995", L"Audio");
             setNavButtonContent(PluginsButton(), L"\xEA86", L"Plugins");
+            setNavButtonContent(SupportButton(), L"\xEB51", L"Support me");
             setNavButtonContent(ConfigButton(), L"\xE713", L"Settings");
             if (currentWidth > 0.0)
                 applyResponsiveLayout(currentWidth);
@@ -2842,7 +3191,8 @@ namespace winrt::LightHostWinUI::implementation
         });
 
         button.IsEnabled(hasRows);
-        button.Content(box_value(hstring(allActive ? L"Uncheck all" : L"Check all")));
+        button.Content(box_value(localization.text(allActive ? "audio.uncheckAll" : "audio.checkAll",
+            allActive ? L"Uncheck all" : L"Check all")));
         button.Tag(box_value(hstring(allActive ? L"uncheck" : L"check")));
         ToolTipService::SetToolTip(button, box_value(hstring(allActive
             ? L"Disable every visible channel"
@@ -2995,17 +3345,19 @@ namespace winrt::LightHostWinUI::implementation
         const auto vst2HostAvailable = extractBool(json, "vst2HostAvailable");
         const auto vst2RuntimeEnabled = extractBool(json, "vst2RuntimeEnabled");
         const auto vst2HostEnabled = extractBool(json, "vst2HostEnabled");
-        const auto pluginRows = extractActivePluginRows(json);
-        auto knownPluginRows = extractKnownPluginRows(json);
-        applyInstalledPluginRuntimeStatus(knownPluginRows, pluginRows);
+        const auto allPluginRows = extractActivePluginRows(json);
+        auto allKnownPluginRows = extractKnownPluginRows(json);
+        applyInstalledPluginRuntimeStatus(allKnownPluginRows, allPluginRows);
+        const auto pluginRows = filterAndSortPluginRows(allPluginRows, runningPluginSearch, runningPluginSortMode, true);
+        const auto knownPluginRows = filterAndSortPluginRows(allKnownPluginRows, installedPluginSearch, installedPluginSortMode, false);
         const auto pluginKeys = pluginRowKeys(pluginRows);
         const auto knownPluginKeys = pluginRowKeys(knownPluginRows);
         activePluginIdentityKeys.clear();
-        for (auto const& plugin : pluginRows)
+        for (auto const& plugin : allPluginRows)
             activePluginIdentityKeys.push_back(pluginIdentityKey(plugin));
         knownPluginIdentityKeys.clear();
         knownPluginDisplayNames.clear();
-        for (auto const& plugin : knownPluginRows)
+        for (auto const& plugin : allKnownPluginRows)
         {
             knownPluginIdentityKeys.push_back(pluginIdentityKey(plugin));
             knownPluginDisplayNames.push_back(utf8ToWide(plugin.name));
@@ -3038,8 +3390,10 @@ namespace winrt::LightHostWinUI::implementation
         disabledAudioBackendCount = (int) extractStringArray(json, "blockedAudioBackends").size();
         disabledAudioDeviceCount = (int) extractStringArray(json, "blockedAudioDeviceLabels").size();
 
-        RunningPluginsTabButton().Content(box_value(hs("Running (" + std::to_string((int) pluginRows.size()) + ")")));
-        InstalledPluginsTabButton().Content(box_value(hs("Installed (" + std::to_string((int) knownPluginRows.size()) + ")")));
+        RunningPluginsTabButton().Content(box_value(hstring(std::wstring(localization.text("plugins.running", L"Running").c_str())
+            + L" (" + std::to_wstring((int) allPluginRows.size()) + L")")));
+        InstalledPluginsTabButton().Content(box_value(hstring(std::wstring(localization.text("plugins.installed", L"Installed").c_str())
+            + L" (" + std::to_wstring((int) allKnownPluginRows.size()) + L")")));
 
         ConnectionStatusText().Text(hs(status == "online" ? "Online" : status));
         HeaderStatusText().Text(hs(status == "online" ? "Online" : status));
@@ -3059,9 +3413,11 @@ namespace winrt::LightHostWinUI::implementation
         currentAudioInputDeviceName = isAsioBackend ? device : inputDeviceText;
         currentAudioOutputDeviceName = isAsioBackend ? device : outputDeviceText;
 
-        DashboardRoutingTitleText().Text(isAsioBackend ? L"Device" : L"Input and Output");
-        DashboardInputDeviceLabel().Text(isAsioBackend ? L"Device" : L"Input device");
-        DashboardOutputDeviceLabel().Text(L"Output device");
+        DashboardRoutingTitleText().Text(localization.text(isAsioBackend ? "audio.device" : "dashboard.routing",
+            isAsioBackend ? L"Device" : L"Input and Output"));
+        DashboardInputDeviceLabel().Text(localization.text(isAsioBackend ? "audio.device" : "dashboard.inputDevice",
+            isAsioBackend ? L"Device" : L"Input device"));
+        DashboardOutputDeviceLabel().Text(localization.text("dashboard.outputDevice", L"Output device"));
         DashboardInputDeviceText().Text(hs(isAsioBackend ? device : inputDeviceText));
         DashboardOutputDeviceText().Text(hs(outputDeviceText));
         setVisible(DashboardOutputDeviceGrid(), !isAsioBackend);
@@ -3083,7 +3439,8 @@ namespace winrt::LightHostWinUI::implementation
         setComboItems(InputBox(), isAsioBackend ? asioDeviceNames : inputDeviceNames, isAsioBackend ? asioDeviceIndex : currentInputDeviceIndex);
         setComboItems(OutputBox(), outputDeviceNames, currentOutputDeviceIndex);
         setVisible(DeviceRoutingCard(), !inputDeviceNames.empty() || !outputDeviceNames.empty());
-        InputDeviceLabel().Text(isAsioBackend ? L"Device" : L"Input device");
+        InputDeviceLabel().Text(localization.text(isAsioBackend ? "audio.device" : "dashboard.inputDevice",
+            isAsioBackend ? L"Device" : L"Input device"));
         setVisible(InputDeviceRow(), isAsioBackend ? !asioDeviceNames.empty() : !inputDeviceNames.empty());
         setVisible(InputDeviceLabel(), isAsioBackend ? !asioDeviceNames.empty() : !inputDeviceNames.empty());
         setVisible(InputBox(), isAsioBackend ? !asioDeviceNames.empty() : !inputDeviceNames.empty());
@@ -3151,7 +3508,10 @@ namespace winrt::LightHostWinUI::implementation
             ScanVstCheckBox().IsChecked(false);
 
         const int persistenceIndex = audioPersistenceModeIndex(audioPersistenceMode);
-        setComboItems(AudioPersistenceModeBox(), { "Disabled", "Last selected device", "Custom device" }, persistenceIndex);
+        setComboItems(AudioPersistenceModeBox(), {
+            to_string(localization.text("settings.persistence.disabled", L"Disabled")),
+            to_string(localization.text("settings.persistence.lastSelected", L"Last selected device")),
+            to_string(localization.text("settings.persistence.custom", L"Custom device")) }, persistenceIndex);
         AudioRecoveryRetrySecondsBox().Value((std::max)(1, audioPersistenceRetrySeconds));
         AudioRecoveryRetryAttemptsBox().Value((std::max)(1, audioPersistenceRetryAttempts));
 
@@ -3225,10 +3585,12 @@ namespace winrt::LightHostWinUI::implementation
             for (int i = 0; i < (int) pluginRows.size(); ++i)
             {
                 const auto& plugin = pluginRows[(size_t) i];
+                const auto sourceIndex = plugin.originalIndex;
+                const bool canReorder = runningPluginSortMode == 0 && runningPluginSearch.empty();
                 auto row = Grid();
-                row.Tag(box_value(i));
-                row.CanDrag(true);
-                row.AllowDrop(true);
+                row.Tag(box_value(sourceIndex));
+                row.CanDrag(canReorder);
+                row.AllowDrop(canReorder);
                 row.DragStarting({ this, &MainWindow::RunningPluginItem_DragStarting });
                 row.DragOver({ this, &MainWindow::RunningPluginItem_DragOver });
                 row.Drop({ this, &MainWindow::RunningPluginItem_Drop });
@@ -3247,7 +3609,7 @@ namespace winrt::LightHostWinUI::implementation
                 row.ColumnDefinitions().Append(ColumnDefinition());
                 row.ColumnDefinitions().GetAt(5).Width(GridLengthHelper::FromPixels(72));
 
-                auto orderText = rowText(std::to_string(i + 1), 17);
+                auto orderText = rowText(std::to_string(sourceIndex + 1), 17);
                 orderText.HorizontalAlignment(HorizontalAlignment::Center);
                 row.Children().Append(orderText);
 
@@ -3269,27 +3631,27 @@ namespace winrt::LightHostWinUI::implementation
                 Grid::SetColumn(format, 3);
                 row.Children().Append(format);
 
-                auto statusBadge = pill(plugin.status);
+                auto statusBadge = pill(plugin.status, to_string(localization.translatedSource(hs(plugin.status))));
                 statusBadge.HorizontalAlignment(HorizontalAlignment::Left);
                 statusBadge.VerticalAlignment(VerticalAlignment::Center);
                 Grid::SetColumn(statusBadge, 4);
                 row.Children().Append(statusBadge);
 
-                auto actionsButton = rowActionsMenuButton(i);
+                auto actionsButton = rowActionsMenuButton(sourceIndex);
                 auto actionsMenu = MenuFlyout();
-                actionsMenu.Items().Append(actionMenuItem(L"Open editor", L"\xE8A7", i, { this, &MainWindow::OpenPluginEditor_Click }));
-                actionsMenu.Items().Append(actionMenuItem(L"Duplicate", L"\xE8C8", i, { this, &MainWindow::DuplicatePlugin_Click }));
-                actionsMenu.Items().Append(actionMenuItem(plugin.bypassed ? L"Enable" : L"Bypass", L"\xE7E8", i, { this, &MainWindow::BypassPlugin_Click }));
-                actionsMenu.Items().Append(actionMenuItem(L"Remove", L"\xE74D", i, { this, &MainWindow::RemovePlugin_Click }));
+                actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.openEditor", L"Open editor").c_str(), L"\xE8A7", sourceIndex, { this, &MainWindow::OpenPluginEditor_Click }));
+                actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.duplicate", L"Duplicate").c_str(), L"\xE8C8", sourceIndex, { this, &MainWindow::DuplicatePlugin_Click }));
+                actionsMenu.Items().Append(actionMenuItem(localization.text(plugin.bypassed ? "plugins.enable" : "plugins.bypass", plugin.bypassed ? L"Enable" : L"Bypass").c_str(), L"\xE7E8", sourceIndex, { this, &MainWindow::BypassPlugin_Click }));
+                actionsMenu.Items().Append(actionMenuItem(localization.text("common.remove", L"Remove").c_str(), L"\xE74D", sourceIndex, { this, &MainWindow::RemovePlugin_Click }));
                 actionsButton.Flyout(actionsMenu);
                 actionsButton.HorizontalAlignment(HorizontalAlignment::Right);
                 actionsButton.VerticalAlignment(VerticalAlignment::Center);
                 Grid::SetColumn(actionsButton, 5);
                 row.Children().Append(actionsButton);
 
-                auto item = pluginListItem(row, i);
-                item.CanDrag(true);
-                item.AllowDrop(true);
+                auto item = pluginListItem(row, sourceIndex);
+                item.CanDrag(canReorder);
+                item.AllowDrop(canReorder);
                 item.DragStarting({ this, &MainWindow::RunningPluginItem_DragStarting });
                 item.DragOver({ this, &MainWindow::RunningPluginItem_DragOver });
                 item.Drop({ this, &MainWindow::RunningPluginItem_Drop });
@@ -3300,10 +3662,10 @@ namespace winrt::LightHostWinUI::implementation
             renderedRunningPluginLabels = pluginKeys;
         }
 
-        activePluginCount = (int) pluginRows.size();
+        activePluginCount = (int) allPluginRows.size();
         updateRunningPluginActions();
 
-        installedPluginCount = (int) knownPluginRows.size();
+        installedPluginCount = (int) allKnownPluginRows.size();
         setVisible(InstalledPluginsListCard(), !knownPluginRows.empty());
         setVisible(InstalledPluginsEmptyText(), knownPluginRows.empty());
         if (renderedInstalledPluginLabels != knownPluginKeys)
@@ -3314,6 +3676,7 @@ namespace winrt::LightHostWinUI::implementation
             for (int i = 0; i < (int) knownPluginRows.size(); ++i)
             {
                 const auto& plugin = knownPluginRows[(size_t) i];
+                const auto sourceIndex = plugin.originalIndex;
                 auto row = Grid();
                 row.Padding(ThicknessHelper::FromLengths(28, 0, 22, 0));
                 row.ColumnSpacing(18);
@@ -3344,24 +3707,24 @@ namespace winrt::LightHostWinUI::implementation
                 Grid::SetColumn(format, 2);
                 row.Children().Append(format);
 
-                auto statusBadge = pill(plugin.status);
+                auto statusBadge = pill(plugin.status, to_string(localization.translatedSource(hs(plugin.status))));
                 statusBadge.HorizontalAlignment(HorizontalAlignment::Left);
                 statusBadge.VerticalAlignment(VerticalAlignment::Center);
                 Grid::SetColumn(statusBadge, 3);
                 row.Children().Append(statusBadge);
 
-                auto actionsButton = rowActionsMenuButton(i);
+                auto actionsButton = rowActionsMenuButton(sourceIndex);
                 auto actionsMenu = MenuFlyout();
-                actionsMenu.Items().Append(actionMenuItem(L"Add to chain", L"\xE710", i, { this, &MainWindow::AddInstalledPlugin_Click }));
-                actionsMenu.Items().Append(actionMenuItem(L"Open folder", L"\xE8B7", i, { this, &MainWindow::OpenInstalledPluginLocation_Click }));
-                actionsMenu.Items().Append(actionMenuItem(L"Remove from database", L"\xE74D", i, { this, &MainWindow::RemoveInstalledPlugin_Click }));
+                actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.addToChain", L"Add to chain").c_str(), L"\xE710", sourceIndex, { this, &MainWindow::AddInstalledPlugin_Click }));
+                actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.openFolder", L"Open folder").c_str(), L"\xE8B7", sourceIndex, { this, &MainWindow::OpenInstalledPluginLocation_Click }));
+                actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.removeDatabase", L"Remove from database").c_str(), L"\xE74D", sourceIndex, { this, &MainWindow::RemoveInstalledPlugin_Click }));
                 actionsButton.Flyout(actionsMenu);
                 actionsButton.HorizontalAlignment(HorizontalAlignment::Right);
                 actionsButton.VerticalAlignment(VerticalAlignment::Center);
                 Grid::SetColumn(actionsButton, 4);
                 row.Children().Append(actionsButton);
 
-                auto item = pluginListItem(row, i);
+                auto item = pluginListItem(row, sourceIndex);
                 installedPluginItemBorders.push_back(item);
                 InstalledPluginsListView().Children().Append(item);
             }
