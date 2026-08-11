@@ -2263,13 +2263,13 @@ void AudioEngine::loadActivePlugins()
 
 		if (plugin.numInputChannels <= 0 || plugin.numOutputChannels <= 0)
 		{
-			const String errorMessage = "Plugin does not expose audio input and output channels";
-			const auto message = "Light Host Modern: failed to load plugin '" + plugin.name + "': " + errorMessage;
+			const auto message = "Light Host Modern: plugin scan reported incomplete channel metadata for '"
+				+ plugin.name
+				+ "' inputs=" + String(plugin.numInputChannels)
+				+ " outputs=" + String(plugin.numOutputChannels)
+				+ "; validating the instantiated plugin";
 			Logger::writeToLog(message);
 			lightHostLog(message);
-			pluginStateStore.setValue("failed", plugin, errorMessage);
-			markSettingsDirty();
-			continue;
 		}
 
 		const bool bypass = pluginStateStore.getValue("bypass", plugin).getIntValue() != 0;
@@ -2325,6 +2325,28 @@ void AudioEngine::loadActivePlugins()
 			Logger::writeToLog(message);
 			lightHostLog(message);
 			pluginStateStore.setValue("failed", plugin, errorMessage);
+			markSettingsDirty();
+			continue;
+		}
+
+		const int instanceInputChannels = instance->getTotalNumInputChannels();
+		const int instanceOutputChannels = instance->getTotalNumOutputChannels();
+		const auto channelMessage = "Light Host Modern: plugin channel validation '"
+			+ plugin.name
+			+ "' scanInputs=" + String(plugin.numInputChannels)
+			+ " scanOutputs=" + String(plugin.numOutputChannels)
+			+ " instanceInputs=" + String(instanceInputChannels)
+			+ " instanceOutputs=" + String(instanceOutputChannels);
+		Logger::writeToLog(channelMessage);
+		lightHostLog(channelMessage);
+
+		if (instanceInputChannels <= 0 && instanceOutputChannels <= 0)
+		{
+			const String channelError = "Instantiated plugin does not expose audio input or output channels";
+			const auto message = "Light Host Modern: failed to load plugin '" + plugin.name + "': " + channelError;
+			Logger::writeToLog(message);
+			lightHostLog(message);
+			pluginStateStore.setValue("failed", plugin, channelError);
 			markSettingsDirty();
 			continue;
 		}
@@ -2415,10 +2437,13 @@ bool AudioEngine::addKnownPluginByIndex(int sortedIndex)
 
 	if (plugin.numInputChannels <= 0 || plugin.numOutputChannels <= 0)
 	{
-		const auto rejectMessage = "Light Host Modern: rejected plugin without audio input/output before load '" + plugin.name + "'";
-		Logger::writeToLog(rejectMessage);
-		lightHostLog(rejectMessage);
-		return false;
+		const auto warningMessage = "Light Host Modern: plugin scan reported incomplete channel metadata before add '"
+			+ plugin.name
+			+ "' inputs=" + String(plugin.numInputChannels)
+			+ " outputs=" + String(plugin.numOutputChannels)
+			+ "; deferring validation until after instantiation";
+		Logger::writeToLog(warningMessage);
+		lightHostLog(warningMessage);
 	}
 
 	const auto activeTypes = activePluginList.getTypes();
