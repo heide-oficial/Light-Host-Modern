@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(LightHost VERSION 1.1.1 LANGUAGES C CXX)
+project(LightHost VERSION 1.2.0 LANGUAGES C CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "Light Host Modern is now maintained as a Windows-only application.")
@@ -229,7 +229,7 @@ target_link_libraries(LightHost
 
 if(MSVC)
     set(LIGHTHOST_WINUI_SOURCE_DIR
-        "${CMAKE_CURRENT_SOURCE_DIR}/WinUI/LightHost.WinUI/x64/$<CONFIG>/LightHost.WinUI")
+        "${CMAKE_CURRENT_SOURCE_DIR}/WinUI/x64/$<CONFIG>/LightHost.WinUI")
     set(LIGHTHOST_WINUI_TARGET_DIR
         "$<TARGET_FILE_DIR:LightHost>/WinUI/x64/$<CONFIG>/LightHost.WinUI")
 
