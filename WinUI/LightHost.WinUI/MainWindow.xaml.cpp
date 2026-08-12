@@ -2612,7 +2612,7 @@ namespace winrt::LightHostWinUI::implementation
         else if (section == L"Plugins")
             PageSubtitleText().Text(localization.text("page.plugins.subtitle", L"Manage the running chain and installed plugin database."));
         else if (section == L"Support me")
-            PageSubtitleText().Text(localization.text("page.support.subtitle", L"Support the continued development of Light Host Modern."));
+            PageSubtitleText().Text(localization.text("page.support.subtitle", L"Support the continued development of my projects!"));
         else
             PageSubtitleText().Text(localization.text("page.settings.subtitle", L"Basic app preferences."));
 
@@ -2690,7 +2690,6 @@ namespace winrt::LightHostWinUI::implementation
         }
         DownloadUpdateButton().Content(box_value(localization.text("settings.update.download", L"Download update")));
         HideSupportTitleText().Text(localization.text("settings.support.hide", L"Hide the Support me tab"));
-        HideSupportDescriptionText().Text(localization.text("settings.support.hideDescription", L"Keep support links out of the sidebar."));
         LanguageTitleText().Text(localization.text("settings.language.title", L"Language"));
         LanguageDescriptionText().Text(localization.text("settings.language.description", L"Choose the language used by the app."));
         ScanDefaultPluginsMenuItem().Text(localization.text("plugins.scan", L"Scan"));

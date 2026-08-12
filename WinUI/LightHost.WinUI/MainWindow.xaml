@@ -359,20 +359,26 @@
 
                     <StackPanel x:Name="SupportPanel" Visibility="Collapsed" Spacing="18">
                         <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="28">
-                            <StackPanel Spacing="22" MaxWidth="760" HorizontalAlignment="Left">
+                            <Grid ColumnSpacing="32">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
                                 <TextBlock x:Name="SupportMessageText"
                                            Text="Please consider supporting my work. There are many hours of work, thinking and effort behind it. The two easiest ways to support the app are either by starring the repository or by donating any amount on Ko-fi. Thank you!"
                                            FontSize="17"
-                                           TextWrapping="Wrap" />
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center" />
                                 <Button x:Name="KoFiButton"
+                                        Grid.Column="1"
                                         Padding="0"
-                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
                                         AutomationProperties.Name="Support me on Ko-fi">
-                                    <Image Source="https://camo.githubusercontent.com/ccbceaf50e27134b48a85cbc14fc0cbabfa7c91d011b916e4f9d557682f40b8a/68747470733a2f2f73746f726167652e6b6f2d66692e636f6d2f63646e2f6272616e6461737365742f76322f737570706f72745f6d655f6f6e5f62656967652e706e67"
-                                           Width="218"
+                                    <Image Source="ms-appx:///Assets/support-me-on-kofi.png"
+                                           Width="245"
                                            Stretch="Uniform" />
                                 </Button>
-                            </StackPanel>
+                            </Grid>
                         </Border>
                     </StackPanel>
 
@@ -401,17 +407,6 @@
                                 <TextBlock Text="General" FontSize="17" FontWeight="SemiBold" />
                                 <StackPanel x:Name="StartWithWindowsCheckBoxHost" />
                                 <StackPanel x:Name="CloseToTraySwitchHost" />
-                                <Grid ColumnSpacing="24">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock x:Name="HideSupportTitleText" Text="Hide the Support me tab" />
-                                        <TextBlock x:Name="HideSupportDescriptionText" Text="Keep support links out of the sidebar." Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                    <ToggleSwitch x:Name="HideSupportTabSwitch" Grid.Column="1" VerticalAlignment="Center" AutomationProperties.Name="Hide the Support me tab" />
-                                </Grid>
                                 <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -571,6 +566,18 @@
                                         <TextBlock Text="Choose the icon variant used in the app and tray." Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel x:Name="IconModeBoxHost" Grid.Column="1" />
+                                </Grid>
+                                <Grid ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="360" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="HideSupportTitleText" Text="Hide the Support me tab" VerticalAlignment="Center" />
+                                    <ToggleSwitch x:Name="HideSupportTabSwitch"
+                                                  Grid.Column="1"
+                                                  HorizontalAlignment="Left"
+                                                  VerticalAlignment="Center"
+                                                  AutomationProperties.Name="Hide the Support me tab" />
                                 </Grid>
                                 <Grid ColumnSpacing="24">
                                     <Grid.ColumnDefinitions>

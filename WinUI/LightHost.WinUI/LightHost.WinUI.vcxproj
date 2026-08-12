@@ -173,6 +173,7 @@
     <Image Include="Assets\logo.ico" />
     <Image Include="Assets\logo-white.ico" />
     <Image Include="Assets\logo-black.ico" />
+    <Image Include="Assets\support-me-on-kofi.png" />
   </ItemGroup>
   <ItemGroup>
     <AppxPackagePayload Include="Assets\LockScreenLogo.scale-200.png">
@@ -213,6 +214,9 @@
     </AppxPackagePayload>
     <AppxPackagePayload Include="Assets\logo-black.ico">
       <TargetPath>Assets\logo-black.ico</TargetPath>
+    </AppxPackagePayload>
+    <AppxPackagePayload Include="Assets\support-me-on-kofi.png">
+      <TargetPath>Assets\support-me-on-kofi.png</TargetPath>
     </AppxPackagePayload>
     <AppxPackagePayload Include="Locales\en-us.json">
       <TargetPath>Locales\en-us.json</TargetPath>
