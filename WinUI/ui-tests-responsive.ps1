@@ -38,6 +38,7 @@ function Set-ComboIndex([string] $selector, [int] $index) {
 Assert-Command 'Focus main window' { rtk winapp ui focus NavSettings -w $window.hwnd }
 Assert-Command 'Compact app logo exists' { rtk winapp ui wait-for NavCompactLogo -w $window.hwnd -t 3000 }
 Assert-Command 'Navigate Settings' { rtk winapp ui click NavSettings -w $window.hwnd }
+Assert-Command 'Normalize test language to English' { Set-ComboIndex AppLanguage 0 }
 Assert-Command 'Layout mode exists' { rtk winapp ui wait-for LayoutMode -w $window.hwnd -t 3000 }
 Assert-Command 'Backdrop mode exists' { rtk winapp ui wait-for BackdropMode -w $window.hwnd -t 3000 }
 Assert-Command 'Start with Windows state label exists' { rtk winapp ui wait-for StartWithWindowsState -w $window.hwnd -t 3000 }
@@ -105,6 +106,11 @@ $focusedAfterAdd = (rtk winapp ui get-focused -w $window.hwnd | Out-String)
 if ($focusedAfterAdd -notmatch 'ScanPathEditor') { throw 'The newly added scan path was not focused.' }
 Write-Output 'PASS: New scan path receives focus and text selection'
 rtk winapp ui screenshot -w $window.hwnd --capture-screen -o (Join-Path $screenshots '10-new-scan-path-focused.png') | Out-Null
+Assert-Command 'Discard untouched blank scan path' { rtk winapp ui click ScanPathsHint -w $window.hwnd }
+Start-Sleep -Milliseconds 800
+$focusedAfterBlankPath = (rtk winapp ui get-focused -w $window.hwnd | Out-String)
+if ($focusedAfterBlankPath -match 'ScanPathEditor') { throw 'The untouched blank scan path was not discarded after losing focus.' }
+Write-Output 'PASS: Untouched blank scan path is discarded on focus loss'
 Assert-Command 'Cancel scan paths dialog' { rtk winapp ui invoke CloseButton -w $window.hwnd }
 
 [LightHostWindowTest]::MoveWindow($hwnd, 80, 60, 1000, 760, $true) | Out-Null
@@ -113,6 +119,10 @@ Assert-Command 'Navigate back to Settings' { rtk winapp ui click NavSettings -w 
 Assert-Command 'Switch to Portuguese (Brazil)' { Set-ComboIndex AppLanguage 1 }
 Assert-Command 'Portuguese Settings title appears' { rtk winapp ui wait-for PageTitle -w $window.hwnd --value 'Configurações' -t 3000 }
 rtk winapp ui screenshot -w $window.hwnd -o (Join-Path $screenshots '11-settings-pt-br.png') | Out-Null
+Assert-Command 'Open language choices after localization' { rtk winapp ui invoke AppLanguage -w $window.hwnd }
+Assert-Command 'English native language name remains available' { rtk winapp ui wait-for 'English (United States)' -w $window.hwnd -t 3000 }
+Assert-Command 'Portuguese native language name remains available' { rtk winapp ui wait-for 'Português (Brasil)' -w $window.hwnd -t 3000 }
+rtk winapp ui send-keys escape -w $window.hwnd | Out-Null
 Assert-Command 'Restore English language' { Set-ComboIndex AppLanguage 0 }
 
 [LightHostWindowTest]::MoveWindow($hwnd, 80, 60, 1460, 920, $true) | Out-Null
