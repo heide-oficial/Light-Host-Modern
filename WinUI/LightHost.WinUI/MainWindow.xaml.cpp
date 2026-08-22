@@ -2069,20 +2069,7 @@ namespace winrt::LightHostWinUI::implementation
         CloseToTrayRadioButton().Checked({ this, &MainWindow::CloseBehaviorRadioButton_Checked });
 
         configurePluginSortMenus();
-        syncingLanguageControls = true;
-        const auto languages = ::LightHostWinUI::LocalizationCatalog::availableLanguages();
-        int selectedLanguage = 0;
-        for (size_t index = 0; index < languages.size(); ++index)
-        {
-            auto item = ComboBoxItem();
-            item.Content(box_value(hstring(languages[index].second)));
-            item.Tag(box_value(hstring(languages[index].first)));
-            LanguageBox().Items().Append(item);
-            if (_wcsicmp(languages[index].first.c_str(), localization.languageCode().c_str()) == 0)
-                selectedLanguage = static_cast<int>(index);
-        }
-        LanguageBox().SelectedIndex(selectedLanguage);
-        syncingLanguageControls = false;
+        refreshLanguageItems();
 
         hideSupportTab = loadUiSetting(L"General", L"HideSupportTab", L"0") == L"1";
         HideSupportTabSwitch().IsOn(hideSupportTab);
@@ -2790,6 +2777,7 @@ namespace winrt::LightHostWinUI::implementation
     void MainWindow::applyLocalization()
     {
         localizeVisualTree(RootLayout());
+        refreshLanguageItems();
         BrandTitleText().Text(localization.text("app.title", L"Light Host Modern"));
         DashboardButton().Content(box_value(localization.text("nav.dashboard", L"Dashboard")));
         PreferencesButton().Content(box_value(localization.text("nav.audio", L"Audio")));
@@ -2845,6 +2833,28 @@ namespace winrt::LightHostWinUI::implementation
         updateToggleStateLabels();
         configurePluginSortMenus();
         showSection(currentSection);
+    }
+
+    void MainWindow::refreshLanguageItems()
+    {
+        const bool wasSyncing = syncingLanguageControls;
+        syncingLanguageControls = true;
+        LanguageBox().Items().Clear();
+
+        const auto languages = ::LightHostWinUI::LocalizationCatalog::availableLanguages();
+        int selectedLanguage = 0;
+        for (size_t index = 0; index < languages.size(); ++index)
+        {
+            auto item = ComboBoxItem();
+            item.Content(box_value(hstring(languages[index].second)));
+            item.Tag(box_value(hstring(languages[index].first)));
+            LanguageBox().Items().Append(item);
+            if (_wcsicmp(languages[index].first.c_str(), localization.languageCode().c_str()) == 0)
+                selectedLanguage = static_cast<int>(index);
+        }
+
+        LanguageBox().SelectedIndex(selectedLanguage);
+        syncingLanguageControls = wasSyncing;
     }
 
     void MainWindow::localizeVisualTree(DependencyObject const& root)

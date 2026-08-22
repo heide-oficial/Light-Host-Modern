@@ -264,6 +264,7 @@ namespace winrt::LightHostWinUI::implementation
         void configurePluginSortMenus();
         void localizeVisualTree(Microsoft::UI::Xaml::DependencyObject const& root);
         void applyLocalization();
+        void refreshLanguageItems();
         winrt::fire_and_forget checkForUpdatesAsync();
         void updateDebugControls();
         void resetDefaultPluginScanPaths();
