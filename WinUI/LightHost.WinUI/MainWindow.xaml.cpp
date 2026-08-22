@@ -1887,7 +1887,6 @@ namespace winrt::LightHostWinUI::implementation
         setComboItems(audioPersistenceModeBox, { "Disabled", "Last selected device", "Custom device" }, 0);
 
         audioRecoveryRetrySecondsBox = NumberBox();
-        audioRecoveryRetrySecondsBox.Header(box_value(hstring(L"Retry interval")));
         audioRecoveryRetrySecondsBox.Minimum(1);
         audioRecoveryRetrySecondsBox.Maximum(60);
         audioRecoveryRetrySecondsBox.Value(5);
@@ -1896,7 +1895,6 @@ namespace winrt::LightHostWinUI::implementation
         AudioRecoveryRetrySecondsBoxHost().Children().Append(audioRecoveryRetrySecondsBox);
 
         audioRecoveryRetryAttemptsBox = NumberBox();
-        audioRecoveryRetryAttemptsBox.Header(box_value(hstring(L"Max attempts")));
         audioRecoveryRetryAttemptsBox.Minimum(1);
         audioRecoveryRetryAttemptsBox.Maximum(100);
         audioRecoveryRetryAttemptsBox.Value(10);

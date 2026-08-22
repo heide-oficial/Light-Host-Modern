@@ -579,7 +579,7 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE72C;" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Retry interval" />
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Device persistence: retry interval" />
                                         <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Choose how many seconds to wait between retry attempts." TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel x:Name="AudioRecoveryRetrySecondsBoxHost" Grid.Column="2" Width="96" />
@@ -590,7 +590,7 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE9D9;" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Maximum attempts" />
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Device persistence: max attempts" />
                                         <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Choose how many times to retry before pausing recovery." TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel x:Name="AudioRecoveryRetryAttemptsBoxHost" Grid.Column="2" Width="96" />
