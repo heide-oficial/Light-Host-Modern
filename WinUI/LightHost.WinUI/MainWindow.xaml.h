@@ -148,6 +148,7 @@ namespace winrt::LightHostWinUI::implementation
         bool asioDeviceMode = false;
         bool sidebarCollapsed = false;
         bool syncingLanguageControls = false;
+        bool languageChangeQueued = false;
         bool hideSupportTab = false;
         bool compactLayout = false;
         bool compactPluginCards = false;
@@ -158,6 +159,7 @@ namespace winrt::LightHostWinUI::implementation
         std::wstring installedPluginSearch;
         std::wstring latestReleaseUrl;
         std::wstring latestReleaseTag;
+        std::wstring pendingLanguageCode;
         std::wstring currentSection = L"Dashboard";
         ::LightHostWinUI::LocalizationCatalog localization;
         int draggedPluginSourceIndex = -1;

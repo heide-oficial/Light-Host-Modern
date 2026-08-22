@@ -28,6 +28,7 @@
   "settings.update.download": "Baixar atualização",
   "settings.language.title": "Idioma",
   "settings.language.description": "Escolha o idioma usado pelo aplicativo.",
+  "settings.language.failed": "Não foi possível aplicar o idioma. Reabra a interface e tente novamente.",
   "settings.language.automation": "Idioma do aplicativo",
   "settings.support.hide": "Ocultar a aba Apoie-me",
   "plugins.search.placeholder": "Pesquisar plugins",

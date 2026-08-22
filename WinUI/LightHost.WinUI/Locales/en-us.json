@@ -28,6 +28,7 @@
   "settings.update.download": "Download update",
   "settings.language.title": "Language",
   "settings.language.description": "Choose the language used by the app.",
+  "settings.language.failed": "The language could not be applied. Reopen the interface and try again.",
   "settings.language.automation": "App language",
   "settings.support.hide": "Hide the Support me tab",
   "plugins.search.placeholder": "Search plugins",

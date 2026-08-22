@@ -2234,11 +2234,40 @@ namespace winrt::LightHostWinUI::implementation
             return;
         const auto language = unbox_value_or<hstring>(item.Tag(), L"en-us");
         saveUiSetting(L"Localization", L"Language", language.c_str());
-        localization.load(language.c_str());
-        applyLocalization();
-        renderedRunningPluginLabels.clear();
-        renderedInstalledPluginLabels.clear();
-        refreshSnapshot();
+        pendingLanguageCode = language.c_str();
+        if (languageChangeQueued)
+            return;
+
+        languageChangeQueued = true;
+        const bool queued = DispatcherQueue().TryEnqueue([this]()
+        {
+            languageChangeQueued = false;
+            try
+            {
+                localization.load(pendingLanguageCode);
+                applyLocalization();
+                renderedRunningPluginLabels.clear();
+                renderedInstalledPluginLabels.clear();
+                refreshSnapshot();
+            }
+            catch (hresult_error const& error)
+            {
+                winUILog("Language change failed: " + to_string(error.message()));
+                showNotification(localization.text("settings.language.failed", L"The language could not be applied. Reopen the interface and try again.").c_str());
+            }
+            catch (std::exception const& error)
+            {
+                winUILog(std::string("Language change failed: ") + error.what());
+                showNotification(localization.text("settings.language.failed", L"The language could not be applied. Reopen the interface and try again.").c_str());
+            }
+            catch (...)
+            {
+                winUILog("Language change failed with an unknown exception.");
+                showNotification(localization.text("settings.language.failed", L"The language could not be applied. Reopen the interface and try again.").c_str());
+            }
+        });
+        if (!queued)
+            languageChangeQueued = false;
     }
 
     void MainWindow::PluginSearchBox_TextChanged(AutoSuggestBox const& sender, AutoSuggestBoxTextChangedEventArgs const& args)
@@ -2777,7 +2806,6 @@ namespace winrt::LightHostWinUI::implementation
     void MainWindow::applyLocalization()
     {
         localizeVisualTree(RootLayout());
-        refreshLanguageItems();
         BrandTitleText().Text(localization.text("app.title", L"Light Host Modern"));
         DashboardButton().Content(box_value(localization.text("nav.dashboard", L"Dashboard")));
         PreferencesButton().Content(box_value(localization.text("nav.audio", L"Audio")));
