@@ -131,7 +131,7 @@
   "settings.persistence.retryInterval": "Device persistence: retry interval",
   "settings.persistence.maxAttempts": "Device persistence: max attempts",
   "settings.devices.enabled": "Enabled devices",
-  "settings.devices.allEnabled": "All detected audio backends and devices are enabled.",
+  "settings.devices.allEnabled": "Choose which audio backends and devices Light Host Modern is allowed to use.",
   "settings.devices.manage": "Manage enabled devices",
   "settings.appearance": "Appearance",
   "settings.material": "Window material",

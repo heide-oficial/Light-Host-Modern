@@ -3328,15 +3328,9 @@ namespace winrt::LightHostWinUI::implementation
 
     void MainWindow::syncEnabledAudioChoicesSummary()
     {
-        if (disabledAudioBackendCount == 0 && disabledAudioDeviceCount == 0)
-        {
-            EnabledAudioChoicesSummaryText().Text(L"All detected audio backends and devices are enabled.");
-            return;
-        }
-
-        EnabledAudioChoicesSummaryText().Text(hs(std::to_string(disabledAudioBackendCount) + " backend(s) and "
-            + std::to_string(disabledAudioDeviceCount)
-            + " device choice(s) are disabled. Disabled choices are never selected automatically or manually."));
+        EnabledAudioChoicesSummaryText().Text(localization.text(
+            "settings.devices.allEnabled",
+            L"Choose which audio backends and devices Light Host Modern is allowed to use."));
     }
 
     void MainWindow::updateDebugControls()
@@ -3514,9 +3508,6 @@ namespace winrt::LightHostWinUI::implementation
         const auto recoveryTargetBackend = extractString(json, "recoveryTargetBackend");
         const auto recoveryTargetInputDevice = extractString(json, "recoveryTargetInputDevice");
         const auto recoveryTargetOutputDevice = extractString(json, "recoveryTargetOutputDevice");
-        disabledAudioBackendCount = (int) extractStringArray(json, "blockedAudioBackends").size();
-        disabledAudioDeviceCount = (int) extractStringArray(json, "blockedAudioDeviceLabels").size();
-
         RunningPluginsTabButton().Content(box_value(hstring(std::wstring(localization.text("plugins.running", L"Running").c_str())
             + L" (" + std::to_wstring((int) allPluginRows.size()) + L")")));
         InstalledPluginsTabButton().Content(box_value(hstring(std::wstring(localization.text("plugins.installed", L"Installed").c_str())

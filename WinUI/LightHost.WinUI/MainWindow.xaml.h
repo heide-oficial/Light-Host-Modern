@@ -182,8 +182,6 @@ namespace winrt::LightHostWinUI::implementation
         std::string currentAudioBackendName;
         std::string currentAudioInputDeviceName;
         std::string currentAudioOutputDeviceName;
-        int disabledAudioBackendCount = 0;
-        int disabledAudioDeviceCount = 0;
         std::vector<std::string> allAudioBackendNames;
         std::vector<bool> allAudioBackendEnabled;
         std::vector<std::string> allAudioDeviceChoices;

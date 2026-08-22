@@ -602,7 +602,7 @@
                                     <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE8D7;" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                         <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Enabled devices" />
-                                        <TextBlock x:Name="EnabledAudioChoicesSummaryText" AutomationProperties.AutomationId="EnabledDevicesSummary" Style="{StaticResource CaptionTextBlockStyle}" Text="All detected audio backends and devices are enabled." TextWrapping="Wrap" />
+                                        <TextBlock x:Name="EnabledAudioChoicesSummaryText" AutomationProperties.AutomationId="EnabledDevicesSummary" Style="{StaticResource CaptionTextBlockStyle}" Text="Choose which audio backends and devices Light Host Modern is allowed to use." TextWrapping="Wrap" />
                                     </StackPanel>
                                     <Button x:Name="ManageEnabledAudioDevicesButton" Grid.Column="2" AutomationProperties.AutomationId="ManageEnabledAudioDevices" VerticalAlignment="Center" Content="Manage enabled devices" />
                                 </Grid>

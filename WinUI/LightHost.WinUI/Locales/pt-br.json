@@ -131,7 +131,7 @@
   "settings.persistence.retryInterval": "Persistência de dispositivo: intervalo entre tentativas",
   "settings.persistence.maxAttempts": "Persistência de dispositivo: máximo de tentativas",
   "settings.devices.enabled": "Dispositivos habilitados",
-  "settings.devices.allEnabled": "Todos os backends e dispositivos de áudio detectados estão habilitados.",
+  "settings.devices.allEnabled": "Escolha quais backends e dispositivos de áudio o Light Host Modern pode usar.",
   "settings.devices.manage": "Gerenciar dispositivos habilitados",
   "settings.appearance": "Aparência",
   "settings.material": "Material da janela",
