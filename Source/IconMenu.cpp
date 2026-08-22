@@ -24,9 +24,9 @@ namespace
 		if (auto* hwnd = findWinUIWindow())
 		{
 			if (IsIconic(hwnd))
-				ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+				ShowWindow(hwnd, SW_RESTORE);
 			else
-				ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+				ShowWindow(hwnd, SW_SHOW);
 
 			SetForegroundWindow(hwnd);
 			return true;
@@ -223,6 +223,12 @@ void IconMenu::openWinUI()
 			for (const auto& configuration : configurations)
 			{
 				Array<File> candidates;
+				candidates.add(root.getChildFile("WinUI")
+					.getChildFile("LightHost.WinUI")
+					.getChildFile("x64")
+					.getChildFile(configuration)
+					.getChildFile("LightHost.WinUI")
+					.getChildFile(executableName));
 				candidates.add(root.getChildFile("WinUI")
 					.getChildFile("x64")
 					.getChildFile(configuration)

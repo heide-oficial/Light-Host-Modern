@@ -22,7 +22,11 @@ namespace winrt::LightHostWinUI::implementation
         void Plugins_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void Config_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void Support_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void Navigation_SelectionChanged(Microsoft::UI::Xaml::Controls::NavigationView const&,
+                                         Microsoft::UI::Xaml::Controls::NavigationViewSelectionChangedEventArgs const&);
         void KoFi_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void SupportRepository_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void SupportShowcase_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void DownloadUpdate_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void HideSupportTabSwitch_Toggled(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void LanguageBox_SelectionChanged(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
@@ -36,6 +40,7 @@ namespace winrt::LightHostWinUI::implementation
         void ComboBox_DropDownOpened(winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&);
         void ComboBox_DropDownClosed(winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&);
         void RootLayout_SizeChanged(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
+        void RootLayout_PointerPressed(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&);
         void RunningPluginsTab_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void InstalledPluginsTab_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void OpenWindowsSoundSettings_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
@@ -80,6 +85,7 @@ namespace winrt::LightHostWinUI::implementation
         void RetryAudioDevice_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void ChooseAudioDevice_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void ManageEnabledAudioDevices_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void PreferredDeviceButton_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void IconModeBox_SelectionChanged(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
         void Window_Closed(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::WindowEventArgs const&);
 
@@ -109,6 +115,7 @@ namespace winrt::LightHostWinUI::implementation
         Microsoft::UI::Xaml::Controls::ComboBox bufferSizeBox{ nullptr };
         Microsoft::UI::Xaml::Controls::ComboBox themeModeBox{ nullptr };
         Microsoft::UI::Xaml::Controls::ComboBox backdropModeBox{ nullptr };
+        Microsoft::UI::Xaml::Controls::ComboBox layoutModeBox{ nullptr };
         Microsoft::UI::Xaml::Controls::ComboBox iconModeBox{ nullptr };
         Microsoft::UI::Xaml::Controls::ComboBox audioPersistenceModeBox{ nullptr };
         Microsoft::UI::Xaml::Controls::ComboBox customRecoveryBackendBox{ nullptr };
@@ -142,6 +149,9 @@ namespace winrt::LightHostWinUI::implementation
         bool sidebarCollapsed = false;
         bool syncingLanguageControls = false;
         bool hideSupportTab = false;
+        bool compactLayout = false;
+        bool compactPluginCards = false;
+        bool preferredDeviceDialogOpen = false;
         int runningPluginSortMode = 0;
         int installedPluginSortMode = 1;
         std::wstring runningPluginSearch;
@@ -191,6 +201,7 @@ namespace winrt::LightHostWinUI::implementation
         Microsoft::UI::Xaml::Controls::ComboBox BufferSizeBox() const { return bufferSizeBox; }
         Microsoft::UI::Xaml::Controls::ComboBox ThemeModeBox() const { return themeModeBox; }
         Microsoft::UI::Xaml::Controls::ComboBox BackdropModeBox() const { return backdropModeBox; }
+        Microsoft::UI::Xaml::Controls::ComboBox LayoutModeBox() const { return layoutModeBox; }
         Microsoft::UI::Xaml::Controls::ComboBox IconModeBox() const { return iconModeBox; }
         Microsoft::UI::Xaml::Controls::ComboBox AudioPersistenceModeBox() const { return audioPersistenceModeBox; }
         Microsoft::UI::Xaml::Controls::ComboBox CustomRecoveryBackendBox() const { return customRecoveryBackendBox; }
@@ -232,14 +243,14 @@ namespace winrt::LightHostWinUI::implementation
         void updateInstalledPluginActions();
         void applyTheme(Microsoft::UI::Xaml::ElementTheme theme);
         void applyBackdrop(int selectedIndex);
+        void applyLayoutMode();
+        void updatePreferredDeviceSummary();
+        winrt::fire_and_forget showPreferredDeviceDialogAsync();
         void applyIconMode(std::string const& mode);
         void syncIconMode(std::string const& mode);
-        void pulsePluginList(bool installedList);
-        void pulseElement(Microsoft::UI::Xaml::UIElement const& element);
-        void pulseRunningPluginCard(int index);
-        void pulseInstalledPluginCard(int index);
         void applyResponsiveLayout(double width);
         void updateSidebarLayout();
+        void updateToggleStateLabels();
         void syncThemeSelectors(int selectedIndex);
         void setVisible(Microsoft::UI::Xaml::UIElement const& element, bool visible);
         void syncChannelCheckBoxes(Microsoft::UI::Xaml::Controls::StackPanel const& panel,

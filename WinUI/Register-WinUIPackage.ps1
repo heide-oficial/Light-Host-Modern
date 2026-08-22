@@ -10,6 +10,9 @@ $ErrorActionPreference = 'Stop'
 
 $manifest = Join-Path $PSScriptRoot "LightHost.WinUI\$Platform\$Configuration\LightHost.WinUI\AppxManifest.xml"
 if (-not (Test-Path -LiteralPath $manifest)) {
+    $manifest = Join-Path $PSScriptRoot "$Platform\$Configuration\LightHost.WinUI\AppxManifest.xml"
+}
+if (-not (Test-Path -LiteralPath $manifest)) {
     throw "Generated AppxManifest.xml was not found. Build WinUI\LightHost.WinUI.sln first."
 }
 

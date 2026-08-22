@@ -12,7 +12,11 @@ compile_commands.json
 .wix/
 lib/
 tools/
+packages/
+.nuget/
 _deps/
+*.nupkg
+*.snupkg
 ThirdParty/VST2_SDK/
 ThirdParty/vst2/
 third_party/VST2_SDK/
@@ -66,6 +70,15 @@ WinUI/**/obj/
 WinUI/**/bin/
 WinUI/packaged-aumid.txt
 WinUI/**/*_h.h
+WinUI/test-screenshots/
+
+# Test and analysis output
+screenshots/
+test-results.json
+test-screenshot.png
+*.trx
+*.coverage
+*.coveragexml
 
 # Local runtime state / logs
 *.log
@@ -73,9 +86,20 @@ WinUI/**/*_h.h
 *.tmp
 *.bak
 
+# Local configuration and signing secrets
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Local maintainer notes
+/git-github-workflow.md

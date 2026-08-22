@@ -11,6 +11,10 @@ namespace LightHostWinUI
     public:
         bool load(std::wstring const& languageCode);
         winrt::hstring text(std::string const& key, std::wstring const& fallback = {}) const;
+        winrt::hstring format(
+            std::string const& key,
+            std::wstring const& fallback,
+            std::vector<std::wstring> const& arguments) const;
         winrt::hstring translatedSource(winrt::hstring const& source) const;
         std::wstring languageCode() const;
 

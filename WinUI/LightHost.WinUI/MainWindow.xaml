@@ -5,61 +5,139 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Light Host Modern">
 
-    <Grid x:Name="RootLayout" Background="Transparent">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="SidebarColumn" Width="230" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-
-        <Border x:Name="SidebarRail" Background="{ThemeResource AppSidebarBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="0,0,1,0">
-            <Grid x:Name="SidebarContent" Padding="18,24,14,24">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <Grid x:Name="BrandHeaderGrid" ColumnSpacing="10">
+    <Grid x:Name="RootLayout" Background="Transparent" PointerPressed="RootLayout_PointerPressed">
+        <NavigationView
+            x:Name="SidebarRail"
+            AutomationProperties.AutomationId="RootNavigation"
+            Background="Transparent"
+            CompactPaneLength="64"
+            IsBackButtonVisible="Collapsed"
+            IsPaneOpen="False"
+            IsPaneToggleButtonVisible="False"
+            IsSettingsVisible="False"
+            OpenPaneLength="280"
+            PaneDisplayMode="Left">
+            <NavigationView.PaneHeader>
+                <Grid
+                    x:Name="BrandHeaderGrid"
+                    MinHeight="40"
+                    Margin="12,12,12,16"
+                    ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="40" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Image x:Name="BrandLogoImage" Source="Assets/logo.png" Width="22" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    <TextBlock x:Name="BrandTitleText" Grid.Column="1" Text="Light Host Modern" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <Image
+                        x:Name="BrandLogoImage"
+                        Width="28"
+                        Height="28"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Source="Assets/logo.png" />
+                    <TextBlock
+                        x:Name="BrandTitleText"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Light Host Modern"
+                        TextTrimming="CharacterEllipsis" />
                 </Grid>
+            </NavigationView.PaneHeader>
 
-                <StackPanel Grid.Row="1" Margin="0,46,0,0" Spacing="8">
-                    <Button x:Name="DashboardButton" Content="Dashboard" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
-                    <Button x:Name="PreferencesButton" Content="Audio" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
-                    <Button x:Name="PluginsButton" Content="Plugins" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
-                    <Button x:Name="SupportButton" Content="Support me" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
-                    <Button x:Name="ConfigButton" Content="Settings" MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
-                </StackPanel>
+            <NavigationView.MenuItems>
+                <NavigationViewItem
+                    x:Name="CompactLogoNavItem"
+                    AutomationProperties.AutomationId="NavCompactLogo"
+                    IsEnabled="False"
+                    SelectsOnInvoked="False">
+                    <NavigationViewItem.Icon>
+                        <BitmapIcon ShowAsMonochrome="False" UriSource="Assets/logo.png" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="DashboardButton"
+                    AutomationProperties.AutomationId="NavDashboard"
+                    Content="Dashboard"
+                    Icon="Home"
+                    Tag="Dashboard" />
+                <NavigationViewItem
+                    x:Name="PreferencesButton"
+                    AutomationProperties.AutomationId="NavAudio"
+                    Content="Audio"
+                    Icon="Audio"
+                    Tag="Audio" />
+                <NavigationViewItem
+                    x:Name="PluginsButton"
+                    AutomationProperties.AutomationId="NavPlugins"
+                    Content="Plugins"
+                    Tag="Plugins">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xEA86;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="SupportButton"
+                    AutomationProperties.AutomationId="NavSupport"
+                    Content="Support me"
+                    Tag="Support me">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Favorite" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="ConfigButton"
+                    AutomationProperties.AutomationId="NavSettings"
+                    Content="Settings"
+                    Icon="Setting"
+                    Tag="Settings" />
+            </NavigationView.MenuItems>
 
-                <Grid Grid.Row="2">
+            <NavigationView.PaneFooter>
+                <Grid Margin="12">
                     <StackPanel x:Name="SidebarStatusPanel" Visibility="Collapsed">
-                    <TextBlock x:Name="ConnectionStatusText" Text="Connecting" FontSize="13" FontWeight="SemiBold" />
-                    <TextBlock x:Name="SidebarStatusDetailText" Text="Waiting for snapshot" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,4,0,0" />
+                        <TextBlock x:Name="ConnectionStatusText" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Connecting" />
+                        <TextBlock x:Name="SidebarStatusDetailText" Margin="0,4,0,0" Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Waiting for snapshot" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button x:Name="SidebarToggleButton"
-                            AutomationProperties.Name="Collapse sidebar"
-                            Width="36"
-                            MinWidth="36"
-                            MinHeight="36"
-                            Padding="0"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Bottom">
-                        <Button.Content>
-                            <FontIcon x:Name="SidebarToggleIcon" Glyph="&#xE72B;" FontSize="14" />
-                        </Button.Content>
+                    <Button
+                        x:Name="SidebarToggleButton"
+                        AutomationProperties.AutomationId="BtnPaneToggle"
+                        AutomationProperties.Name="Collapse sidebar"
+                        MinWidth="40"
+                        Height="40"
+                        HorizontalAlignment="Stretch"
+                        Padding="0">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="40" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon
+                                x:Name="SidebarToggleIcon"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontFamily="Segoe Fluent Icons"
+                                Glyph="&#xE72A;" />
+                            <TextBlock
+                                x:Name="SidebarToggleText"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Text="Collapse sidebar" />
+                        </Grid>
                     </Button>
                 </Grid>
-            </Grid>
-        </Border>
+            </NavigationView.PaneFooter>
 
-        <Grid x:Name="MainContent" Grid.Column="1" Padding="42,54,52,42">
-            <ScrollViewer x:Name="ContentScrollViewer" Padding="0,0,28,0" VerticalScrollBarVisibility="Hidden">
-                <StackPanel x:Name="PageContentStack" Spacing="28" Margin="0,0,4,0">
+            <Grid x:Name="MainContent" Padding="24,48,24,24">
+                <ScrollViewer
+                    x:Name="ContentScrollViewer"
+                    HorizontalContentAlignment="Stretch"
+                    HorizontalScrollBarVisibility="Hidden"
+                    HorizontalScrollMode="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+                    <StackPanel
+                        x:Name="PageContentStack"
+                        HorizontalAlignment="Stretch"
+                        Spacing="24">
                     <Grid x:Name="HeaderGrid">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -67,8 +145,8 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel>
-                            <TextBlock x:Name="PageTitleText" Text="Dashboard" FontSize="34" FontWeight="SemiBold" />
-                            <TextBlock x:Name="PageSubtitleText" Text="" Margin="0,6,0,0" FontSize="15" TextWrapping="Wrap" Foreground="{ThemeResource AppTextSecondaryBrush}" />
+                            <TextBlock x:Name="PageTitleText" AutomationProperties.AutomationId="PageTitle" Style="{StaticResource TitleTextBlockStyle}" Text="Dashboard" />
+                            <TextBlock x:Name="PageSubtitleText" AutomationProperties.AutomationId="PageSubtitle" Margin="0,4,0,0" Foreground="{ThemeResource AppTextSecondaryBrush}" TextWrapping="Wrap" />
                         </StackPanel>
 
                         <StackPanel x:Name="HeaderActions" Grid.Column="1" Orientation="Horizontal" Spacing="12" Visibility="Collapsed">
@@ -85,32 +163,32 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
 
-                            <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24" Margin="0,0,7,0">
+                            <Border Margin="0,0,8,0" Style="{StaticResource AppCardStyle}">
                                 <StackPanel>
-                                    <TextBlock Text="Audio backend" FontSize="14" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock x:Name="DashboardDeviceTypeText" Text="--" FontSize="30" FontWeight="SemiBold" Margin="0,16,0,0" />
+                                    <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Audio backend" />
+                                    <TextBlock x:Name="DashboardDeviceTypeText" Margin="0,8,0,0" Style="{StaticResource SubtitleTextBlockStyle}" Text="--" />
                                 </StackPanel>
                             </Border>
 
-                            <Border Grid.Column="1" Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24" Margin="7,0,0,0">
+                            <Border Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource AppCardStyle}">
                                 <StackPanel>
-                                    <TextBlock Text="Format" FontSize="14" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock x:Name="DashboardFormatText" Text="--" FontSize="26" FontWeight="SemiBold" Margin="0,18,0,0" />
+                                    <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Format" />
+                                    <TextBlock x:Name="DashboardFormatText" Margin="0,8,0,0" Style="{StaticResource SubtitleTextBlockStyle}" Text="--" />
                                 </StackPanel>
                             </Border>
                         </Grid>
 
-                        <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
+                        <Border Style="{StaticResource AppCardStyle}">
                             <StackPanel Spacing="22">
-                                <TextBlock x:Name="DashboardRoutingTitleText" Text="Input and Output" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock x:Name="DashboardRoutingTitleText" Style="{StaticResource SubtitleTextBlockStyle}" Text="Input and Output" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="380" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <TextBlock x:Name="DashboardInputDeviceLabel" Text="Input device" FontSize="13" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                        <TextBlock x:Name="DashboardInputDeviceText" Text="--" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                        <TextBlock x:Name="DashboardInputDeviceLabel" Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Input device" />
+                                        <TextBlock x:Name="DashboardInputDeviceText" Margin="0,4,0,0" Style="{StaticResource BodyStrongTextBlockStyle}" Text="--" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel x:Name="InputMeterBarHost" Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0" />
                                 </Grid>
@@ -120,8 +198,8 @@
                                         <ColumnDefinition Width="380" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <TextBlock x:Name="DashboardOutputDeviceLabel" Text="Output device" FontSize="13" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                        <TextBlock x:Name="DashboardOutputDeviceText" Text="--" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                        <TextBlock x:Name="DashboardOutputDeviceLabel" Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Output device" />
+                                        <TextBlock x:Name="DashboardOutputDeviceText" Margin="0,4,0,0" Style="{StaticResource BodyStrongTextBlockStyle}" Text="--" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel x:Name="OutputMeterBarHost" Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0" />
                                 </Grid>
@@ -133,25 +211,25 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24" Margin="0,0,7,0">
+                            <Border Margin="0,0,8,0" Style="{StaticResource AppCardStyle}">
                                 <StackPanel>
-                                    <TextBlock Text="Active plugins" FontSize="14" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock x:Name="ActivePluginsText" Text="--" FontSize="34" FontWeight="SemiBold" Margin="0,12,0,0" />
+                                    <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Active plugins" />
+                                    <TextBlock x:Name="ActivePluginsText" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" />
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="1" Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24" Margin="7,0,0,0">
+                            <Border Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource AppCardStyle}">
                                 <StackPanel>
-                                    <TextBlock Text="Installed plugins" FontSize="14" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock x:Name="KnownPluginsText" Text="--" FontSize="34" FontWeight="SemiBold" Margin="0,12,0,0" />
+                                    <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Installed plugins" />
+                                    <TextBlock x:Name="KnownPluginsText" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" />
                                 </StackPanel>
                             </Border>
                         </Grid>
                     </StackPanel>
 
                     <StackPanel x:Name="PreferencesPanel" Visibility="Collapsed" Spacing="18">
-                        <Border x:Name="DeviceRoutingCard" Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
+                        <Border x:Name="DeviceRoutingCard" Style="{StaticResource AppCardStyle}">
                             <StackPanel Spacing="14">
-                                <TextBlock Text="Devices" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Devices" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="220" />
@@ -179,7 +257,7 @@
                             </StackPanel>
                         </Border>
 
-                        <Border x:Name="ChannelsCard" Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
+                        <Border x:Name="ChannelsCard" Style="{StaticResource AppCardStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -217,9 +295,9 @@
                             </Grid>
                         </Border>
 
-                        <Border x:Name="FormatCard" Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
+                        <Border x:Name="FormatCard" Style="{StaticResource AppCardStyle}">
                             <StackPanel Spacing="14">
-                                <TextBlock Text="Format" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Format" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="220" />
@@ -241,417 +319,439 @@
 
                     </StackPanel>
 
-                    <StackPanel x:Name="PluginsPanel" Visibility="Collapsed" Spacing="20">
-                        <Grid>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button x:Name="RunningPluginsTabButton" Content="Running" MinWidth="126" MinHeight="44" />
-                                <Button x:Name="InstalledPluginsTabButton" Content="Installed" MinWidth="126" MinHeight="44" />
-                            </StackPanel>
-
-                            <Button x:Name="PluginActionsButton"
+                    <StackPanel x:Name="PluginsPanel" Visibility="Collapsed" Spacing="16">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="RunningPluginsTabButton" AutomationProperties.AutomationId="PluginsRunningTab" Content="Running" MinWidth="128" />
+                                    <Button x:Name="InstalledPluginsTabButton" AutomationProperties.AutomationId="PluginsInstalledTab" Content="Installed" MinWidth="128" />
+                                </StackPanel>
+                                <Button
+                                    x:Name="PluginActionsButton"
+                                    Grid.Column="1"
+                                    AutomationProperties.AutomationId="PluginDatabaseActions"
                                     AutomationProperties.Name="Plugin database actions"
-                                    Width="44"
-                                    MinWidth="44"
+                                    Width="40"
+                                    MinWidth="40"
                                     Padding="0"
-                                    HorizontalAlignment="Right"
-                                Visibility="Collapsed">
-                                <Button.Content>
-                                    <FontIcon Glyph="&#xE700;" FontSize="18" />
-                                </Button.Content>
-                                <Button.Flyout>
-                                    <MenuFlyout>
-                                        <MenuFlyoutItem x:Name="ScanDefaultPluginsMenuItem" Text="Scan" Icon="Find" Click="ScanDefaultPlugins_Click" />
-                                        <MenuFlyoutItem x:Name="ScanPathsMenuItem" Text="Scan paths" Icon="Folder" Click="ScanPaths_Click" />
-                                        <MenuFlyoutItem x:Name="RemoveMissingPluginsMenuItem" Text="Remove missing" Icon="Delete" Click="RemoveMissingPlugins_Click" />
-                                        <MenuFlyoutItem x:Name="ClearPluginDatabaseMenuItem" Text="Clear" Icon="Clear" Click="ClearPluginDatabase_Click" />
-                                    </MenuFlyout>
-                                </Button.Flyout>
-                            </Button>
-                        </Grid>
+                                    Visibility="Collapsed">
+                                    <Button.Content>
+                                        <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE700;" />
+                                    </Button.Content>
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuFlyoutItem x:Name="ScanDefaultPluginsMenuItem" AutomationProperties.AutomationId="ScanDefaultPlugins" Text="Scan" Icon="Find" Click="ScanDefaultPlugins_Click" />
+                                            <MenuFlyoutItem x:Name="ScanPathsMenuItem" AutomationProperties.AutomationId="ManageScanPaths" Text="Scan paths" Icon="Folder" Click="ScanPaths_Click" />
+                                            <MenuFlyoutItem x:Name="RemoveMissingPluginsMenuItem" AutomationProperties.AutomationId="RemoveMissingPlugins" Text="Remove missing" Icon="Delete" Click="RemoveMissingPlugins_Click" />
+                                            <MenuFlyoutItem x:Name="ClearPluginDatabaseMenuItem" AutomationProperties.AutomationId="ClearPluginDatabase" Text="Clear" Icon="Clear" Click="ClearPluginDatabase_Click" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </Grid>
 
-                        <StackPanel x:Name="RunningPluginsPanel" Spacing="10">
+                        <StackPanel x:Name="RunningPluginsPanel" Spacing="12">
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <AutoSuggestBox x:Name="RunningPluginSearchBox"
-                                                PlaceholderText="Search plugins"
-                                                QueryIcon="Find"
-                                                AutomationProperties.Name="Search running plugins" />
-                                <Button x:Name="RunningPluginSortButton"
-                                        Grid.Column="1"
-                                        Width="44"
-                                        MinWidth="44"
-                                        Padding="0"
-                                        AutomationProperties.Name="Sort running plugins">
-                                    <FontIcon Glyph="&#xE8CB;" FontSize="16" />
+                                <AutoSuggestBox
+                                    x:Name="RunningPluginSearchBox"
+                                    AutomationProperties.AutomationId="RunningPluginSearch"
+                                    AutomationProperties.Name="Search running plugins"
+                                    PlaceholderText="Search running plugins"
+                                    QueryIcon="Find" />
+                                <Button
+                                    x:Name="RunningPluginSortButton"
+                                    Grid.Column="1"
+                                    AutomationProperties.AutomationId="RunningPluginSort"
+                                    AutomationProperties.Name="Sort running plugins"
+                                    Width="40"
+                                    MinWidth="40"
+                                    Padding="0">
+                                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8CB;" />
                                 </Button>
                             </Grid>
-                            <TextBlock x:Name="RunningPluginsEmptyText" Text="No plugins running" Visibility="Collapsed" FontSize="16" Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,42,0,0" HorizontalAlignment="Center" />
+                            <TextBlock Text="Drag a card to change the processing order." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AppTextSecondaryBrush}" />
+                            <TextBlock x:Name="RunningPluginsEmptyText" Margin="0,48,0,0" HorizontalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}" Text="No plugins running" Visibility="Collapsed" />
                             <StackPanel x:Name="RunningPluginsListCard" Spacing="8">
-                                <Grid Padding="22,0,22,0" ColumnSpacing="18" MinHeight="28">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="64" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="170" />
-                                        <ColumnDefinition Width="100" />
-                                        <ColumnDefinition Width="150" />
-                                        <ColumnDefinition Width="186" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Order" Foreground="{ThemeResource AppTextSecondaryBrush}" HorizontalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="Name" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="2" Text="Manufacturer" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="3" Text="Type" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="4" Text="Status" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="5" Text="Actions" Foreground="{ThemeResource AppTextSecondaryBrush}" HorizontalAlignment="Right" />
-                                </Grid>
                                 <StackPanel x:Name="RunningPluginsListView" Spacing="8" />
                             </StackPanel>
-                            <TextBlock x:Name="RunningPluginsSummaryText" Text="" Foreground="{ThemeResource AppTextSecondaryBrush}" />
+                            <TextBlock x:Name="RunningPluginsSummaryText" Text="" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AppTextSecondaryBrush}" />
                         </StackPanel>
 
-                        <StackPanel x:Name="InstalledPluginsPanel" Visibility="Collapsed" Spacing="16">
+                        <StackPanel x:Name="InstalledPluginsPanel" Visibility="Collapsed" Spacing="12">
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <AutoSuggestBox x:Name="InstalledPluginSearchBox"
-                                                PlaceholderText="Search plugins"
-                                                QueryIcon="Find"
-                                                AutomationProperties.Name="Search installed plugins" />
-                                <Button x:Name="InstalledPluginSortButton"
-                                        Grid.Column="1"
-                                        Width="44"
-                                        MinWidth="44"
-                                        Padding="0"
-                                        AutomationProperties.Name="Sort installed plugins">
-                                    <FontIcon Glyph="&#xE8CB;" FontSize="16" />
+                                <AutoSuggestBox
+                                    x:Name="InstalledPluginSearchBox"
+                                    AutomationProperties.AutomationId="InstalledPluginSearch"
+                                    AutomationProperties.Name="Search installed plugins"
+                                    PlaceholderText="Search installed plugins"
+                                    QueryIcon="Find" />
+                                <Button
+                                    x:Name="InstalledPluginSortButton"
+                                    Grid.Column="1"
+                                    AutomationProperties.AutomationId="InstalledPluginSort"
+                                    AutomationProperties.Name="Sort installed plugins"
+                                    Width="40"
+                                    MinWidth="40"
+                                    Padding="0">
+                                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8CB;" />
                                 </Button>
                             </Grid>
-                            <TextBlock x:Name="InstalledPluginsEmptyText" Text="No plugins installed" Visibility="Collapsed" FontSize="16" Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,42,0,0" HorizontalAlignment="Center" />
+                            <TextBlock Text="Select a plugin card menu to add it to the chain or manage its database entry." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AppTextSecondaryBrush}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="InstalledPluginsEmptyText" Margin="0,48,0,0" HorizontalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}" Text="No plugins installed" Visibility="Collapsed" />
                             <StackPanel x:Name="InstalledPluginsListCard" Spacing="8">
-                                <Grid Padding="22,0,22,0" ColumnSpacing="18" MinHeight="28">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="180" />
-                                        <ColumnDefinition Width="100" />
-                                        <ColumnDefinition Width="150" />
-                                        <ColumnDefinition Width="150" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Name" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="1" Text="Manufacturer" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="2" Text="Type" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="3" Text="Status" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                    <TextBlock Grid.Column="4" Text="Actions" Foreground="{ThemeResource AppTextSecondaryBrush}" HorizontalAlignment="Right" />
-                                </Grid>
                                 <StackPanel x:Name="InstalledPluginsListView" Spacing="8" />
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="10" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
                                 <Button x:Name="ScanDefaultPluginsButton" Content="Scan" />
                                 <Button x:Name="RemoveMissingPluginsButton" Content="Remove Missing" />
                                 <Button x:Name="ClearPluginDatabaseButton" Content="Clear" />
                             </StackPanel>
-                            <TextBlock x:Name="InstalledPluginsSummaryText" Text="" Foreground="{ThemeResource AppTextSecondaryBrush}" Visibility="Collapsed" />
+                            <TextBlock x:Name="InstalledPluginsSummaryText" Text="" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AppTextSecondaryBrush}" Visibility="Collapsed" />
                         </StackPanel>
                     </StackPanel>
 
-                    <StackPanel x:Name="SupportPanel" Visibility="Collapsed" Spacing="18">
-                        <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="28">
-                            <Grid ColumnSpacing="32">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="SupportMessageText"
-                                           Text="Please consider supporting my work. There are many hours of work, thinking and effort behind it. The two easiest ways to support the app are either by starring the repository or by donating any amount on Ko-fi. Thank you!"
-                                           FontSize="17"
-                                           TextWrapping="Wrap"
-                                           VerticalAlignment="Center" />
-                                <Button x:Name="KoFiButton"
+                    <StackPanel x:Name="SupportPanel" Visibility="Collapsed" Spacing="8">
+                        <TextBlock x:Name="SupportDonateTitleText" Style="{StaticResource SubtitleTextBlockStyle}" Text="Support by donating via Ko-fi" />
+                        <StackPanel Spacing="8">
+                            <Border MinHeight="112" Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="24">
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition x:Name="SupportDonateActionColumn" Width="294" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="SupportDonateDescriptionText" VerticalAlignment="Center" Text="If you enjoy the app and would like to support its continued development, you can make a donation through Ko-fi." TextWrapping="WrapWholeWords" />
+                                    <Button
+                                        x:Name="KoFiButton"
                                         Grid.Column="1"
-                                        Padding="0"
+                                        AutomationProperties.AutomationId="SupportKoFiButton"
+                                        AutomationProperties.Name="Support me on Ko-fi"
+                                        Width="294"
+                                        Height="60"
+                                        HorizontalAlignment="Right"
                                         VerticalAlignment="Center"
-                                        AutomationProperties.Name="Support me on Ko-fi">
-                                    <Image Source="ms-appx:///Assets/support-me-on-kofi.png"
-                                           Width="245"
-                                           Stretch="Uniform" />
-                                </Button>
-                            </Grid>
-                        </Border>
+                                        Padding="0"
+                                        ToolTipService.ToolTip="Support me on Ko-fi">
+                                        <Image
+                                            Width="286"
+                                            Height="52"
+                                            Margin="4"
+                                            Source="Assets/support-me-on-kofi.png"
+                                            Stretch="Uniform" />
+                                    </Button>
+                                </Grid>
+                            </Border>
+
+                            <TextBlock x:Name="SupportRepositoryTitleText" Margin="0,16,0,0" Style="{StaticResource SubtitleTextBlockStyle}" Text="Support by starring the GitHub repository" />
+                            <Border MinHeight="112" Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="24">
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition x:Name="SupportRepositoryActionColumn" Width="294" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="SupportRepositoryDescriptionText" VerticalAlignment="Center" Text="If you enjoy the app and want to support the project, consider giving the repository a star on GitHub." TextWrapping="WrapWholeWords" />
+                                    <Button
+                                        x:Name="SupportRepositoryButton"
+                                        Grid.Column="1"
+                                        AutomationProperties.AutomationId="SupportRepositoryButton"
+                                        AutomationProperties.Name="Go to the Light Host Modern repository"
+                                        Width="294"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Content="Go to repo" />
+                                </Grid>
+                            </Border>
+
+                            <TextBlock x:Name="SupportShowcaseTitleText" Margin="0,16,0,0" Style="{StaticResource SubtitleTextBlockStyle}" Text="Support by showcasing the app" />
+                            <Border MinHeight="144" Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="24">
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition x:Name="SupportShowcaseActionColumn" Width="294" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="SupportShowcaseDescriptionText" VerticalAlignment="Center" Text="If you create a video about the app, I’d be happy to help give it more visibility." TextWrapping="WrapWholeWords" />
+                                    <Button
+                                        x:Name="SupportShowcaseButton"
+                                        Grid.Column="1"
+                                        AutomationProperties.AutomationId="SupportShowcaseButton"
+                                        AutomationProperties.Name="Create a video showcase post"
+                                        Width="294"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Content="Create video showcase post" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
                     </StackPanel>
 
-                    <StackPanel x:Name="ConfigPanel" Visibility="Collapsed" Spacing="18">
-                        <Border x:Name="UpdateAvailableCard"
-                                Visibility="Collapsed"
-                                Background="{ThemeResource AccentFillColorSecondaryBrush}"
-                                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="24">
+                    <StackPanel x:Name="ConfigPanel" Visibility="Collapsed" Spacing="24">
+                        <InfoBar
+                            x:Name="UpdateAvailableCard"
+                            AutomationProperties.AutomationId="UpdateAvailableInfoBar"
+                            IsClosable="False"
+                            Severity="Informational"
+                            Visibility="Collapsed">
                             <Grid ColumnSpacing="24">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="4">
-                                    <TextBlock x:Name="UpdateAvailableTitleText" Text="Update available" FontSize="17" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="UpdateAvailableTitleText" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Update available" />
                                     <TextBlock x:Name="UpdateAvailableBodyText" Text="A newer version of Light Host Modern is available." TextWrapping="Wrap" />
                                 </StackPanel>
                                 <Button x:Name="DownloadUpdateButton" Grid.Column="1" Content="Download update" VerticalAlignment="Center" />
                             </Grid>
-                        </Border>
-                        <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
-                            <StackPanel Spacing="14">
-                                <TextBlock Text="General" FontSize="17" FontWeight="SemiBold" />
-                                <StackPanel x:Name="StartWithWindowsCheckBoxHost" />
-                                <StackPanel x:Name="CloseToTraySwitchHost" />
-                                <Grid ColumnSpacing="24">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="360" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel x:Name="EnableVst2CheckBoxHost" />
-                                    <TextBlock x:Name="Vst2StatusText"
-                                               Grid.Column="1"
-                                               Text="VST2 status unavailable."
-                                               FontSize="14"
-                                               Foreground="{ThemeResource AppTextSecondaryBrush}"
-                                               TextWrapping="Wrap"
-                                               VerticalAlignment="Center" />
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
-                            <StackPanel Spacing="20">
-                                <StackPanel Spacing="6">
-                                    <TextBlock Text="Device persistence" FontSize="17" FontWeight="SemiBold" />
-                                    <TextBlock Text="Keep Light Host Modern pinned to a preferred audio device instead of falling back automatically."
-                                               Foreground="{ThemeResource AppTextSecondaryBrush}"
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-
-                                <StackPanel Spacing="16">
-                                    <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
-                                        <Grid ColumnSpacing="16">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="360" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Spacing="4">
-                                                <TextBlock Text="Mode" FontWeight="SemiBold" />
-                                                <TextBlock Text="Choose how Light Host Modern handles unavailable audio devices."
-                                                           Foreground="{ThemeResource AppTextSecondaryBrush}"
-                                                           TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <StackPanel x:Name="AudioPersistenceModeBoxHost" Grid.Column="1" VerticalAlignment="Center" />
-                                        </Grid>
-                                    </Border>
-
-                                    <Border x:Name="AudioPersistenceRetryPolicyGrid" Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
-                                        <Grid ColumnSpacing="16">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="132" />
-                                                <ColumnDefinition Width="132" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Spacing="4">
-                                                <TextBlock Text="Retry policy" FontWeight="SemiBold" />
-                                                <TextBlock Text="Retry the preferred device, then pause when attempts are exhausted."
-                                                           Foreground="{ThemeResource AppTextSecondaryBrush}"
-                                                           TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <StackPanel x:Name="AudioRecoveryRetrySecondsBoxHost" Grid.Column="1" />
-                                            <StackPanel x:Name="AudioRecoveryRetryAttemptsBoxHost" Grid.Column="2" />
-                                        </Grid>
-                                    </Border>
-
-                                    <Border x:Name="CustomAudioPersistenceCard" Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
-                                        <Grid x:Name="CustomAudioPersistenceGrid" ColumnSpacing="16">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="360" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Spacing="4" VerticalAlignment="Center">
-                                                <TextBlock Text="Preferred device" FontWeight="SemiBold" />
-                                                <TextBlock Text="Select the backend and device Light Host Modern should retry."
-                                                           Foreground="{ThemeResource AppTextSecondaryBrush}"
-                                                           TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="1" Spacing="10">
-                                                <Grid ColumnSpacing="12">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="120" />
-                                                        <ColumnDefinition Width="*" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="Audio backend" VerticalAlignment="Center" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                                    <StackPanel x:Name="CustomRecoveryBackendBoxHost" Grid.Column="1" />
-                                                </Grid>
-                                                <Grid ColumnSpacing="12">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="120" />
-                                                        <ColumnDefinition Width="*" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock x:Name="CustomRecoveryInputLabel" Text="Input device" VerticalAlignment="Center" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                                    <StackPanel x:Name="CustomRecoveryInputBoxHost" Grid.Column="1" />
-                                                </Grid>
-                                                <Grid x:Name="CustomRecoveryOutputRow" ColumnSpacing="12">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="120" />
-                                                        <ColumnDefinition Width="*" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="Output device" VerticalAlignment="Center" Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                                                    <StackPanel x:Name="CustomRecoveryOutputBoxHost" Grid.Column="1" />
-                                                </Grid>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-
-                                    <TextBlock x:Name="AudioRecoveryStatusText"
-                                               Visibility="Collapsed"
-                                               Text="Audio recovery is running normally." />
-                                    <Button x:Name="RetryAudioDeviceButton"
-                                            Visibility="Collapsed"
-                                            Content="Retry now" />
-                                    <Button x:Name="ChooseAudioDeviceButton"
-                                            Visibility="Collapsed"
-                                            Content="Choose device" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
-                            <Grid ColumnSpacing="24">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="6">
-                                    <TextBlock Text="Enabled devices" FontSize="17" FontWeight="SemiBold" />
-                                    <TextBlock x:Name="EnabledAudioChoicesSummaryText"
-                                               Text="All detected audio backends and devices are enabled."
-                                               Foreground="{ThemeResource AppTextSecondaryBrush}"
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-                                <Button x:Name="ManageEnabledAudioDevicesButton"
-                                        Grid.Column="1"
-                                        Content="Manage enabled devices"
-                                        VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-
-                        <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
-                            <StackPanel Spacing="18">
-                                <TextBlock Text="Appearance" FontSize="17" FontWeight="SemiBold" />
-                                <Grid ColumnSpacing="24">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="360" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="Window material" />
-                                        <TextBlock Text="Choose the native Windows 11 backdrop used behind the app content." Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </InfoBar>
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="General" />
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE7E8;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Start with Windows" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Launch Light Host Modern automatically when you sign in." TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <StackPanel x:Name="BackdropModeBoxHost" Grid.Column="1" />
-                                </Grid>
-                                <Grid ColumnSpacing="24">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="360" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="App icon" />
-                                        <TextBlock Text="Choose the icon variant used in the app and tray." Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                        <TextBlock x:Name="StartWithWindowsStateText" AutomationProperties.AutomationId="StartWithWindowsState" VerticalAlignment="Center" Text="Off" />
+                                        <StackPanel x:Name="StartWithWindowsCheckBoxHost" Width="52" />
                                     </StackPanel>
-                                    <StackPanel x:Name="IconModeBoxHost" Grid.Column="1" />
                                 </Grid>
-                                <Grid ColumnSpacing="24">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="360" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="HideSupportTitleText" Text="Hide the Support me tab" VerticalAlignment="Center" />
-                                    <ToggleSwitch x:Name="HideSupportTabSwitch"
-                                                  Grid.Column="1"
-                                                  HorizontalAlignment="Left"
-                                                  VerticalAlignment="Center"
-                                                  AutomationProperties.Name="Hide the Support me tab" />
-                                </Grid>
-                                <Grid ColumnSpacing="24">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="360" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock x:Name="LanguageTitleText" Text="Language" />
-                                        <TextBlock x:Name="LanguageDescriptionText" Text="Choose the language used by the app." Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                            </Border>
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE8BB;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Close to tray" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Keep audio processing active when the window is closed." TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <ComboBox x:Name="LanguageBox" Grid.Column="1" HorizontalAlignment="Stretch" MinHeight="42" AutomationProperties.Name="App language" />
+                                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                        <TextBlock x:Name="CloseToTrayStateText" AutomationProperties.AutomationId="CloseToTrayState" VerticalAlignment="Center" Text="Off" />
+                                        <StackPanel x:Name="CloseToTraySwitchHost" Width="52" />
+                                    </StackPanel>
                                 </Grid>
+                            </Border>
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE950;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Enable VST2 plugins" />
+                                        <TextBlock x:Name="Vst2StatusText" Style="{StaticResource CaptionTextBlockStyle}" Text="VST2 status unavailable." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                        <TextBlock x:Name="EnableVst2StateText" AutomationProperties.AutomationId="EnableVst2State" VerticalAlignment="Center" Text="Off" />
+                                        <StackPanel x:Name="EnableVst2CheckBoxHost" Width="52" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Audio recovery" />
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE777;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Device persistence" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Choose how Light Host Modern handles unavailable audio devices." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="AudioPersistenceModeBoxHost" Grid.Column="2" MinWidth="240" VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                            <Border x:Name="AudioPersistenceRetryIntervalGrid" Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE72C;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Retry interval" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Choose how many seconds to wait between retry attempts." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="AudioRecoveryRetrySecondsBoxHost" Grid.Column="2" Width="96" />
+                                </Grid>
+                            </Border>
+                            <Border x:Name="AudioPersistenceRetryAttemptsGrid" Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE9D9;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Maximum attempts" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Choose how many times to retry before pausing recovery." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="AudioRecoveryRetryAttemptsBoxHost" Grid.Column="2" Width="96" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE8D7;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Enabled devices" />
+                                        <TextBlock x:Name="EnabledAudioChoicesSummaryText" AutomationProperties.AutomationId="EnabledDevicesSummary" Style="{StaticResource CaptionTextBlockStyle}" Text="All detected audio backends and devices are enabled." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button x:Name="ManageEnabledAudioDevicesButton" Grid.Column="2" AutomationProperties.AutomationId="ManageEnabledAudioDevices" VerticalAlignment="Center" Content="Manage enabled devices" />
+                                </Grid>
+                            </Border>
+                            <Border x:Name="CustomAudioPersistenceCard" Style="{StaticResource AppCardStyle}">
+                                <Grid x:Name="CustomAudioPersistenceGrid" ColumnSpacing="16">
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE8B7;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Preferred device" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Select the backend and device Light Host Modern should retry." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button
+                                        x:Name="PreferredDeviceButton"
+                                        Grid.Column="2"
+                                        AutomationProperties.AutomationId="PreferredDevicePicker"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Click="PreferredDeviceButton_Click">
+                                        <Grid MinWidth="240" ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="PreferredDeviceSummaryText" VerticalAlignment="Center" Text="Choose device" TextTrimming="CharacterEllipsis" />
+                                            <FontIcon Grid.Column="1" FontFamily="Segoe Fluent Icons" Glyph="&#xE76C;" />
+                                        </Grid>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                            <StackPanel Visibility="Collapsed">
+                                <StackPanel x:Name="CustomRecoveryBackendBoxHost" />
+                                <StackPanel x:Name="CustomRecoveryInputBoxHost" />
+                                <StackPanel x:Name="CustomRecoveryOutputBoxHost" />
+                                <TextBlock x:Name="CustomRecoveryInputLabel" Text="Input device" />
+                                <Grid x:Name="CustomRecoveryOutputRow" />
                             </StackPanel>
-                        </Border>
+                            <TextBlock x:Name="AudioRecoveryStatusText" Visibility="Collapsed" Text="Audio recovery is running normally." />
+                            <Button x:Name="RetryAudioDeviceButton" Visibility="Collapsed" Content="Retry now" />
+                            <Button x:Name="ChooseAudioDeviceButton" Visibility="Collapsed" Content="Choose device" />
+                        </StackPanel>
 
-                        <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="Windows sound settings" FontSize="17" FontWeight="SemiBold" />
-                                    <TextBlock Text="Open the system sound control page for device-level changes." Foreground="{ThemeResource AppTextSecondaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
-                                </StackPanel>
-                                <Button x:Name="OpenWindowsSoundSettingsButton" Grid.Column="1" Content="Open Windows Sound Settings" VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Appearance" />
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xF2B7;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock x:Name="LanguageTitleText" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Language" />
+                                        <TextBlock x:Name="LanguageDescriptionText" Style="{StaticResource CaptionTextBlockStyle}" Text="Choose the language used by the app." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <ComboBox x:Name="LanguageBox" Grid.Column="2" AutomationProperties.AutomationId="AppLanguage" AutomationProperties.Name="App language" HorizontalAlignment="Stretch" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE8A4;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock x:Name="LayoutModeTitleText" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Layout mode" />
+                                        <TextBlock x:Name="LayoutModeDescriptionText" Style="{StaticResource CaptionTextBlockStyle}" Text="Compact limits page width; Expanded uses all available space." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="LayoutModeBoxHost" Grid.Column="2" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE790;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Window material" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Choose the native Windows 11 backdrop used behind the app content." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="BackdropModeBoxHost" Grid.Column="2" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE91B;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="App icon" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Choose the icon variant used in the app and tray." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="IconModeBoxHost" Grid.Column="2" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <SymbolIcon VerticalAlignment="Center" Symbol="Favorite" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock x:Name="HideSupportTitleText" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Hide the Support me tab" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Remove the support page from the navigation sidebar." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                        <TextBlock x:Name="HideSupportStateText" AutomationProperties.AutomationId="HideSupportState" VerticalAlignment="Center" Text="Off" />
+                                        <ToggleSwitch x:Name="HideSupportTabSwitch" AutomationProperties.AutomationId="HideSupportTab" AutomationProperties.Name="Hide the Support me tab" Style="{StaticResource CompactToggleSwitchStyle}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
 
-                        <Grid ColumnSpacing="14">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="System" />
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <SymbolIcon VerticalAlignment="Center" Symbol="Audio" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Windows sound settings" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Open the system sound control page for device-level changes." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button x:Name="OpenWindowsSoundSettingsButton" Grid.Column="2" VerticalAlignment="Center" Content="Open Windows Sound Settings" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
 
-                            <Border Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
-                                <StackPanel Spacing="10">
-                                    <Grid ColumnSpacing="10">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                            <TextBlock Text="Light Host Modern" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <TextBlock Text="v1.2.0" Foreground="{ThemeResource AppTextSecondaryBrush}" VerticalAlignment="Center" />
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="About" />
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE946;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Light Host Modern" />
+                                            <TextBlock VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" Text="v1.2.0" />
                                         </StackPanel>
-                                        <Button x:Name="RepositoryButton" Grid.Column="1" AutomationProperties.Name="Go to Light Host Modern repository" Width="36" MinWidth="36" MinHeight="36" Padding="0" Click="RepositoryButton_Click">
-                                            <Button.Content>
-                                                <FontIcon Glyph="&#xE8A7;" FontSize="15" />
-                                            </Button.Content>
-                                        </Button>
-                                    </Grid>
-                                    <TextBlock Text="A Windows-focused fork of Light Host, updated and modernized by Matheus Heidemann." Foreground="{ThemeResource AppTextSecondaryBrush}" TextWrapping="Wrap" />
-                                </StackPanel>
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="A Windows-focused fork of Light Host, updated and modernized by Matheus Heidemann." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button x:Name="RepositoryButton" Grid.Column="2" AutomationProperties.AutomationId="ModernRepository" AutomationProperties.Name="Go to Light Host Modern repository" Width="40" MinWidth="40" Padding="0" Click="RepositoryButton_Click">
+                                        <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8A7;" />
+                                    </Button>
+                                </Grid>
                             </Border>
-
-                            <Border Grid.Column="1" Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="24">
-                                <StackPanel Spacing="10">
-                                    <Grid ColumnSpacing="10">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Light Host (Original)" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                        <Button x:Name="OriginalRepositoryButton" Grid.Column="1" AutomationProperties.Name="Go to original Light Host repository" Width="36" MinWidth="36" MinHeight="36" Padding="0" Click="OriginalRepositoryButton_Click">
-                                            <Button.Content>
-                                                <FontIcon Glyph="&#xE8A7;" FontSize="15" />
-                                            </Button.Content>
-                                        </Button>
-                                    </Grid>
-                                    <TextBlock Text="Original project by Rolando Islas/OpenCMA." Foreground="{ThemeResource AppTextSecondaryBrush}" TextWrapping="Wrap" />
-                                </StackPanel>
+                            <Border Style="{StaticResource AppCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="&#xE943;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Light Host (Original)" />
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Original project by Rolando Islas/OpenCMA." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button x:Name="OriginalRepositoryButton" Grid.Column="2" AutomationProperties.AutomationId="OriginalRepository" AutomationProperties.Name="Go to original Light Host repository" Width="40" MinWidth="40" Padding="0" Click="OriginalRepositoryButton_Click">
+                                        <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE8A7;" />
+                                    </Button>
+                                </Grid>
                             </Border>
-                        </Grid>
+                        </StackPanel>
                     </StackPanel>
 
                     <StackPanel Visibility="Collapsed">
@@ -679,25 +779,34 @@
                 </StackPanel>
             </ScrollViewer>
         </Grid>
+        </NavigationView>
+
+        <Grid
+            x:Name="AppTitleBar"
+            Height="32"
+            Margin="64,0,0,0"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            Canvas.ZIndex="1"
+            Background="Transparent" />
 
         <Border x:Name="NotificationToast"
-                Grid.ColumnSpan="2"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
-                Margin="0,0,28,28"
+                Margin="0,0,24,24"
                 MinWidth="280"
                 MaxWidth="420"
-                Padding="16,14"
-                CornerRadius="8"
+                Padding="16"
+                CornerRadius="{ThemeResource OverlayCornerRadius}"
                 BorderThickness="1"
                 BorderBrush="{ThemeResource AppFlyoutStrokeBrush}"
                 Background="{ThemeResource AppFlyoutBrush}"
+                BackgroundSizing="InnerBorderEdge"
                 Visibility="Collapsed">
             <TextBlock x:Name="NotificationText"
                        Text=""
                        TextWrapping="Wrap"
-                       FontSize="14"
-                       FontWeight="SemiBold" />
+                       Style="{StaticResource BodyStrongTextBlockStyle}" />
         </Border>
     </Grid>
 </Window>

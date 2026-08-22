@@ -1,234 +1,97 @@
 # Light Host Modern
 
-Light Host Modern is a Windows-focused fork of the original [Light Host](https://github.com/opencma/LightHost), updated for current Windows audio workflows, modern C++ builds, WinUI 3, VST3, VST2, ASIO, and Windows 11-style desktop usage.
-
-The project keeps the original goal of being a small, practical audio plugin host, but removes the old cross-platform tray-menu workflow and replaces it with a native Windows application experience.
-
-<p align="center">
-  <img src="https://i.imgur.com/sEBRC3e.png" alt="Light Host Modern dashboard" width="90%" />
+<p align="left">
+<a href="https://github.com/heide-oficial/Light-Host-Modern/stargazers"><img src="https://img.shields.io/github/stars/heide-oficial/Light-Host-Modern?colorA=363a4f&colorB=e0ac00&style=for-the-badge" alt="GitHub star count"></a>
+<a href="https://github.com/heide-oficial/Light-Host-Modern/releases"><img src="https://img.shields.io/github/downloads/heide-oficial/Light-Host-Modern/total?colorA=363a4f&colorB=d53984&style=for-the-badge" alt="GitHub release download count"></a>
+<a href="https://github.com/heide-oficial/Light-Host-Modern/blob/main/license"><img src="https://img.shields.io/static/v1.svg?style=for-the-badge&label=License&message=GPL-2.0-or-later&colorA=363a4f&colorB=b7bdf8" alt="GPL-2.0-or-later license"></a>
 </p>
 
-<p align="center">
-  <img src="https://i.imgur.com/S0SbkSI.png" alt="Light Host Modern audio settings" width="90%" />
-</p>
+Light Host Modern is a native Windows audio plugin host for running VST3 and optional VST2 effects outside a DAW. It combines a JUCE-based realtime host with a dedicated WinUI 3 interface for configuring audio devices, building a serial plugin chain, monitoring the stream, and keeping processing active from the notification area.
 
-<p align="center">
-  <img src="https://i.imgur.com/0NKJ9mP.png" alt="Light Host Modern plugins view" width="90%" />
-</p>
+## ✨ Features
 
-<p align="center">
-  <img src="https://i.imgur.com/r4lECTa.png" alt="Light Host Modern settings view" width="90%" />
-</p>
+- Hosts VST3 and optional VST2 audio effects in a serial realtime processing chain.
+- Supports Windows Audio, DirectSound, and ASIO backends exposed by JUCE.
+- Configures audio devices, input/output channels, sample rate, and buffer size.
+- Displays live input/output meters, CPU usage, latency, x-runs, and plugin counts.
+- Scans configurable plugin folders and maintains a reusable installed-plugin database.
+- Adds multiple instances of the same plugin and supports reorder, bypass, duplicate, editor, and remove actions.
+- Preserves plugin state and compensates bypass latency to keep the chain aligned.
+- Recovers preferred audio devices after startup, sleep, driver restarts, or temporary unavailability.
+- Provides compact and expanded layouts, Windows 11 materials, icon variants, JSON localization, and Brazilian Portuguese.
+- Runs from the notification area with close-to-tray and current-user startup options.
+- Includes safe mode, settings reset, failed-plugin quarantine recovery, installer, and portable packages.
 
-## What Light Host Modern Is
+## 🖼️ Demo
 
-Light Host Modern is a standalone audio plugin host for Windows. It can load VST/VST3 effects, route audio through an active plugin chain, and run from a lightweight tray-host process with a dedicated WinUI 3 interface.
+![Light Host Modern dashboard](https://i.imgur.com/sEBRC3e.png)
 
-This fork is maintained as a Windows-only application. Linux and macOS support from the original project were removed so the codebase can focus on Windows audio APIs, ASIO behavior, Windows App SDK, and a native Windows 11 interface.
+![Audio device and stream configuration](https://i.imgur.com/S0SbkSI.png)
 
-## What Light Host Is For
+![Running and installed plugin management](https://i.imgur.com/0NKJ9mP.png)
 
-Light Host is useful when you want to run audio plugins outside a DAW. Typical use cases include:
+![Windows 11-style settings](https://i.imgur.com/r4lECTa.png)
 
-- Applying VST/VST3 effects to live audio.
-- Building a simple processing chain for microphones, instruments, virtual audio devices, or system routing.
-- Hosting lightweight plugin chains without opening a full DAW.
-- Testing plugins, audio devices, routing, sample rates, buffers, and ASIO/Windows Audio behavior.
+## 🚀 Usage
 
-## Improvements
+1. Start Light Host Modern and open its interface from the notification area if it is not already visible.
+2. Open **Audio** and select the backend, device, channels, sample rate, and buffer size used by the host.
+3. Open **Plugins > Installed**, configure **Scan paths**, and scan for VST3 or VST2 plugins.
+4. Add plugins to **Running**, arrange the serial processing order, and open each plugin editor when needed.
+5. Review **Settings** to configure device persistence, startup, close-to-tray, VST2 availability, language, layout, material, and icon.
 
-- Windows-only modernization with CMake, Visual Studio 2022 builds, x64 Release/Debug presets, and Windows SDK-based tooling.
-- Updated audio/plugin foundation from the legacy JUCE 4-era codebase to JUCE 8.0.13.
-- Updated VST3 support to Steinberg VST3 SDK `v3.8.0_build_66`.
-- Added configurable VST2 host support through the Xaymar VST2 header provider, with optional legacy SDK discovery.
-- Added ASIO SDK integration and improved ASIO backend selection for modern Windows audio setups.
-- Replaced the old tray-menu-first UI with a native WinUI 3 interface.
-- Added a Windows 11-style dark UI with sidebar navigation, Dashboard, Audio, Plugins, and Settings pages.
-- Added native controls for audio backend, device selection, active channels, sample rate, and buffer size.
-- For ASIO, the UI now treats the driver as a single `Device` selection instead of exposing invalid separate input/output selectors.
-- Added live input/output audio meters to the Dashboard.
-- Added running and installed plugin views with plugin counts, manufacturer, format, status, and contextual actions.
-- Added support for multiple instances of the same plugin in the running chain.
-- Added drag-and-drop reordering for the running plugin chain.
-- Added plugin duplication, bypass, editor opening, removal, installed-plugin deletion, missing-plugin cleanup, and plugin database clearing.
-- Added configurable plugin scan paths with default Windows VST/VST3 locations and editable scan path management.
-- Added Windows startup and close-to-tray behavior settings.
-- Added dark Windows material options: Mica, Mica Alt, Acrylic, and Solid.
-- Added selectable app/tray icon variants using the new app icon set.
-- Added native installer and portable release packaging.
-- Added per-user installer behavior with shortcuts and an uninstall entry.
-- Added a portable self-extracting executable that contains the full app payload.
-- Added conditional `--debug` logging for host, WinUI, IPC, plugin loading, audio device selection, and crash diagnostics.
-- Added `--safe-mode`, `--reset-settings`, and `--clear-failed-plugins` recovery options.
+For detailed descriptions of the screens, workflows, and internal implementation, see the [application documentation](docs/_index.md).
 
-## Bug Fixes
+## ⚙️ Requirements
 
-The fork also fixes several operational problems present in the legacy Light Host workflow:
+- Windows 10 version 1809 (`10.0.17763`) or newer; Windows 11 is recommended.
+- A 64-bit Windows installation for the published x64 packages.
+- A working Windows Audio, DirectSound, or ASIO input/output configuration.
+- Compatible 64-bit VST3 plugins, or VST2 plugins when VST2 support is included and enabled.
 
-- Fixed startup crashes caused by bad saved settings or broken saved plugin chains.
-- Invalid settings XML is now discarded per setting key instead of breaking the whole configuration.
-- Missing plugins, failed plugins, and plugins with unsupported I/O can be skipped without crashing the app.
-- Added failed-plugin quarantine and a command to clear quarantined plugins.
-- Improved plugin state keys so plugin state survives reorder/remove operations more reliably.
-- Kept compatibility with older plugin-state keys where possible.
-- Fixed plugin reorder/remove behavior that could lose or swap plugin state.
-- Fixed empty-chain and bypass routing so input can still pass to output when no active plugin is processing.
-- Improved mono and non-standard channel routing support.
-- Reworked the audio path into a serial realtime processor using immutable chain snapshots.
-- Added bypass latency compensation so bypassed plugins keep chain latency aligned.
-- Reused compatible plugin instances across chain rebuilds and reorder operations.
-- Retired old plugin snapshots outside the audio callback to reduce realtime-thread risk.
-- Added process-failure protection and deferred plugin failure logging outside the audio callback.
-- Reduced unnecessary graph/device rebuilds during common actions.
-- Debounced settings persistence and reduced synchronous disk writes during interactive plugin operations.
-- Added device recovery attempts for stopped or failed audio devices after sleep, restart, or Windows Audio changes.
-- Improved Windows Audio, DirectSound, and ASIO backend/device diagnostics.
-- Fixed ASIO backend switching to validate that a selected driver actually opens before saving the audio state.
-- Added fallback attempts across available matching ASIO driver pairs.
-- Restored the previous audio setup when an ASIO device change fails or opens the wrong driver.
-- Prevented invalid mixed ASIO input/output device states by treating ASIO as a single driver selection.
-- Reduced UI snapshot traffic by adding backend version counters and requesting full snapshots only when state changes.
-- Prevented plugin database clearing from leaving stale running plugin instances.
-- Added explicit plugin-load failure responses so the UI can report load failures instead of silently losing the host connection.
+## ⬇️ Installation
 
-## Development Guide
+### Recommended installation
 
-### Requirements
+Download `LightHostModern-Setup.msi` from the [latest GitHub release](https://github.com/heide-oficial/Light-Host-Modern/releases/latest), open it, and follow the Windows Installer steps. The application is installed for the current Windows user under `%LOCALAPPDATA%\Programs\Light Host Modern` and receives Start menu and desktop shortcuts.
 
-Install the following on Windows:
+### Portable version
 
-- Windows 11 is recommended. Windows 10 `10.0.17763` or newer is the current WinUI project minimum.
-- Visual Studio 2022 or newer with the **Desktop development with C++** workload.
-- MSVC x64 toolchain and MSBuild.
-- Windows SDK `10.0.22621.0` or newer. The WinUI project currently targets `10.0.28000.0` when available.
-- CMake `3.22` or newer.
-- Git, because CMake fetches third-party dependencies.
-- Windows App SDK / WinUI 3 tooling through Visual Studio/NuGet restore.
+Download `LightHostModern-Portable.exe` from the [latest GitHub release](https://github.com/heide-oficial/Light-Host-Modern/releases/latest) and run it directly. The launcher extracts the self-contained payload to a temporary folder and starts the host without requiring a separate Windows App SDK installation.
 
-The CMake build fetches these dependencies automatically unless local paths are provided:
+## 🔒 Privacy and disclosures
 
-- JUCE `8.0.13`
-- Steinberg VST3 SDK `v3.8.0_build_66`
-- ASIO SDK from `audiosdk/asio`
-- Xaymar `vst2sdk` `v0.4.0` when VST2 support is enabled through the default provider
+- The application does not include telemetry, analytics, advertising, authentication, or user accounts.
+- Audio processing, plugin hosting, device enumeration, settings, and host/UI communication remain local to the computer.
+- Host settings, plugin database entries, chain state, and plugin state are stored locally through JUCE application properties.
+- WinUI preferences are stored in `%LOCALAPPDATA%\LightHostModern\ui-settings.ini`.
+- Debug logs are created under `%APPDATA%\LightHostModern\Logs` only when the host is started with `--debug`.
+- The update checker sends an HTTPS request to the public GitHub Releases API for this repository. It does not upload audio, plugin state, device settings, or personal data.
+- Enabling **Start with Windows** creates an entry for the current user under the Windows `Run` registry key.
+- GitHub and Ko-fi pages open in the default browser only after the user activates their corresponding controls. The Support page displays the Ko-fi banner from Ko-fi's content delivery network.
+- The host and WinUI shell are full-trust desktop processes so they can access audio drivers, plugins, local files, the notification area, named pipes, and startup registration.
 
-### Build the Windows Host
+## 🌐 Supported languages
 
-Use the helper script from the repository root:
+- English (`1.0.0+`)
+- Brazilian Portuguese (`1.2.0+`)
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\Utilities\Build Windows.ps1"
-```
+Want to translate Light Host Modern? Copy the [English JSON catalogue](WinUI/LightHost.WinUI/Locales/en-us.json), rename it with the appropriate language code, translate only the values, and submit the file through a pull request or GitHub issue. Missing keys automatically fall back to English. See [Contributing translations](docs/localization.md) for the complete format.
 
-By default this builds Release x64 with the `windows-vs2022` CMake preset.
+## ❤️ Support
 
-Useful options:
+You can support continued development by [donating on Ko-fi](https://ko-fi.com/heide_oficial), [starring the GitHub repository](https://github.com/heide-oficial/Light-Host-Modern), or publishing a video and [submitting it for showcase](https://github.com/heide-oficial/Light-Host-Modern/issues/new?title=%5BSHOWCASE%20VIDEO%5D%20Video%20title%20here&labels=showcase%20video&body=Here%27s%20my%20video%20showcasing%20or%20featuring%20the%20app%3A%20%5BINSERT%20LINK%20HERE%5D).
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\Utilities\Build Windows.ps1" -Configuration Debug
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\Utilities\Build Windows.ps1" -EnableVst2 ON -Vst2Provider XAYMAR
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\Utilities\Build Windows.ps1" -EnableVst2 OFF
-```
+<a href="https://ko-fi.com/heide_oficial" target="_blank">
+  <img src="https://storage.ko-fi.com/cdn/brandasset/v2/support_me_on_kofi_beige.png" alt="Support me on Ko-fi" width="200">
+</a>
 
-Main build output:
+## 👥 Credits
 
-```text
-out\build\windows-vs2022\LightHost_artefacts\Release\Light Host Modern.exe
-```
+- Modern Windows fork maintained by [Matheus Heidemann - heide-oficial](https://github.com/heide-oficial).
+- Based on the original [Light Host](https://github.com/opencma/LightHost) by Rolando Islas / OpenCMA.
+- Built with [JUCE](https://github.com/juce-framework/JUCE), the [Steinberg VST3 SDK](https://github.com/steinbergmedia/vst3sdk), the [ASIO SDK](https://github.com/audiosdk/asio), and optional [Xaymar VST2 headers](https://github.com/Xaymar/vst2sdk).
 
-### Build the WinUI Shell
+## 📄 License
 
-The release script builds the WinUI project automatically. For manual work, build:
-
-```text
-WinUI\LightHost.WinUI\LightHost.WinUI.sln
-```
-
-or build the project with MSBuild for `x64` and `Debug` or `Release`.
-
-The host expects the WinUI executable beside the host output under:
-
-```text
-WinUI\x64\<Configuration>\LightHost.WinUI\LightHostWinUI.exe
-```
-
-### Run Locally
-
-Run the host executable:
-
-```powershell
-& ".\out\build\windows-vs2022\LightHost_artefacts\Release\Light Host Modern.exe"
-```
-
-Run with debug logging:
-
-```powershell
-& ".\out\build\windows-vs2022\LightHost_artefacts\Release\Light Host Modern.exe" --debug
-```
-
-Recovery options:
-
-```powershell
-& ".\out\build\windows-vs2022\LightHost_artefacts\Release\Light Host Modern.exe" --safe-mode
-& ".\out\build\windows-vs2022\LightHost_artefacts\Release\Light Host Modern.exe" --reset-settings
-& ".\out\build\windows-vs2022\LightHost_artefacts\Release\Light Host Modern.exe" --clear-failed-plugins
-```
-
-### Create Release Artifacts
-
-Generate the installer and portable executable:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\Utilities\Build Release.ps1"
-```
-
-Outputs:
-
-```text
-out\release\LightHostModern-Setup.exe
-out\release\LightHostModern-Portable.exe
-```
-
-The setup executable installs per-user under:
-
-```text
-%LOCALAPPDATA%\Programs\Light Host Modern
-```
-
-The portable executable self-extracts to a temporary payload folder and launches the app from there.
-
-### VST2 Notes
-
-VST2 support is compile-time optional and runtime-toggleable:
-
-- `LIGHTHOST_ENABLE_VST2=AUTO` enables VST2 when headers are available.
-- `LIGHTHOST_ENABLE_VST2=ON` requires headers and fails configure if unavailable.
-- `LIGHTHOST_ENABLE_VST2=OFF` builds without VST2.
-- The default provider is `XAYMAR`.
-- A legacy SDK path can be provided with `-Vst2SdkDir` or `LIGHTHOST_VST2_SDK_DIR`.
-
-Example:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\Utilities\Build Windows.ps1" -EnableVst2 ON -Vst2Provider XAYMAR
-```
-
-### Project Layout
-
-```text
-Source\                         Host, audio engine, IPC, tray, plugin runtime
-WinUI\LightHost.WinUI\          Native WinUI 3 shell
-Icon\                           App and tray icon sources
-ThirdParty\                     Compatibility shims and third-party notices
-Utilities\Build Windows.ps1     Local Windows build script
-Utilities\Build Release.ps1     Installer and portable release builder
-changelog-*.md                  Internal development changelogs
-```
-
-## Credits
-
-Light Host Modern is a Windows-focused fork updated and modernized by Matheus Heidemann.
-
-Original Light Host project by Rolando Islas / OpenCMA: <https://github.com/opencma/LightHost>
-
-This project follows the license lineage of the original Light Host project. Keep the original copyright, license notices, and source availability requirements when redistributing.
+Light Host Modern follows the original Light Host license lineage and is distributed under the [GNU General Public License version 2 or later](license). Third-party components remain subject to their respective licenses and notices.

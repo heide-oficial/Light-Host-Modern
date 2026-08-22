@@ -1091,7 +1091,16 @@ if (!$SkipBuild) {
 
 $hostOutput = Join-Path $repoRoot "out\build\windows-vs2022\LightHost_artefacts\$Configuration"
 $hostExe = Join-Path $hostOutput $exeName
-$winUIOutput = Join-Path $hostOutput "WinUI\$Platform\$Configuration\LightHost.WinUI\LightHostWinUI.exe"
+$builtWinUIOutput = Join-Path $repoRoot "WinUI\LightHost.WinUI\$Platform\$Configuration\LightHost.WinUI"
+$hostWinUIOutput = Join-Path $hostOutput "WinUI\$Platform\$Configuration\LightHost.WinUI"
+$winUIOutput = Join-Path $hostWinUIOutput "LightHostWinUI.exe"
+
+if (!(Test-Path -LiteralPath (Join-Path $builtWinUIOutput "LightHostWinUI.exe"))) {
+    throw "Built WinUI output was not found: $builtWinUIOutput"
+}
+
+New-Item -ItemType Directory -Force -Path $hostWinUIOutput | Out-Null
+Copy-Item -Path (Join-Path $builtWinUIOutput "*") -Destination $hostWinUIOutput -Recurse -Force
 
 if (!(Test-Path -LiteralPath $hostExe)) {
     throw "Host executable was not found: $hostExe"

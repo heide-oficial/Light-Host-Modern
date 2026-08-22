@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <unordered_map>
 
@@ -30,6 +31,10 @@ using winrt::LightHostWinUI::implementation::ChannelRowData;
 
 namespace
 {
+    constexpr wchar_t GITHUB_REPOSITORY_URL[] = L"https://github.com/heide-oficial/Light-Host-Modern";
+    constexpr wchar_t GITHUB_SHOWCASE_URL[] = L"https://github.com/heide-oficial/Light-Host-Modern/issues/new?title=%5BSHOWCASE%20VIDEO%5D%20Video%20title%20here&labels=showcase%20video&body=Here%27s%20my%20video%20showcasing%20or%20featuring%20the%20app%3A%20%5BINSERT%20LINK%20HERE%5D";
+    constexpr wchar_t KOFI_URL[] = L"https://ko-fi.com/heide_oficial";
+
     std::string toLower(std::string value)
     {
         std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
@@ -601,9 +606,9 @@ namespace
     void styleNumberBox(NumberBox const& box)
     {
         box.HorizontalAlignment(HorizontalAlignment::Stretch);
-        box.MinHeight(42);
-        box.MinWidth(160);
-        box.SpinButtonPlacementMode(NumberBoxSpinButtonPlacementMode::Compact);
+        box.MinHeight(32);
+        box.MinWidth(96);
+        box.SpinButtonPlacementMode(NumberBoxSpinButtonPlacementMode::Hidden);
         box.SmallChange(1);
         box.LargeChange(5);
     }
@@ -1136,6 +1141,7 @@ namespace
         button.Padding(ThicknessHelper::FromUniformLength(0));
         button.BorderThickness(ThicknessHelper::FromUniformLength(0));
         button.Background(resourceBrush(L"SubtleFillColorTransparentBrush", makeColorA(0, 0, 0, 0)));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(button, hstring(tooltip.c_str()));
         ToolTipService::SetToolTip(button, box_value(hstring(tooltip.c_str())));
         return button;
     }
@@ -1158,8 +1164,11 @@ namespace
     Button rowActionsMenuButton(int index, std::wstring const& tooltip = L"Actions")
     {
         auto button = iconButton(L"\xE712", index, tooltip);
-        button.Width(42);
-        button.Height(42);
+        button.Width(40);
+        button.Height(40);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(button, tooltip);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
+            button, hstring(L"PluginActions-" + std::to_wstring(index)));
         return button;
     }
 
@@ -1261,9 +1270,9 @@ namespace
         auto item = Border();
         item.Child(row);
         item.Tag(box_value(index));
-        item.MinHeight(82);
+        item.MinHeight(72);
         item.Padding(ThicknessHelper::FromUniformLength(0));
-        item.CornerRadius(CornerRadiusHelper::FromUniformRadius(8));
+        item.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
         item.Background(resourceBrush(L"AppCardBrush", themedFallback(makeColor(255, 255, 255), makeColor(44, 44, 44))));
         item.BorderBrush(resourceBrush(L"AppCardStrokeBrush", themedFallback(makeColor(226, 226, 226), makeColor(62, 62, 62))));
         item.BorderThickness(ThicknessHelper::FromUniformLength(1));
@@ -1407,16 +1416,15 @@ namespace
     void styleCombo(ComboBox const& combo)
     {
         combo.HorizontalAlignment(HorizontalAlignment::Stretch);
-        combo.MinHeight(42);
-        combo.MinWidth(240);
+        combo.MinHeight(36);
+        combo.MinWidth(200);
         combo.Padding(ThicknessHelper::FromLengths(12, 0, 12, 0));
     }
 
     void styleButton(Button const& button)
     {
-        button.MinHeight(44);
-        button.Padding(ThicknessHelper::FromLengths(18, 0, 18, 0));
-        button.FontSize(15);
+        button.MinHeight(36);
+        button.Padding(ThicknessHelper::FromLengths(12, 0, 12, 0));
     }
 
     void styleIconOnlyButton(Button const& button)
@@ -1425,7 +1433,7 @@ namespace
         button.MinWidth(36);
         button.MinHeight(36);
         button.Padding(ThicknessHelper::FromUniformLength(0));
-        button.CornerRadius(CornerRadiusHelper::FromUniformRadius(6));
+        button.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
     }
 
     void styleNavButton(Button const& button)
@@ -1461,6 +1469,48 @@ namespace
         row.Children().Append(label);
         button.Content(row);
         button.HorizontalContentAlignment(compact ? HorizontalAlignment::Center : HorizontalAlignment::Left);
+    }
+
+    bool pointerStartedInsideInteractiveControl(
+        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args,
+        DependencyObject const& boundary)
+    {
+        auto current = args.OriginalSource().try_as<DependencyObject>();
+        while (current && current != boundary)
+        {
+            if (current.try_as<TextBox>()
+                || current.try_as<RichEditBox>()
+                || current.try_as<PasswordBox>()
+                || current.try_as<NumberBox>()
+                || current.try_as<ComboBox>()
+                || current.try_as<AutoSuggestBox>()
+                || current.try_as<ToggleSwitch>()
+                || current.try_as<ButtonBase>())
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper::GetParent(current);
+        }
+
+        return false;
+    }
+
+    void enableDialogBackgroundDefocus(ContentDialog const& dialog)
+    {
+        dialog.PointerPressed([dialog](Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
+        {
+            if (!pointerStartedInsideInteractiveControl(args, dialog))
+                dialog.Focus(FocusState::Programmatic);
+        });
+    }
+
+    void sizeDialogToViewport(ContentDialog const& dialog, FrameworkElement const& viewport, double fraction)
+    {
+        const double availableWidth = (std::max)(320.0, viewport.ActualWidth() - 48.0);
+        const double targetWidth = (std::min)(availableWidth, (std::max)(320.0, viewport.ActualWidth() * fraction));
+        dialog.Resources().Insert(box_value(L"ContentDialogMinWidth"), box_value(targetWidth));
+        dialog.Resources().Insert(box_value(L"ContentDialogMaxWidth"), box_value(targetWidth));
     }
 
 }
@@ -1780,11 +1830,21 @@ namespace winrt::LightHostWinUI::implementation
         BufferSizeBoxHost().Children().Append(bufferSizeBox);
 
         startWithWindowsCheckBox = ToggleSwitch();
-        startWithWindowsCheckBox.Header(box_value(hstring(L"Start with Windows")));
+        startWithWindowsCheckBox.Width(52);
+        startWithWindowsCheckBox.MinWidth(0);
+        startWithWindowsCheckBox.OnContent(box_value(hstring(L"")));
+        startWithWindowsCheckBox.OffContent(box_value(hstring(L"")));
+        startWithWindowsCheckBox.HorizontalAlignment(HorizontalAlignment::Right);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(startWithWindowsCheckBox, L"StartWithWindows");
         StartWithWindowsCheckBoxHost().Children().Append(startWithWindowsCheckBox);
 
         closeToTraySwitch = ToggleSwitch();
-        closeToTraySwitch.Header(box_value(hstring(L"Close to tray when pressing X")));
+        closeToTraySwitch.Width(52);
+        closeToTraySwitch.MinWidth(0);
+        closeToTraySwitch.OnContent(box_value(hstring(L"")));
+        closeToTraySwitch.OffContent(box_value(hstring(L"")));
+        closeToTraySwitch.HorizontalAlignment(HorizontalAlignment::Right);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(closeToTraySwitch, L"CloseToTray");
         CloseToTraySwitchHost().Children().Append(closeToTraySwitch);
 
         themeModeBox = ComboBox();
@@ -1794,20 +1854,35 @@ namespace winrt::LightHostWinUI::implementation
 
         backdropModeBox = ComboBox();
         styleCombo(backdropModeBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(backdropModeBox, L"BackdropMode");
         BackdropModeBoxHost().Children().Append(backdropModeBox);
         setComboItems(backdropModeBox, { "Mica", "Mica Alt", "Acrylic", "Solid" }, loadBackdropModeIndex());
 
+        layoutModeBox = ComboBox();
+        styleCombo(layoutModeBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(layoutModeBox, L"LayoutMode");
+        LayoutModeBoxHost().Children().Append(layoutModeBox);
+        compactLayout = _wcsicmp(loadUiSetting(L"Appearance", L"LayoutMode", L"Expanded").c_str(), L"Compact") == 0;
+        setComboItems(layoutModeBox, { "Compact", "Expanded" }, compactLayout ? 0 : 1);
+
         iconModeBox = ComboBox();
         styleCombo(iconModeBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(iconModeBox, L"IconMode");
         IconModeBoxHost().Children().Append(iconModeBox);
         setComboItems(iconModeBox, { "Color", "White", "Black" }, 0);
 
         enableVst2CheckBox = ToggleSwitch();
-        enableVst2CheckBox.Header(box_value(hstring(L"Enable VST2 plugins")));
+        enableVst2CheckBox.Width(52);
+        enableVst2CheckBox.MinWidth(0);
+        enableVst2CheckBox.OnContent(box_value(hstring(L"")));
+        enableVst2CheckBox.OffContent(box_value(hstring(L"")));
+        enableVst2CheckBox.HorizontalAlignment(HorizontalAlignment::Right);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(enableVst2CheckBox, L"EnableVst2");
         EnableVst2CheckBoxHost().Children().Append(enableVst2CheckBox);
 
         audioPersistenceModeBox = ComboBox();
         styleCombo(audioPersistenceModeBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(audioPersistenceModeBox, L"AudioPersistenceMode");
         AudioPersistenceModeBoxHost().Children().Append(audioPersistenceModeBox);
         setComboItems(audioPersistenceModeBox, { "Disabled", "Last selected device", "Custom device" }, 0);
 
@@ -1817,6 +1892,7 @@ namespace winrt::LightHostWinUI::implementation
         audioRecoveryRetrySecondsBox.Maximum(60);
         audioRecoveryRetrySecondsBox.Value(5);
         styleNumberBox(audioRecoveryRetrySecondsBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(audioRecoveryRetrySecondsBox, L"AudioRecoveryRetrySeconds");
         AudioRecoveryRetrySecondsBoxHost().Children().Append(audioRecoveryRetrySecondsBox);
 
         audioRecoveryRetryAttemptsBox = NumberBox();
@@ -1825,18 +1901,22 @@ namespace winrt::LightHostWinUI::implementation
         audioRecoveryRetryAttemptsBox.Maximum(100);
         audioRecoveryRetryAttemptsBox.Value(10);
         styleNumberBox(audioRecoveryRetryAttemptsBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(audioRecoveryRetryAttemptsBox, L"AudioRecoveryRetryAttempts");
         AudioRecoveryRetryAttemptsBoxHost().Children().Append(audioRecoveryRetryAttemptsBox);
 
         customRecoveryBackendBox = ComboBox();
         styleCombo(customRecoveryBackendBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(customRecoveryBackendBox, L"RecoveryAudioBackend");
         CustomRecoveryBackendBoxHost().Children().Append(customRecoveryBackendBox);
 
         customRecoveryInputBox = ComboBox();
         styleCombo(customRecoveryInputBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(customRecoveryInputBox, L"RecoveryInputDevice");
         CustomRecoveryInputBoxHost().Children().Append(customRecoveryInputBox);
 
         customRecoveryOutputBox = ComboBox();
         styleCombo(customRecoveryOutputBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(customRecoveryOutputBox, L"RecoveryOutputDevice");
         CustomRecoveryOutputBoxHost().Children().Append(customRecoveryOutputBox);
 
         styleButton(RetryAudioDeviceButton());
@@ -1886,17 +1966,6 @@ namespace winrt::LightHostWinUI::implementation
         localization.load(loadUiSetting(L"Localization", L"Language", L"en-us"));
         createDynamicControls();
 
-        setNavButtonContent(DashboardButton(), L"\xE80F", L"Dashboard");
-        setNavButtonContent(PreferencesButton(), L"\xE995", L"Audio");
-        setNavButtonContent(PluginsButton(), L"\xEA86", L"Plugins");
-        setNavButtonContent(SupportButton(), L"\xEB51", L"Support me");
-        setNavButtonContent(ConfigButton(), L"\xE713", L"Settings");
-        styleNavButton(DashboardButton());
-        styleNavButton(PreferencesButton());
-        styleNavButton(PluginsButton());
-        styleNavButton(SupportButton());
-        styleNavButton(ConfigButton());
-        styleIconOnlyButton(SidebarToggleButton());
         styleButton(RefreshButton());
         styleButton(OpenWindowsSoundSettingsButton());
         styleIconOnlyButton(RepositoryButton());
@@ -1908,18 +1977,22 @@ namespace winrt::LightHostWinUI::implementation
         styleIconOnlyButton(InstalledPluginSortButton());
         styleButton(DownloadUpdateButton());
         styleButton(KoFiButton());
+        styleButton(SupportRepositoryButton());
+        styleButton(SupportShowcaseButton());
         styleButton(ScanDefaultPluginsButton());
         styleButton(RemoveMissingPluginsButton());
         styleButton(ClearPluginDatabaseButton());
         styleButton(InputChannelsToggleAllButton());
         styleButton(OutputChannelsToggleAllButton());
         styleButton(ManageEnabledAudioDevicesButton());
+        styleButton(PreferredDeviceButton());
         styleButton(CopyLogsButton());
         styleButton(SaveLogButton());
 
         winUILog("Configuring window title.");
         Title(L"Light Host Modern");
-        ExtendsContentIntoTitleBar(false);
+        ExtendsContentIntoTitleBar(true);
+        SetTitleBar(AppTitleBar());
         try
         {
             wchar_t modulePath[MAX_PATH] {};
@@ -1934,33 +2007,35 @@ namespace winrt::LightHostWinUI::implementation
         catch (...) {}
         styleTitleBar(AppWindow(), true);
         applyBackdrop(BackdropModeBox().SelectedIndex() < 0 ? loadBackdropModeIndex() : BackdropModeBox().SelectedIndex());
+        applyLayoutMode();
         resetDefaultPluginScanPaths();
         Closed({ this, &MainWindow::Window_Closed });
 
         winUILog("Resizing window.");
-        AppWindow().Resize({ 1120, 760 });
+        const auto windowScale = static_cast<double>(GetDpiForSystem()) / 96.0;
+        AppWindow().Resize({
+            static_cast<int32_t>(1180.0 * windowScale),
+            static_cast<int32_t>(760.0 * windowScale)
+        });
 
         winUILog("Moving window.");
-        AppWindow().Move({ 80, 80 });
-
-        try
-        {
-            if (auto presenter = AppWindow().Presenter().try_as<Microsoft::UI::Windowing::OverlappedPresenter>())
-                presenter.Maximize();
-        }
-        catch (...) {}
+        AppWindow().Move({
+            static_cast<int32_t>(80.0 * windowScale),
+            static_cast<int32_t>(80.0 * windowScale)
+        });
 
         winUILog("Reading host pipe option.");
         hostPipeName = commandLineOptionValue(L"--host-pipe");
         winUILog("Host pipe: " + wideToUtf8(hostPipeName));
 
         winUILog("Attaching UI events.");
+        RootLayout().Loaded([this](IInspectable const&, RoutedEventArgs const&)
+        {
+            sidebarCollapsed = true;
+            updateSidebarLayout();
+        });
         RootLayout().SizeChanged({ this, &MainWindow::RootLayout_SizeChanged });
-        DashboardButton().Click({ this, &MainWindow::Dashboard_Click });
-        PreferencesButton().Click({ this, &MainWindow::Preferences_Click });
-        PluginsButton().Click({ this, &MainWindow::Plugins_Click });
-        SupportButton().Click({ this, &MainWindow::Support_Click });
-        ConfigButton().Click({ this, &MainWindow::Config_Click });
+        SidebarRail().SelectionChanged({ this, &MainWindow::Navigation_SelectionChanged });
         SidebarToggleButton().Click({ this, &MainWindow::SidebarToggle_Click });
         RefreshButton().Click({ this, &MainWindow::Refresh_Click });
         OpenWindowsSoundSettingsButton().Click({ this, &MainWindow::OpenWindowsSoundSettings_Click });
@@ -1969,6 +2044,8 @@ namespace winrt::LightHostWinUI::implementation
         RunningPluginSearchBox().TextChanged({ this, &MainWindow::PluginSearchBox_TextChanged });
         InstalledPluginSearchBox().TextChanged({ this, &MainWindow::PluginSearchBox_TextChanged });
         KoFiButton().Click({ this, &MainWindow::KoFi_Click });
+        SupportRepositoryButton().Click({ this, &MainWindow::SupportRepository_Click });
+        SupportShowcaseButton().Click({ this, &MainWindow::SupportShowcase_Click });
         DownloadUpdateButton().Click({ this, &MainWindow::DownloadUpdate_Click });
         HideSupportTabSwitch().Toggled({ this, &MainWindow::HideSupportTabSwitch_Toggled });
         LanguageBox().SelectionChanged({ this, &MainWindow::LanguageBox_SelectionChanged });
@@ -2013,6 +2090,8 @@ namespace winrt::LightHostWinUI::implementation
         HideSupportTabSwitch().IsOn(hideSupportTab);
         SupportButton().Visibility(hideSupportTab ? Visibility::Collapsed : Visibility::Visible);
         applyLocalization();
+        sidebarCollapsed = true;
+        updateSidebarLayout();
         AudioBackendBox().SelectionChanged({ this, &MainWindow::AudioBackendBox_SelectionChanged });
         InputBox().SelectionChanged({ this, &MainWindow::InputBox_SelectionChanged });
         OutputBox().SelectionChanged({ this, &MainWindow::OutputBox_SelectionChanged });
@@ -2027,12 +2106,23 @@ namespace winrt::LightHostWinUI::implementation
                 applyBackdrop(BackdropModeBox().SelectedIndex());
             }
         });
+        LayoutModeBox().SelectionChanged([this](IInspectable const&, SelectionChangedEventArgs const&)
+        {
+            if (!LayoutModeBox() || LayoutModeBox().SelectedIndex() < 0)
+                return;
+
+            compactLayout = LayoutModeBox().SelectedIndex() == 0;
+            saveUiSetting(L"Appearance", L"LayoutMode", compactLayout ? L"Compact" : L"Expanded");
+            applyLayoutMode();
+            applyResponsiveLayout(RootLayout().ActualWidth());
+        });
         AudioBackendBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
         InputBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
         OutputBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
         SampleRateBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
         BufferSizeBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
         BackdropModeBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
+        LayoutModeBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
         AudioPersistenceModeBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
         CustomRecoveryBackendBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
         CustomRecoveryInputBox().DropDownOpened({ this, &MainWindow::ComboBox_DropDownOpened });
@@ -2043,6 +2133,7 @@ namespace winrt::LightHostWinUI::implementation
         SampleRateBox().DropDownClosed({ this, &MainWindow::ComboBox_DropDownClosed });
         BufferSizeBox().DropDownClosed({ this, &MainWindow::ComboBox_DropDownClosed });
         BackdropModeBox().DropDownClosed({ this, &MainWindow::ComboBox_DropDownClosed });
+        LayoutModeBox().DropDownClosed({ this, &MainWindow::ComboBox_DropDownClosed });
         AudioPersistenceModeBox().DropDownClosed({ this, &MainWindow::ComboBox_DropDownClosed });
         CustomRecoveryBackendBox().DropDownClosed({ this, &MainWindow::ComboBox_DropDownClosed });
         CustomRecoveryInputBox().DropDownClosed({ this, &MainWindow::ComboBox_DropDownClosed });
@@ -2087,7 +2178,10 @@ namespace winrt::LightHostWinUI::implementation
         winUILog("Updating debug controls.");
         updateDebugControls();
         winUILog("Showing initial section.");
+        SidebarRail().SelectedItem(DashboardButton());
         showSection(L"Dashboard");
+        sidebarCollapsed = true;
+        updateSidebarLayout();
         showPluginSubsection(L"Running");
         winUILog("Initial snapshot deferred until first timer tick.");
         winUILog("MainWindow ready.");
@@ -2100,9 +2194,31 @@ namespace winrt::LightHostWinUI::implementation
     void MainWindow::Support_Click(IInspectable const&, RoutedEventArgs const&) { showSection(L"Support me"); }
     void MainWindow::Config_Click(IInspectable const&, RoutedEventArgs const&) { showSection(L"Settings"); }
 
+    void MainWindow::Navigation_SelectionChanged(NavigationView const&,
+                                                  NavigationViewSelectionChangedEventArgs const& args)
+    {
+        const auto item = args.SelectedItem().try_as<NavigationViewItem>();
+        if (!item)
+            return;
+
+        const auto section = unbox_value_or<hstring>(item.Tag(), L"");
+        if (!section.empty())
+            showSection(std::wstring(section.c_str()));
+    }
+
     void MainWindow::KoFi_Click(IInspectable const&, RoutedEventArgs const&)
     {
-        ShellExecuteW(nullptr, L"open", L"https://ko-fi.com/heide_oficial", nullptr, nullptr, SW_SHOWNORMAL);
+        ShellExecuteW(nullptr, L"open", KOFI_URL, nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
+    void MainWindow::SupportRepository_Click(IInspectable const&, RoutedEventArgs const&)
+    {
+        ShellExecuteW(nullptr, L"open", GITHUB_REPOSITORY_URL, nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
+    void MainWindow::SupportShowcase_Click(IInspectable const&, RoutedEventArgs const&)
+    {
+        ShellExecuteW(nullptr, L"open", GITHUB_SHOWCASE_URL, nullptr, nullptr, SW_SHOWNORMAL);
     }
 
     void MainWindow::DownloadUpdate_Click(IInspectable const&, RoutedEventArgs const&)
@@ -2114,10 +2230,14 @@ namespace winrt::LightHostWinUI::implementation
     void MainWindow::HideSupportTabSwitch_Toggled(IInspectable const&, RoutedEventArgs const&)
     {
         hideSupportTab = HideSupportTabSwitch().IsOn();
+        updateToggleStateLabels();
         saveUiSetting(L"General", L"HideSupportTab", hideSupportTab ? L"1" : L"0");
         SupportButton().Visibility(hideSupportTab ? Visibility::Collapsed : Visibility::Visible);
         if (hideSupportTab && SupportPanel().Visibility() == Visibility::Visible)
+        {
+            SidebarRail().SelectedItem(ConfigButton());
             showSection(L"Settings");
+        }
     }
 
     void MainWindow::LanguageBox_SelectionChanged(IInspectable const&, SelectionChangedEventArgs const&)
@@ -2150,7 +2270,7 @@ namespace winrt::LightHostWinUI::implementation
     }
     void MainWindow::SidebarToggle_Click(IInspectable const&, RoutedEventArgs const&)
     {
-        sidebarCollapsed = !sidebarCollapsed;
+        sidebarCollapsed = SidebarRail().IsPaneOpen();
         updateSidebarLayout();
     }
     void MainWindow::Refresh_Click(IInspectable const&, RoutedEventArgs const&) { refreshSnapshot(); }
@@ -2275,7 +2395,6 @@ namespace winrt::LightHostWinUI::implementation
         winUILog("Swapping running plugin " + std::to_string(sourceIndex) + " with " + std::to_string(targetIndex) + ".");
         if (sendCommand("swap-plugin-with:" + std::to_string(sourceIndex) + ":" + std::to_string(targetIndex)))
         {
-            pulsePluginList(false);
             showNotification(L"Plugin chain reordered.");
         }
     }
@@ -2612,17 +2731,20 @@ namespace winrt::LightHostWinUI::implementation
         else if (section == L"Plugins")
             PageSubtitleText().Text(localization.text("page.plugins.subtitle", L"Manage the running chain and installed plugin database."));
         else if (section == L"Support me")
-            PageSubtitleText().Text(localization.text("page.support.subtitle", L"Support the continued development of my projects!"));
+            PageSubtitleText().Text(localization.text("page.support.subtitle", L"Support the project and help Light Host Modern keep improving."));
         else
-            PageSubtitleText().Text(localization.text("page.settings.subtitle", L"Basic app preferences."));
+            PageSubtitleText().Text(localization.text("page.settings.subtitle", L"Configure app behavior, audio recovery, and appearance."));
 
-        const auto selectedBrush = resourceBrush(L"SubtleFillColorSecondaryBrush", themedFallback(makeColorA(24, 0, 0, 0), makeColorA(42, 255, 255, 255)));
-        const auto transparentBrush = resourceBrush(L"SubtleFillColorTransparentBrush", makeColorA(0, 0, 0, 0));
-        DashboardButton().Background(section == L"Dashboard" ? selectedBrush : transparentBrush);
-        PreferencesButton().Background(section == L"Audio" ? selectedBrush : transparentBrush);
-        PluginsButton().Background(section == L"Plugins" ? selectedBrush : transparentBrush);
-        SupportButton().Background(section == L"Support me" ? selectedBrush : transparentBrush);
-        ConfigButton().Background(section == L"Settings" ? selectedBrush : transparentBrush);
+        NavigationViewItem selectedItem{ nullptr };
+        if (section == L"Dashboard") selectedItem = DashboardButton();
+        else if (section == L"Audio") selectedItem = PreferencesButton();
+        else if (section == L"Plugins") selectedItem = PluginsButton();
+        else if (section == L"Support me") selectedItem = SupportButton();
+        else selectedItem = ConfigButton();
+
+        if (SidebarRail().SelectedItem() != selectedItem)
+            SidebarRail().SelectedItem(selectedItem);
+
     }
 
     void MainWindow::configurePluginSortMenus()
@@ -2630,6 +2752,7 @@ namespace winrt::LightHostWinUI::implementation
         auto configure = [this](Button const& button, bool running)
         {
             auto flyout = MenuFlyout();
+            flyout.Placement(FlyoutPlacementMode::BottomEdgeAlignedRight);
             auto add = [this, &flyout, running](std::wstring const& label, int mode)
             {
                 auto item = MenuFlyoutItem();
@@ -2670,16 +2793,23 @@ namespace winrt::LightHostWinUI::implementation
     {
         localizeVisualTree(RootLayout());
         BrandTitleText().Text(localization.text("app.title", L"Light Host Modern"));
-        setNavButtonContent(DashboardButton(), L"\xE80F", localization.text("nav.dashboard", L"Dashboard").c_str(), sidebarCollapsed);
-        setNavButtonContent(PreferencesButton(), L"\xE995", localization.text("nav.audio", L"Audio").c_str(), sidebarCollapsed);
-        setNavButtonContent(PluginsButton(), L"\xEA86", localization.text("nav.plugins", L"Plugins").c_str(), sidebarCollapsed);
-        setNavButtonContent(SupportButton(), L"\xEB51", localization.text("nav.support", L"Support me").c_str(), sidebarCollapsed);
-        setNavButtonContent(ConfigButton(), L"\xE713", localization.text("nav.settings", L"Settings").c_str(), sidebarCollapsed);
-        RunningPluginSearchBox().PlaceholderText(localization.text("plugins.search.placeholder", L"Search plugins"));
-        InstalledPluginSearchBox().PlaceholderText(localization.text("plugins.search.placeholder", L"Search plugins"));
+        DashboardButton().Content(box_value(localization.text("nav.dashboard", L"Dashboard")));
+        PreferencesButton().Content(box_value(localization.text("nav.audio", L"Audio")));
+        PluginsButton().Content(box_value(localization.text("nav.plugins", L"Plugins")));
+        SupportButton().Content(box_value(localization.text("nav.support", L"Support me")));
+        ConfigButton().Content(box_value(localization.text("nav.settings", L"Settings")));
+        RunningPluginSearchBox().PlaceholderText(localization.text("plugins.search.running", L"Search running plugins"));
+        InstalledPluginSearchBox().PlaceholderText(localization.text("plugins.search.installed", L"Search installed plugins"));
         RunningPluginsEmptyText().Text(localization.text("plugins.empty.running", L"No plugins running"));
         InstalledPluginsEmptyText().Text(localization.text("plugins.empty.installed", L"No plugins installed"));
-        SupportMessageText().Text(localization.text("support.message"));
+        SupportDonateTitleText().Text(localization.text("support.donate.title", L"Support by donating via Ko-fi"));
+        SupportDonateDescriptionText().Text(localization.text("support.donate.description", L"If you enjoy the app and would like to support its continued development, you can make a donation through Ko-fi. Every contribution, no matter the amount, helps me dedicate more time to improving the app, fixing issues, and building new features.\n\nThank you so much for your support! It truly helps keep the project moving forward."));
+        SupportRepositoryTitleText().Text(localization.text("support.repository.title", L"Support by starring the GitHub repository"));
+        SupportRepositoryDescriptionText().Text(localization.text("support.repository.description", L"If you enjoy the app and want to support the project, consider giving the repository a star on GitHub. It’s a simple way to show your support, help the project gain visibility, and make it easier for others to discover.\n\nThank you for supporting the project!"));
+        SupportRepositoryButton().Content(box_value(localization.text("support.repository.action", L"Go to repo")));
+        SupportShowcaseTitleText().Text(localization.text("support.showcase.title", L"Support by showcasing the app"));
+        SupportShowcaseDescriptionText().Text(localization.text("support.showcase.description", L"If you create a video about the app, I’d be happy to help give it more visibility. Once your video is published, open an issue on GitHub and send me the link. I may feature your video on the project page, helping promote your content while you help introduce the app to more people.\n\nIt’s a simple way for us to support each other: you showcase the app, and I help showcase your work."));
+        SupportShowcaseButton().Content(box_value(localization.text("support.showcase.action", L"Create video showcase post")));
         UpdateAvailableTitleText().Text(localization.text("settings.update.title", L"Update available"));
         if (!latestReleaseTag.empty())
         {
@@ -2692,17 +2822,29 @@ namespace winrt::LightHostWinUI::implementation
         HideSupportTitleText().Text(localization.text("settings.support.hide", L"Hide the Support me tab"));
         LanguageTitleText().Text(localization.text("settings.language.title", L"Language"));
         LanguageDescriptionText().Text(localization.text("settings.language.description", L"Choose the language used by the app."));
+        LayoutModeTitleText().Text(localization.text("settings.layout.title", L"Layout mode"));
+        LayoutModeDescriptionText().Text(localization.text("settings.layout.description", L"Compact limits page width; Expanded uses all available space."));
+        setComboItems(LayoutModeBox(), {
+            to_string(localization.text("settings.layout.compact", L"Compact")),
+            to_string(localization.text("settings.layout.expanded", L"Expanded")) }, compactLayout ? 0 : 1);
         ScanDefaultPluginsMenuItem().Text(localization.text("plugins.scan", L"Scan"));
         ScanPathsMenuItem().Text(localization.text("plugins.scanPaths", L"Scan paths"));
         RemoveMissingPluginsMenuItem().Text(localization.text("plugins.removeMissing", L"Remove missing"));
         ClearPluginDatabaseMenuItem().Text(localization.text("common.clear", L"Clear"));
-        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(KoFiButton(), localization.text("support.kofi", L"Support me on Ko-fi"));
+        const auto koFiAutomationName = localization.text("support.kofi", L"Support me on Ko-fi");
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(KoFiButton(), koFiAutomationName);
+        ToolTipService::SetToolTip(KoFiButton(), box_value(koFiAutomationName));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(SupportRepositoryButton(), localization.text("support.repository.automation", L"Go to the Light Host Modern repository"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(SupportShowcaseButton(), localization.text("support.showcase.automation", L"Create a video showcase post"));
         Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(RunningPluginSearchBox(), localization.text("plugins.search.running", L"Search running plugins"));
         Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(InstalledPluginSearchBox(), localization.text("plugins.search.installed", L"Search installed plugins"));
         Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(RunningPluginSortButton(), localization.text("plugins.sort.label", L"Sort plugins"));
         Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(InstalledPluginSortButton(), localization.text("plugins.sort.label", L"Sort plugins"));
         Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(HideSupportTabSwitch(), localization.text("settings.support.hide", L"Hide the Support me tab"));
         Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(LanguageBox(), localization.text("settings.language.automation", L"App language"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(LayoutModeBox(), localization.text("settings.layout.title", L"Layout mode"));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(PreferredDeviceButton(), localization.text("settings.persistence.choose", L"Choose preferred device"));
+        updateToggleStateLabels();
         configurePluginSortMenus();
         showSection(currentSection);
     }
@@ -2801,9 +2943,8 @@ namespace winrt::LightHostWinUI::implementation
     {
         RunningPluginsPanel().Visibility(section == L"Running" ? Visibility::Visible : Visibility::Collapsed);
         InstalledPluginsPanel().Visibility(section == L"Installed" ? Visibility::Visible : Visibility::Collapsed);
-        PluginActionsButton().Visibility(Visibility::Visible);
+        PluginActionsButton().Visibility(section == L"Installed" ? Visibility::Visible : Visibility::Collapsed);
         PluginActionsButton().IsEnabled(section == L"Installed");
-        PluginActionsButton().Opacity(section == L"Installed" ? 1.0 : 0.45);
 
         const auto selectedBrush = resourceBrush(L"SubtleFillColorSecondaryBrush", themedFallback(makeColorA(24, 0, 0, 0), makeColorA(42, 255, 255, 255)));
         const auto defaultBrush = resourceBrush(L"SubtleFillColorTransparentBrush", makeColorA(0, 0, 0, 0));
@@ -2820,6 +2961,27 @@ namespace winrt::LightHostWinUI::implementation
     void MainWindow::RootLayout_SizeChanged(IInspectable const&, SizeChangedEventArgs const& args)
     {
         applyResponsiveLayout(args.NewSize().Width);
+    }
+
+    void MainWindow::RootLayout_PointerPressed(IInspectable const&, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
+    {
+        auto current = args.OriginalSource().try_as<DependencyObject>();
+        while (current && current != RootLayout())
+        {
+            if (current.try_as<NumberBox>()
+                || current.try_as<TextBox>()
+                || current.try_as<ComboBox>()
+                || current.try_as<AutoSuggestBox>()
+                || current.try_as<ToggleSwitch>()
+                || current.try_as<ButtonBase>())
+            {
+                return;
+            }
+
+            current = VisualTreeHelper::GetParent(current);
+        }
+
+        ContentScrollViewer().Focus(FocusState::Programmatic);
     }
 
     void MainWindow::applyTheme(ElementTheme)
@@ -2842,7 +3004,7 @@ namespace winrt::LightHostWinUI::implementation
         currentOutputChannelRows.clear();
         createMeterSegments(InputMeterBarHost(), inputMeterSegments);
         createMeterSegments(OutputMeterBarHost(), outputMeterSegments);
-        showSection(std::wstring(PageTitleText().Text().c_str()));
+        showSection(currentSection);
         refreshSnapshot();
     }
 
@@ -2857,6 +3019,7 @@ namespace winrt::LightHostWinUI::implementation
 
             RootLayout().Background(nullptr);
             MainContent().Background(nullptr);
+            SidebarRail().Background(nullptr);
 
             if (selectedIndex == 1)
             {
@@ -2880,6 +3043,7 @@ namespace winrt::LightHostWinUI::implementation
             {
                 SystemBackdrop(nullptr);
                 RootLayout().Background(resourceBrush(L"AppSolidBackgroundBrush", themedFallback(makeColor(243, 243, 243), makeColor(32, 32, 32))));
+                SidebarRail().Background(resourceBrush(L"AppSidebarBrush", themedFallback(makeColor(243, 243, 243), makeColor(32, 32, 32))));
                 winUILog("Solid backdrop enabled.");
                 return;
             }
@@ -2898,60 +3062,18 @@ namespace winrt::LightHostWinUI::implementation
         }
     }
 
-    void MainWindow::pulsePluginList(bool installedList)
+    void MainWindow::applyLayoutMode()
     {
-        auto element = (installedList ? InstalledPluginsListCard() : RunningPluginsListCard()).try_as<UIElement>();
-        pulseElement(element);
-    }
-
-    void MainWindow::pulseElement(UIElement const& element)
-    {
-        if (!element)
-            return;
-
-        element.RenderTransformOrigin({ 0.5f, 0.5f });
-        auto scale = ScaleTransform();
-        scale.ScaleX(0.985);
-        scale.ScaleY(0.985);
-        element.RenderTransform(scale);
-        element.Opacity(0.78);
-
-        auto timer = DispatcherQueue().CreateTimer();
-        timer.Interval(std::chrono::milliseconds(16));
-
-        auto step = std::make_shared<int>(0);
-        timer.Tick([element, scale, timer, step](auto const&, auto const&) mutable
+        const auto availableWidth = MainContent().ActualWidth()
+            - MainContent().Padding().Left
+            - MainContent().Padding().Right;
+        if (availableWidth > 0.0)
         {
-            ++(*step);
-            const auto rawProgress = static_cast<double>(*step) / 12.0;
-            const auto progress = rawProgress > 1.0 ? 1.0 : rawProgress;
-            element.Opacity(0.78 + ((1.0 - 0.78) * progress));
-            const auto scaleValue = 0.985 + ((1.0 - 0.985) * progress);
-            scale.ScaleX(scaleValue);
-            scale.ScaleY(scaleValue);
-
-            if (progress >= 1.0)
-            {
-                element.Opacity(1.0);
-                scale.ScaleX(1.0);
-                scale.ScaleY(1.0);
-                timer.Stop();
-            }
-        });
-
-        timer.Start();
-    }
-
-    void MainWindow::pulseRunningPluginCard(int index)
-    {
-        if (index >= 0 && index < (int) runningPluginItemBorders.size())
-            pulseElement(runningPluginItemBorders[(size_t) index].try_as<UIElement>());
-    }
-
-    void MainWindow::pulseInstalledPluginCard(int index)
-    {
-        if (index >= 0 && index < (int) installedPluginItemBorders.size())
-            pulseElement(installedPluginItemBorders[(size_t) index].try_as<UIElement>());
+            const auto viewportWidth = (std::max)(0.0, availableWidth - 16.0);
+            PageContentStack().Width(compactLayout ? (std::min)(viewportWidth, 1040.0) : viewportWidth);
+        }
+        PageContentStack().MaxWidth(compactLayout ? 1040.0 : std::numeric_limits<double>::infinity());
+        PageContentStack().HorizontalAlignment(HorizontalAlignment::Stretch);
     }
 
     void MainWindow::applyResponsiveLayout(double width)
@@ -2959,84 +3081,88 @@ namespace winrt::LightHostWinUI::implementation
         if (width <= 0.0)
             return;
 
-        if (sidebarCollapsed)
+        const auto horizontalPadding = MainContent().Padding().Left + MainContent().Padding().Right;
+        const auto measuredContentWidth = MainContent().ActualWidth() > 0.0
+            ? (std::max)(0.0, MainContent().ActualWidth() - horizontalPadding)
+            : width;
+        const bool useNarrowSupportLayout = measuredContentWidth < 760.0;
+        const auto configureSupportAction = [useNarrowSupportLayout](ColumnDefinition const& actionColumn,
+                                                                     Button const& button)
         {
-            updateSidebarLayout();
+            actionColumn.Width(GridLengthHelper::FromPixels(useNarrowSupportLayout ? 0.0 : 294.0));
+            Grid::SetRow(button, useNarrowSupportLayout ? 1 : 0);
+            Grid::SetColumn(button, useNarrowSupportLayout ? 0 : 1);
+            Grid::SetColumnSpan(button, useNarrowSupportLayout ? 2 : 1);
+            button.Width(useNarrowSupportLayout ? std::numeric_limits<double>::quiet_NaN() : 294.0);
+            button.HorizontalAlignment(useNarrowSupportLayout ? HorizontalAlignment::Stretch : HorizontalAlignment::Right);
+            button.Margin(useNarrowSupportLayout
+                              ? ThicknessHelper::FromLengths(0, 12, 0, 0)
+                              : ThicknessHelper::FromUniformLength(0));
+        };
+
+        configureSupportAction(SupportDonateActionColumn(), KoFiButton());
+        configureSupportAction(SupportRepositoryActionColumn(), SupportRepositoryButton());
+        configureSupportAction(SupportShowcaseActionColumn(), SupportShowcaseButton());
+
+        const bool useCompactPluginCards = measuredContentWidth < 680.0;
+        if (compactPluginCards != useCompactPluginCards)
+        {
+            compactPluginCards = useCompactPluginCards;
+            renderedRunningPluginLabels.clear();
+            renderedInstalledPluginLabels.clear();
+            if (currentSection == L"Plugins")
+                refreshSnapshot();
         }
-        else
-        {
+
         if (width < 840.0)
         {
-            SidebarColumn().Width(GridLengthHelper::FromPixels(190));
-            SidebarContent().Padding(ThicknessHelper::FromLengths(12, 18, 10, 18));
-            MainContent().Padding(ThicknessHelper::FromLengths(20, 34, 20, 28));
-            PageTitleText().FontSize(26);
+            MainContent().Padding(ThicknessHelper::FromLengths(16, 48, 16, 16));
+            applyLayoutMode();
             HeaderActions().Orientation(Orientation::Vertical);
         }
         else if (width < 1180.0)
         {
-            SidebarColumn().Width(GridLengthHelper::FromPixels(210));
-            SidebarContent().Padding(ThicknessHelper::FromLengths(16, 22, 12, 22));
-            MainContent().Padding(ThicknessHelper::FromLengths(30, 44, 34, 34));
-            PageTitleText().FontSize(30);
+            MainContent().Padding(ThicknessHelper::FromLengths(24, 48, 24, 24));
+            applyLayoutMode();
             HeaderActions().Orientation(Orientation::Horizontal);
         }
         else
         {
-            SidebarColumn().Width(GridLengthHelper::FromPixels(220));
-            SidebarContent().Padding(ThicknessHelper::FromLengths(18, 24, 14, 24));
-            MainContent().Padding(ThicknessHelper::FromLengths(38, 54, 48, 42));
-            PageTitleText().FontSize(32);
+            MainContent().Padding(ThicknessHelper::FromLengths(24, 48, 24, 24));
+            applyLayoutMode();
             HeaderActions().Orientation(Orientation::Horizontal);
-        }
         }
     }
 
     void MainWindow::updateSidebarLayout()
     {
-        const auto currentWidth = RootLayout().ActualWidth();
-        if (sidebarCollapsed)
-        {
-            SidebarColumn().Width(GridLengthHelper::FromPixels(72));
-            SidebarContent().Padding(ThicknessHelper::FromLengths(12, 20, 12, 20));
-            BrandHeaderGrid().HorizontalAlignment(HorizontalAlignment::Center);
-            BrandHeaderGrid().ColumnSpacing(0);
-            BrandHeaderGrid().Width(48);
-            BrandLogoImage().Margin(ThicknessHelper::FromLengths(8, 0, 0, 0));
-            BrandLogoImage().Width(32);
-            BrandLogoImage().Height(32);
-            BrandTitleText().Visibility(Visibility::Collapsed);
-            SidebarToggleIcon().Glyph(L"\xE72A");
-            SidebarToggleButton().HorizontalAlignment(HorizontalAlignment::Center);
-            setNavButtonContent(DashboardButton(), L"\xE80F", L"Dashboard", true);
-            setNavButtonContent(PreferencesButton(), L"\xE995", L"Audio", true);
-            setNavButtonContent(PluginsButton(), L"\xEA86", L"Plugins", true);
-            setNavButtonContent(SupportButton(), L"\xEB51", L"Support me", true);
-            setNavButtonContent(ConfigButton(), L"\xE713", L"Settings", true);
-        }
-        else
-        {
-            BrandHeaderGrid().HorizontalAlignment(HorizontalAlignment::Stretch);
-            BrandHeaderGrid().ColumnSpacing(10);
-            BrandHeaderGrid().ClearValue(FrameworkElement::WidthProperty());
-            BrandLogoImage().Margin(ThicknessHelper::FromUniformLength(0));
-            BrandLogoImage().Width(22);
-            BrandLogoImage().Height(22);
-            BrandTitleText().Visibility(Visibility::Visible);
-            SidebarToggleIcon().Glyph(L"\xE72B");
-            SidebarToggleButton().HorizontalAlignment(HorizontalAlignment::Left);
-            setNavButtonContent(DashboardButton(), L"\xE80F", L"Dashboard");
-            setNavButtonContent(PreferencesButton(), L"\xE995", L"Audio");
-            setNavButtonContent(PluginsButton(), L"\xEA86", L"Plugins");
-            setNavButtonContent(SupportButton(), L"\xEB51", L"Support me");
-            setNavButtonContent(ConfigButton(), L"\xE713", L"Settings");
-            if (currentWidth > 0.0)
-                applyResponsiveLayout(currentWidth);
-            else
-                SidebarColumn().Width(GridLengthHelper::FromPixels(220));
-        }
+        SidebarRail().IsPaneOpen(!sidebarCollapsed);
+        BrandTitleText().Visibility(sidebarCollapsed ? Visibility::Collapsed : Visibility::Visible);
+        CompactLogoNavItem().Visibility(sidebarCollapsed ? Visibility::Visible : Visibility::Collapsed);
+        SidebarToggleText().Visibility(sidebarCollapsed ? Visibility::Collapsed : Visibility::Visible);
+        SidebarToggleIcon().Glyph(sidebarCollapsed ? L"\xE72A" : L"\xE72B");
+        const auto accessibleName = localization.text(
+            sidebarCollapsed ? "navigation.expand" : "navigation.collapse",
+            sidebarCollapsed ? L"Expand sidebar" : L"Collapse sidebar");
+        SidebarToggleText().Text(accessibleName);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(SidebarToggleButton(), accessibleName);
+        ToolTipService::SetToolTip(SidebarToggleButton(), box_value(accessibleName));
+    }
 
-        showSection(std::wstring(PageTitleText().Text().c_str()));
+    void MainWindow::updateToggleStateLabels()
+    {
+        const auto onText = localization.text("common.on", L"On");
+        const auto offText = localization.text("common.off", L"Off");
+        const auto update = [&onText, &offText](TextBlock const& label, ToggleSwitch const& toggle)
+        {
+            if (label && toggle)
+                label.Text(toggle.IsOn() ? onText : offText);
+        };
+
+        update(StartWithWindowsStateText(), StartWithWindowsCheckBox());
+        update(CloseToTrayStateText(), CloseToTraySwitch());
+        update(EnableVst2StateText(), EnableVst2CheckBox());
+        update(HideSupportStateText(), HideSupportTabSwitch());
     }
 
     void MainWindow::syncThemeSelectors(int selectedIndex)
@@ -3522,7 +3648,9 @@ namespace winrt::LightHostWinUI::implementation
         const int customOutputIndex = stringIndex(customOutputCandidates, audioPersistenceCustomOutputDevice, currentOutputDeviceIndex);
         setComboItems(CustomRecoveryInputBox(), customInputCandidates, customInputIndex);
         setComboItems(CustomRecoveryOutputBox(), customOutputCandidates, customOutputIndex);
-        AudioPersistenceRetryPolicyGrid().Visibility(persistenceIndex == 0 ? Visibility::Collapsed : Visibility::Visible);
+        const auto retryVisibility = persistenceIndex == 0 ? Visibility::Collapsed : Visibility::Visible;
+        AudioPersistenceRetryIntervalGrid().Visibility(retryVisibility);
+        AudioPersistenceRetryAttemptsGrid().Visibility(retryVisibility);
         CustomAudioPersistenceCard().Visibility(persistenceIndex == 2 ? Visibility::Visible : Visibility::Collapsed);
         CustomAudioPersistenceGrid().Visibility(persistenceIndex == 2 ? Visibility::Visible : Visibility::Collapsed);
         const auto selectedCustomBackend = (customBackendIndex >= 0 && (size_t) customBackendIndex < backendNames.size())
@@ -3531,8 +3659,10 @@ namespace winrt::LightHostWinUI::implementation
         const bool customBackendIsAsio = selectedCustomBackend == "ASIO";
         CustomRecoveryInputLabel().Text(customBackendIsAsio ? L"Device" : L"Input device");
         CustomRecoveryOutputRow().Visibility(customBackendIsAsio ? Visibility::Collapsed : Visibility::Visible);
+        updatePreferredDeviceSummary();
         RetryAudioDeviceButton().IsEnabled(persistenceIndex != 0);
         syncEnabledAudioChoicesSummary();
+        updateToggleStateLabels();
 
         std::string persistenceStatus;
         if (persistenceIndex == 0)
@@ -3593,51 +3723,79 @@ namespace winrt::LightHostWinUI::implementation
                 row.DragStarting({ this, &MainWindow::RunningPluginItem_DragStarting });
                 row.DragOver({ this, &MainWindow::RunningPluginItem_DragOver });
                 row.Drop({ this, &MainWindow::RunningPluginItem_Drop });
-                row.Padding(ThicknessHelper::FromLengths(22, 0, 22, 0));
-                row.ColumnSpacing(18);
+                row.Padding(ThicknessHelper::FromLengths(16, 0, 12, 0));
+                row.ColumnSpacing(12);
+                if (compactPluginCards)
+                {
+                    row.RowDefinitions().Append(RowDefinition());
+                    row.RowDefinitions().Append(RowDefinition());
+                }
                 row.ColumnDefinitions().Append(ColumnDefinition());
-                row.ColumnDefinitions().GetAt(0).Width(GridLengthHelper::FromPixels(64));
+                row.ColumnDefinitions().GetAt(0).Width(GridLengthHelper::FromPixels(40));
                 row.ColumnDefinitions().Append(ColumnDefinition());
                 row.ColumnDefinitions().GetAt(1).Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+                if (!compactPluginCards)
+                {
+                    row.ColumnDefinitions().Append(ColumnDefinition());
+                    row.ColumnDefinitions().GetAt(2).Width(GridLengthHelper::FromValueAndType(0, GridUnitType::Auto));
+                    row.ColumnDefinitions().Append(ColumnDefinition());
+                    row.ColumnDefinitions().GetAt(3).Width(GridLengthHelper::FromValueAndType(0, GridUnitType::Auto));
+                }
                 row.ColumnDefinitions().Append(ColumnDefinition());
-                row.ColumnDefinitions().GetAt(2).Width(GridLengthHelper::FromPixels(170));
-                row.ColumnDefinitions().Append(ColumnDefinition());
-                row.ColumnDefinitions().GetAt(3).Width(GridLengthHelper::FromPixels(100));
-                row.ColumnDefinitions().Append(ColumnDefinition());
-                row.ColumnDefinitions().GetAt(4).Width(GridLengthHelper::FromPixels(210));
-                row.ColumnDefinitions().Append(ColumnDefinition());
-                row.ColumnDefinitions().GetAt(5).Width(GridLengthHelper::FromPixels(72));
+                row.ColumnDefinitions().GetAt(compactPluginCards ? 2 : 4).Width(GridLengthHelper::FromPixels(48));
 
-                auto orderText = rowText(std::to_string(sourceIndex + 1), 17);
+                auto orderText = rowText(std::to_string(sourceIndex + 1), 14);
                 orderText.HorizontalAlignment(HorizontalAlignment::Center);
+                orderText.Opacity(0.72);
                 row.Children().Append(orderText);
 
-                auto nameText = pluginNameText(plugin.name, 17);
-                Grid::SetColumn(nameText, 1);
-                row.Children().Append(nameText);
+                auto identity = StackPanel();
+                identity.VerticalAlignment(VerticalAlignment::Center);
+                identity.Spacing(2);
+                identity.Children().Append(pluginNameText(plugin.name, 16));
 
-                auto manufacturerText = rowText(plugin.manufacturer.empty() ? "-" : plugin.manufacturer, 15);
+                const auto manufacturerLabel = plugin.manufacturer.empty()
+                    ? to_string(localization.text("plugins.unknownManufacturer", L"Unknown manufacturer"))
+                    : plugin.manufacturer;
+                auto manufacturerText = rowText(manufacturerLabel, 13);
                 manufacturerText.Opacity(plugin.manufacturer.empty() ? 0.55 : 0.85);
                 manufacturerText.TextWrapping(TextWrapping::NoWrap);
                 manufacturerText.TextTrimming(TextTrimming::CharacterEllipsis);
-                ToolTipService::SetToolTip(manufacturerText, box_value(hs(plugin.manufacturer.empty() ? "-" : plugin.manufacturer)));
-                Grid::SetColumn(manufacturerText, 2);
-                row.Children().Append(manufacturerText);
+                ToolTipService::SetToolTip(manufacturerText, box_value(hs(manufacturerLabel)));
+                identity.Children().Append(manufacturerText);
+                Grid::SetColumn(identity, 1);
+                row.Children().Append(identity);
 
                 auto format = formatBadge(plugin.format);
                 format.HorizontalAlignment(HorizontalAlignment::Left);
                 format.VerticalAlignment(VerticalAlignment::Center);
-                Grid::SetColumn(format, 3);
-                row.Children().Append(format);
-
                 auto statusBadge = pill(plugin.status, to_string(localization.translatedSource(hs(plugin.status))));
                 statusBadge.HorizontalAlignment(HorizontalAlignment::Left);
                 statusBadge.VerticalAlignment(VerticalAlignment::Center);
-                Grid::SetColumn(statusBadge, 4);
-                row.Children().Append(statusBadge);
+                if (compactPluginCards)
+                {
+                    auto metadata = StackPanel();
+                    metadata.Orientation(Orientation::Horizontal);
+                    metadata.Spacing(8);
+                    metadata.Margin(ThicknessHelper::FromLengths(0, 4, 0, 10));
+                    metadata.Children().Append(format);
+                    metadata.Children().Append(statusBadge);
+                    Grid::SetRow(metadata, 1);
+                    Grid::SetColumn(metadata, 1);
+                    Grid::SetColumnSpan(metadata, 2);
+                    row.Children().Append(metadata);
+                }
+                else
+                {
+                    Grid::SetColumn(format, 2);
+                    Grid::SetColumn(statusBadge, 3);
+                    row.Children().Append(format);
+                    row.Children().Append(statusBadge);
+                }
 
                 auto actionsButton = rowActionsMenuButton(sourceIndex);
                 auto actionsMenu = MenuFlyout();
+                actionsMenu.Placement(FlyoutPlacementMode::BottomEdgeAlignedRight);
                 actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.openEditor", L"Open editor").c_str(), L"\xE8A7", sourceIndex, { this, &MainWindow::OpenPluginEditor_Click }));
                 actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.duplicate", L"Duplicate").c_str(), L"\xE8C8", sourceIndex, { this, &MainWindow::DuplicatePlugin_Click }));
                 actionsMenu.Items().Append(actionMenuItem(localization.text(plugin.bypassed ? "plugins.enable" : "plugins.bypass", plugin.bypassed ? L"Enable" : L"Bypass").c_str(), L"\xE7E8", sourceIndex, { this, &MainWindow::BypassPlugin_Click }));
@@ -3645,10 +3803,12 @@ namespace winrt::LightHostWinUI::implementation
                 actionsButton.Flyout(actionsMenu);
                 actionsButton.HorizontalAlignment(HorizontalAlignment::Right);
                 actionsButton.VerticalAlignment(VerticalAlignment::Center);
-                Grid::SetColumn(actionsButton, 5);
+                Grid::SetColumn(actionsButton, compactPluginCards ? 2 : 4);
                 row.Children().Append(actionsButton);
 
                 auto item = pluginListItem(row, sourceIndex);
+                if (compactPluginCards)
+                    item.MinHeight(96);
                 item.CanDrag(canReorder);
                 item.AllowDrop(canReorder);
                 item.DragStarting({ this, &MainWindow::RunningPluginItem_DragStarting });
@@ -3677,53 +3837,83 @@ namespace winrt::LightHostWinUI::implementation
                 const auto& plugin = knownPluginRows[(size_t) i];
                 const auto sourceIndex = plugin.originalIndex;
                 auto row = Grid();
-                row.Padding(ThicknessHelper::FromLengths(28, 0, 22, 0));
-                row.ColumnSpacing(18);
+                row.Padding(ThicknessHelper::FromLengths(16, 0, 12, 0));
+                row.ColumnSpacing(12);
+                if (compactPluginCards)
+                {
+                    row.RowDefinitions().Append(RowDefinition());
+                    row.RowDefinitions().Append(RowDefinition());
+                }
                 row.ColumnDefinitions().Append(ColumnDefinition());
                 row.ColumnDefinitions().GetAt(0).Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+                if (!compactPluginCards)
+                {
+                    row.ColumnDefinitions().Append(ColumnDefinition());
+                    row.ColumnDefinitions().GetAt(1).Width(GridLengthHelper::FromValueAndType(0, GridUnitType::Auto));
+                    row.ColumnDefinitions().Append(ColumnDefinition());
+                    row.ColumnDefinitions().GetAt(2).Width(GridLengthHelper::FromValueAndType(0, GridUnitType::Auto));
+                }
                 row.ColumnDefinitions().Append(ColumnDefinition());
-                row.ColumnDefinitions().GetAt(1).Width(GridLengthHelper::FromPixels(180));
-                row.ColumnDefinitions().Append(ColumnDefinition());
-                row.ColumnDefinitions().GetAt(2).Width(GridLengthHelper::FromPixels(100));
-                row.ColumnDefinitions().Append(ColumnDefinition());
-                row.ColumnDefinitions().GetAt(3).Width(GridLengthHelper::FromPixels(210));
-                row.ColumnDefinitions().Append(ColumnDefinition());
-                row.ColumnDefinitions().GetAt(4).Width(GridLengthHelper::FromPixels(72));
+                row.ColumnDefinitions().GetAt(compactPluginCards ? 1 : 3).Width(GridLengthHelper::FromPixels(48));
 
-                row.Children().Append(pluginNameText(plugin.name, 17));
+                auto identity = StackPanel();
+                identity.VerticalAlignment(VerticalAlignment::Center);
+                identity.Spacing(2);
+                identity.Children().Append(pluginNameText(plugin.name, 16));
 
-                auto manufacturerText = rowText(plugin.manufacturer.empty() ? "-" : plugin.manufacturer, 15);
+                const auto manufacturerLabel = plugin.manufacturer.empty()
+                    ? to_string(localization.text("plugins.unknownManufacturer", L"Unknown manufacturer"))
+                    : plugin.manufacturer;
+                auto manufacturerText = rowText(manufacturerLabel, 13);
                 manufacturerText.Opacity(plugin.manufacturer.empty() ? 0.55 : 0.85);
                 manufacturerText.TextWrapping(TextWrapping::NoWrap);
                 manufacturerText.TextTrimming(TextTrimming::CharacterEllipsis);
-                ToolTipService::SetToolTip(manufacturerText, box_value(hs(plugin.manufacturer.empty() ? "-" : plugin.manufacturer)));
-                Grid::SetColumn(manufacturerText, 1);
-                row.Children().Append(manufacturerText);
+                ToolTipService::SetToolTip(manufacturerText, box_value(hs(manufacturerLabel)));
+                identity.Children().Append(manufacturerText);
+                row.Children().Append(identity);
 
                 auto format = formatBadge(plugin.format);
                 format.HorizontalAlignment(HorizontalAlignment::Left);
                 format.VerticalAlignment(VerticalAlignment::Center);
-                Grid::SetColumn(format, 2);
-                row.Children().Append(format);
-
                 auto statusBadge = pill(plugin.status, to_string(localization.translatedSource(hs(plugin.status))));
                 statusBadge.HorizontalAlignment(HorizontalAlignment::Left);
                 statusBadge.VerticalAlignment(VerticalAlignment::Center);
-                Grid::SetColumn(statusBadge, 3);
-                row.Children().Append(statusBadge);
+                if (compactPluginCards)
+                {
+                    auto metadata = StackPanel();
+                    metadata.Orientation(Orientation::Horizontal);
+                    metadata.Spacing(8);
+                    metadata.Margin(ThicknessHelper::FromLengths(0, 4, 0, 10));
+                    metadata.Children().Append(format);
+                    metadata.Children().Append(statusBadge);
+                    Grid::SetRow(metadata, 1);
+                    Grid::SetColumn(metadata, 0);
+                    Grid::SetColumnSpan(metadata, 2);
+                    row.Children().Append(metadata);
+                }
+                else
+                {
+                    Grid::SetColumn(format, 1);
+                    Grid::SetColumn(statusBadge, 2);
+                    row.Children().Append(format);
+                    row.Children().Append(statusBadge);
+                }
 
                 auto actionsButton = rowActionsMenuButton(sourceIndex);
                 auto actionsMenu = MenuFlyout();
+                actionsMenu.Placement(FlyoutPlacementMode::BottomEdgeAlignedRight);
                 actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.addToChain", L"Add to chain").c_str(), L"\xE710", sourceIndex, { this, &MainWindow::AddInstalledPlugin_Click }));
                 actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.openFolder", L"Open folder").c_str(), L"\xE8B7", sourceIndex, { this, &MainWindow::OpenInstalledPluginLocation_Click }));
                 actionsMenu.Items().Append(actionMenuItem(localization.text("plugins.removeDatabase", L"Remove from database").c_str(), L"\xE74D", sourceIndex, { this, &MainWindow::RemoveInstalledPlugin_Click }));
                 actionsButton.Flyout(actionsMenu);
                 actionsButton.HorizontalAlignment(HorizontalAlignment::Right);
                 actionsButton.VerticalAlignment(VerticalAlignment::Center);
-                Grid::SetColumn(actionsButton, 4);
+                Grid::SetColumn(actionsButton, compactPluginCards ? 1 : 3);
                 row.Children().Append(actionsButton);
 
                 auto item = pluginListItem(row, sourceIndex);
+                if (compactPluginCards)
+                    item.MinHeight(96);
                 installedPluginItemBorders.push_back(item);
                 InstalledPluginsListView().Children().Append(item);
             }
@@ -3816,7 +4006,6 @@ namespace winrt::LightHostWinUI::implementation
         {
             if (sendCommand("toggle-bypass:" + std::to_string(index)))
             {
-                pulseRunningPluginCard(index);
                 showNotification(L"Plugin bypass updated.");
             }
         }
@@ -3834,10 +4023,8 @@ namespace winrt::LightHostWinUI::implementation
         const auto index = taggedIndexOrSelected(sender, selectedRunningPluginIndex());
         if (index >= 0)
         {
-            const int previousCount = activePluginCount;
             if (sendCommand("duplicate-plugin:" + std::to_string(index)))
             {
-                pulseRunningPluginCard(previousCount);
                 showNotification(L"Plugin duplicated.");
             }
         }
@@ -3850,7 +4037,6 @@ namespace winrt::LightHostWinUI::implementation
         {
             if (sendCommand("remove-plugin:" + std::to_string(index)))
             {
-                pulseRunningPluginCard((std::min)(index, activePluginCount - 1));
                 showNotification(L"Plugin removed from chain.");
             }
         }
@@ -3877,13 +4063,11 @@ namespace winrt::LightHostWinUI::implementation
 
                 if (anyScanSucceeded)
                 {
-                    pulsePluginList(true);
                     showNotification(L"Plugin scan completed. " + std::to_wstring(added) + L" new plugins found.");
                 }
             }
             else if (sendCommand("scan-default-plugins:all"))
             {
-                pulsePluginList(true);
                 showNotification(L"Plugin scan completed. " + std::to_wstring((int) extractNumber(lastCommandResponse, "added", 0)) + L" new plugins found.");
             }
         }
@@ -3891,7 +4075,6 @@ namespace winrt::LightHostWinUI::implementation
         {
             if (sendCommand("scan-default-plugins:vst3"))
             {
-                pulsePluginList(true);
                 showNotification(L"VST3 scan completed. " + std::to_wstring((int) extractNumber(lastCommandResponse, "added", 0)) + L" new plugins found.");
             }
         }
@@ -3899,7 +4082,6 @@ namespace winrt::LightHostWinUI::implementation
         {
             if (sendCommand("scan-default-plugins:vst"))
             {
-                pulsePluginList(true);
                 showNotification(L"VST scan completed. " + std::to_wstring((int) extractNumber(lastCommandResponse, "added", 0)) + L" new plugins found.");
             }
         }
@@ -3912,16 +4094,62 @@ namespace winrt::LightHostWinUI::implementation
 
         auto pathRows = StackPanel();
         pathRows.Spacing(8);
+        auto pathEntries = StackPanel();
+        pathEntries.Spacing(8);
 
         auto editors = std::make_shared<std::vector<TextBox>>();
         auto values = std::make_shared<std::vector<std::wstring>>();
         for (auto const& path : pluginScanPaths)
             values->push_back(utf8ToWide(path));
 
+        auto addPathButton = Button();
+        addPathButton.HorizontalAlignment(HorizontalAlignment::Stretch);
+        addPathButton.HorizontalContentAlignment(HorizontalAlignment::Stretch);
+        addPathButton.MinHeight(64);
+        addPathButton.Padding(ThicknessHelper::FromUniformLength(16));
+        addPathButton.Background(resourceBrush(L"AppCardBrush", themedFallback(makeColor(255, 255, 255), makeColor(39, 39, 39))));
+        addPathButton.BorderBrush(resourceBrush(L"AppCardStrokeBrush", themedFallback(makeColor(225, 225, 225), makeColor(58, 58, 58))));
+        addPathButton.BorderThickness(ThicknessHelper::FromUniformLength(1));
+        addPathButton.CornerRadius(CornerRadiusHelper::FromUniformRadius(8));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(addPathButton, L"AddNewScanPath");
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(
+            addPathButton,
+            localization.text("dialogs.scanPaths.add", L"Add new path"));
+
+        auto addPathContent = Grid();
+        addPathContent.ColumnSpacing(12);
+        addPathContent.ColumnDefinitions().Append(ColumnDefinition());
+        addPathContent.ColumnDefinitions().GetAt(0).Width(GridLengthHelper::FromPixels(32));
+        addPathContent.ColumnDefinitions().Append(ColumnDefinition());
+        addPathContent.ColumnDefinitions().GetAt(1).Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+
+        auto addPathIcon = FontIcon();
+        addPathIcon.Glyph(L"\xE710");
+        addPathIcon.VerticalAlignment(VerticalAlignment::Center);
+        addPathContent.Children().Append(addPathIcon);
+
+        auto addPathText = StackPanel();
+        addPathText.Spacing(2);
+        auto addPathTitle = TextBlock();
+        addPathTitle.Text(localization.text("dialogs.scanPaths.add", L"Add new path"));
+        addPathTitle.FontWeight(Windows::UI::Text::FontWeights::SemiBold());
+        auto addPathDescription = TextBlock();
+        addPathDescription.Text(localization.text("dialogs.scanPaths.addDescription", L"Create another folder entry and edit it immediately."));
+        addPathDescription.Foreground(resourceBrush(L"AppTextSecondaryBrush", themedFallback(makeColor(96, 96, 96), makeColor(190, 200, 214))));
+        addPathDescription.TextWrapping(TextWrapping::Wrap);
+        addPathText.Children().Append(addPathTitle);
+        addPathText.Children().Append(addPathDescription);
+        Grid::SetColumn(addPathText, 1);
+        addPathContent.Children().Append(addPathText);
+        addPathButton.Content(addPathContent);
+        pathRows.Children().Append(addPathButton);
+        pathRows.Children().Append(pathEntries);
+
         auto rebuildRows = std::make_shared<std::function<void()>>();
-        *rebuildRows = [this, values, editors, pathRows, rebuildRows]()
+        auto weakRebuildRows = std::weak_ptr<std::function<void()>>(rebuildRows);
+        *rebuildRows = [this, values, editors, pathEntries, weakRebuildRows]()
         {
-            pathRows.Children().Clear();
+            pathEntries.Children().Clear();
             editors->clear();
 
             for (int i = 0; i < (int) values->size(); ++i)
@@ -3939,16 +4167,32 @@ namespace winrt::LightHostWinUI::implementation
                 editor.Text(hstring((*values)[(size_t) i]));
                 editor.PlaceholderText(L"C:\\Program Files\\Common Files\\VST3");
                 editor.MinHeight(40);
-                editor.TextChanged([values, editors, i](IInspectable const&, TextChangedEventArgs const&)
+                Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
+                    editor,
+                    hstring(L"ScanPathEditor" + std::to_wstring(i)));
+                Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(
+                    editor,
+                    localization.text("dialogs.scanPaths.path", L"Plugin scan path"));
+                const auto weakEditor = make_weak(editor);
+                editor.TextChanged([values, weakEditor, i](IInspectable const&, TextChangedEventArgs const&)
                 {
-                    if (i >= 0 && i < (int) values->size() && i < (int) editors->size())
-                        (*values)[(size_t) i] = std::wstring((*editors)[(size_t) i].Text().c_str());
+                    if (const auto currentEditor = weakEditor.get();
+                        currentEditor && i >= 0 && i < (int) values->size())
+                    {
+                        (*values)[(size_t) i] = std::wstring(currentEditor.Text().c_str());
+                    }
                 });
                 editors->push_back(editor);
                 row.Children().Append(editor);
 
-                auto browseButton = iconButton(L"\xE8B7", i, L"Browse folder");
-                browseButton.Click([values, rebuildRows, i](IInspectable const&, RoutedEventArgs const&)
+                auto browseButton = iconButton(
+                    L"\xE8B7",
+                    i,
+                    localization.text("dialogs.scanPaths.browse", L"Browse folder").c_str());
+                Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
+                    browseButton,
+                    hstring(L"BrowseScanPath" + std::to_wstring(i)));
+                browseButton.Click([values, weakRebuildRows, i](IInspectable const&, RoutedEventArgs const&)
                 {
                     const auto picked = pickFolderPath();
                     if (picked.empty())
@@ -3957,19 +4201,27 @@ namespace winrt::LightHostWinUI::implementation
                     if (i >= 0 && i < (int) values->size())
                     {
                         (*values)[(size_t) i] = picked;
-                        (*rebuildRows)();
+                        if (const auto rebuild = weakRebuildRows.lock())
+                            (*rebuild)();
                     }
                 });
                 Grid::SetColumn(browseButton, 1);
                 row.Children().Append(browseButton);
 
-                auto removeButton = iconButton(L"\xE74D", i, L"Remove path");
-                removeButton.Click([values, rebuildRows, i](IInspectable const&, RoutedEventArgs const&)
+                auto removeButton = iconButton(
+                    L"\xE74D",
+                    i,
+                    localization.text("dialogs.scanPaths.remove", L"Remove path").c_str());
+                Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
+                    removeButton,
+                    hstring(L"RemoveScanPath" + std::to_wstring(i)));
+                removeButton.Click([values, weakRebuildRows, i](IInspectable const&, RoutedEventArgs const&)
                 {
                     if (i >= 0 && i < (int) values->size())
                     {
                         values->erase(values->begin() + i);
-                        (*rebuildRows)();
+                        if (const auto rebuild = weakRebuildRows.lock())
+                            (*rebuild)();
                     }
                 });
                 Grid::SetColumn(removeButton, 2);
@@ -3982,104 +4234,29 @@ namespace winrt::LightHostWinUI::implementation
                 card.CornerRadius(CornerRadiusHelper::FromUniformRadius(8));
                 card.Padding(ThicknessHelper::FromLengths(12, 10, 12, 10));
                 card.Child(row);
-                pathRows.Children().Append(card);
+                pathEntries.Children().Append(card);
             }
         };
-        (*rebuildRows)();
-
-        auto confirmRestoreCard = Border();
-        confirmRestoreCard.Visibility(Visibility::Collapsed);
-        confirmRestoreCard.Background(resourceBrush(L"SubtleFillColorSecondaryBrush", themedFallback(makeColorA(24, 0, 0, 0), makeColorA(42, 255, 255, 255))));
-        confirmRestoreCard.CornerRadius(CornerRadiusHelper::FromUniformRadius(8));
-        confirmRestoreCard.Padding(ThicknessHelper::FromUniformLength(12));
-
-        auto confirmGrid = Grid();
-        confirmGrid.ColumnSpacing(12);
-        confirmGrid.ColumnDefinitions().Append(ColumnDefinition());
-        confirmGrid.ColumnDefinitions().GetAt(0).Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
-        confirmGrid.ColumnDefinitions().Append(ColumnDefinition());
-        confirmGrid.ColumnDefinitions().GetAt(1).Width(GridLengthHelper::FromPixels(108));
-        confirmGrid.ColumnDefinitions().Append(ColumnDefinition());
-        confirmGrid.ColumnDefinitions().GetAt(2).Width(GridLengthHelper::FromPixels(92));
-
-        auto confirmText = TextBlock();
-        confirmText.Text(L"Restore the default VST/VST3 scan folders?");
-        confirmText.VerticalAlignment(VerticalAlignment::Center);
-        confirmGrid.Children().Append(confirmText);
-
-        auto applyDefaultsButton = Button();
-        applyDefaultsButton.Content(box_value(hstring(L"Restore")));
-        styleButton(applyDefaultsButton);
-        applyDefaultsButton.Click([values, rebuildRows, confirmRestoreCard](IInspectable const&, RoutedEventArgs const&)
-        {
-            values->clear();
-            for (auto const& path : defaultPluginScanPaths())
-                values->push_back(utf8ToWide(path));
-            (*rebuildRows)();
-            confirmRestoreCard.Visibility(Visibility::Collapsed);
-        });
-        Grid::SetColumn(applyDefaultsButton, 1);
-        confirmGrid.Children().Append(applyDefaultsButton);
-
-        auto cancelDefaultsButton = Button();
-        cancelDefaultsButton.Content(box_value(hstring(L"Cancel")));
-        styleButton(cancelDefaultsButton);
-        cancelDefaultsButton.Click([confirmRestoreCard](IInspectable const&, RoutedEventArgs const&)
-        {
-            confirmRestoreCard.Visibility(Visibility::Collapsed);
-        });
-        Grid::SetColumn(cancelDefaultsButton, 2);
-        confirmGrid.Children().Append(cancelDefaultsButton);
-        confirmRestoreCard.Child(confirmGrid);
-
-        auto actionsButton = Button();
-        actionsButton.Width(44);
-        actionsButton.MinWidth(44);
-        actionsButton.Padding(ThicknessHelper::FromUniformLength(0));
-        auto actionsIcon = FontIcon();
-        actionsIcon.Glyph(L"\xE700");
-        actionsIcon.FontSize(18);
-        actionsButton.Content(actionsIcon);
-        styleButton(actionsButton);
-        ToolTipService::SetToolTip(actionsButton, box_value(hstring(L"Scan path actions")));
-
-        auto actionsFlyout = MenuFlyout();
-
-        auto addPathItem = MenuFlyoutItem();
-        addPathItem.Text(L"Add path");
-        addPathItem.Icon(SymbolIcon(Symbol::Add));
-        addPathItem.Click([values, rebuildRows](IInspectable const&, RoutedEventArgs const&)
+        addPathButton.Click([values, editors, rebuildRows](IInspectable const&, RoutedEventArgs const&)
         {
             values->push_back(L"");
             (*rebuildRows)();
-        });
-        actionsFlyout.Items().Append(addPathItem);
+            if (editors->empty())
+                return;
 
-        auto restoreItem = MenuFlyoutItem();
-        restoreItem.Text(L"Restore defaults");
-        restoreItem.Icon(SymbolIcon(Symbol::Refresh));
-        restoreItem.Click([confirmRestoreCard](IInspectable const&, RoutedEventArgs const&)
-        {
-            confirmRestoreCard.Visibility(Visibility::Visible);
+            const auto editor = editors->back();
+            editor.Focus(FocusState::Programmatic);
+            editor.SelectAll();
         });
-        actionsFlyout.Items().Append(restoreItem);
-        actionsButton.Flyout(actionsFlyout);
-
-        auto header = Grid();
-        header.ColumnSpacing(12);
-        header.ColumnDefinitions().Append(ColumnDefinition());
-        header.ColumnDefinitions().GetAt(0).Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
-        header.ColumnDefinitions().Append(ColumnDefinition());
-        header.ColumnDefinitions().GetAt(1).Width(GridLengthHelper::FromPixels(44));
+        (*rebuildRows)();
 
         auto hint = TextBlock();
-        hint.Text(L"Scan uses these folders when VST and VST3 scanning are both enabled.");
+        hint.Text(localization.text(
+            "dialogs.scanPaths.description",
+            L"Scan uses these folders when VST and VST3 scanning are both enabled."));
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(hint, L"ScanPathsHint");
         hint.Foreground(resourceBrush(L"AppTextSecondaryBrush", themedFallback(makeColor(96, 96, 96), makeColor(190, 200, 214))));
         hint.TextWrapping(TextWrapping::Wrap);
-        hint.VerticalAlignment(VerticalAlignment::Center);
-        header.Children().Append(hint);
-        Grid::SetColumn(actionsButton, 1);
-        header.Children().Append(actionsButton);
 
         auto pathScroller = ScrollViewer();
         pathScroller.VerticalScrollMode(ScrollMode::Enabled);
@@ -4091,17 +4268,18 @@ namespace winrt::LightHostWinUI::implementation
 
         auto content = StackPanel();
         content.Spacing(12);
-        content.Children().Append(header);
-        content.Children().Append(confirmRestoreCard);
+        content.Children().Append(hint);
         content.Children().Append(pathScroller);
 
         auto dialog = ContentDialog();
         dialog.XamlRoot(RootLayout().XamlRoot());
-        dialog.Title(box_value(hstring(L"Scan paths")));
+        dialog.Title(box_value(localization.text("dialogs.scanPaths.title", L"Scan paths")));
         dialog.Content(content);
-        dialog.PrimaryButtonText(L"Save");
-        dialog.CloseButtonText(L"Cancel");
+        dialog.PrimaryButtonText(localization.text("common.save", L"Save"));
+        dialog.CloseButtonText(localization.text("common.cancel", L"Cancel"));
         dialog.DefaultButton(ContentDialogButton::Primary);
+        sizeDialogToViewport(dialog, RootLayout(), 0.75);
+        enableDialogBackgroundDefocus(dialog);
 
         auto operation = dialog.ShowAsync();
         operation.Completed([this, dialog, values](auto const& async, winrt::Windows::Foundation::AsyncStatus const status)
@@ -4122,7 +4300,10 @@ namespace winrt::LightHostWinUI::implementation
                     text += value;
                 }
                 pluginScanPaths = parsePaths(text);
-                showNotification(std::to_wstring((int) pluginScanPaths.size()) + L" scan paths saved.");
+                showNotification(localization.format(
+                    "dialogs.scanPaths.saved",
+                    L"{0} scan paths saved.",
+                    { std::to_wstring((int) pluginScanPaths.size()) }).c_str());
             });
         });
     }
@@ -4132,10 +4313,8 @@ namespace winrt::LightHostWinUI::implementation
         const auto index = taggedIndexOrSelected(sender, -1);
         if (index >= 0)
         {
-            const int previousCount = activePluginCount;
             if (sendCommand("add-known-plugin:" + std::to_string(index)))
             {
-                pulseRunningPluginCard(previousCount);
                 showNotification(L"Plugin added to chain.");
             }
         }
@@ -4159,7 +4338,6 @@ namespace winrt::LightHostWinUI::implementation
             if (sendCommand("remove-known-plugin:" + std::to_string(index)))
             {
                 const int removedActive = (int) extractNumber(lastCommandResponse, "removedActive", 0);
-                pulseInstalledPluginCard((std::min)(index, installedPluginCount - 1));
                 showNotification(removedActive > 0
                     ? L"Plugin removed from database and running chain."
                     : L"Plugin removed from database.");
@@ -4184,15 +4362,18 @@ namespace winrt::LightHostWinUI::implementation
             : std::wstring(L"This plugin");
 
         auto message = TextBlock();
-        message.Text(hstring(pluginName + L" is currently running and will also be removed from the running chain."));
+        message.Text(localization.format(
+            "dialogs.plugins.removeRunningMessage",
+            L"{0} is currently running and will also be removed from the running chain.",
+            { pluginName }));
         message.TextWrapping(TextWrapping::Wrap);
 
         auto dialog = ContentDialog();
         dialog.XamlRoot(RootLayout().XamlRoot());
-        dialog.Title(box_value(hstring(L"Remove running plugin?")));
+        dialog.Title(box_value(localization.text("dialogs.plugins.removeRunningTitle", L"Remove running plugin?")));
         dialog.Content(message);
-        dialog.PrimaryButtonText(L"Remove");
-        dialog.CloseButtonText(L"Cancel");
+        dialog.PrimaryButtonText(localization.text("common.remove", L"Remove"));
+        dialog.CloseButtonText(localization.text("common.cancel", L"Cancel"));
         dialog.DefaultButton(ContentDialogButton::Close);
 
         auto operation = dialog.ShowAsync();
@@ -4215,7 +4396,6 @@ namespace winrt::LightHostWinUI::implementation
     {
         if (sendCommand("remove-missing-known-plugins"))
         {
-            pulsePluginList(true);
             showNotification(std::to_wstring((int) extractNumber(lastCommandResponse, "removed", 0)) + L" missing plugins removed.");
         }
     }
@@ -4224,10 +4404,10 @@ namespace winrt::LightHostWinUI::implementation
     {
         auto dialog = ContentDialog();
         dialog.XamlRoot(RootLayout().XamlRoot());
-        dialog.Title(box_value(hstring(L"Clear plugin database?")));
-        dialog.Content(box_value(hstring(L"This removes every installed plugin entry and clears the current running chain.")));
-        dialog.PrimaryButtonText(L"Clear");
-        dialog.CloseButtonText(L"Cancel");
+        dialog.Title(box_value(localization.text("dialogs.plugins.clearTitle", L"Clear plugin database?")));
+        dialog.Content(box_value(localization.text("dialogs.plugins.clearMessage", L"This removes every installed plugin entry and clears the current running chain.")));
+        dialog.PrimaryButtonText(localization.text("common.clear", L"Clear"));
+        dialog.CloseButtonText(localization.text("common.cancel", L"Cancel"));
         dialog.DefaultButton(ContentDialogButton::Close);
 
         auto operation = dialog.ShowAsync();
@@ -4243,7 +4423,6 @@ namespace winrt::LightHostWinUI::implementation
             {
                 if (sendCommand("clear-known-plugins"))
                 {
-                    pulsePluginList(true);
                     const int removed = (int) extractNumber(lastCommandResponse, "removed", 0);
                     const int removedActive = (int) extractNumber(lastCommandResponse, "removedActive", 0);
                     showNotification(std::to_wstring(removed) + L" installed plugins cleared. "
@@ -4261,6 +4440,7 @@ namespace winrt::LightHostWinUI::implementation
 
     void MainWindow::StartWithWindowsCheckBox_Changed(IInspectable const&, RoutedEventArgs const&)
     {
+        updateToggleStateLabels();
         if (syncingConfigControls)
             return;
 
@@ -4280,6 +4460,7 @@ namespace winrt::LightHostWinUI::implementation
 
     void MainWindow::CloseToTraySwitch_Toggled(IInspectable const&, RoutedEventArgs const&)
     {
+        updateToggleStateLabels();
         if (syncingConfigControls)
             return;
 
@@ -4291,6 +4472,7 @@ namespace winrt::LightHostWinUI::implementation
 
     void MainWindow::EnableVst2CheckBox_Changed(IInspectable const&, RoutedEventArgs const&)
     {
+        updateToggleStateLabels();
         if (syncingConfigControls)
             return;
 
@@ -4362,6 +4544,113 @@ namespace winrt::LightHostWinUI::implementation
         refreshSnapshot();
     }
 
+    void MainWindow::updatePreferredDeviceSummary()
+    {
+        if (!PreferredDeviceSummaryText())
+            return;
+
+        const auto backend = selectedComboText(CustomRecoveryBackendBox());
+        const auto input = selectedComboText(CustomRecoveryInputBox());
+        const auto output = selectedComboText(CustomRecoveryOutputBox());
+        std::string summary = backend.empty() ? "Choose device" : backend;
+        if (!input.empty())
+            summary += " · " + input;
+        if (backend != "ASIO" && !output.empty() && output != input)
+            summary += " / " + output;
+        PreferredDeviceSummaryText().Text(hs(summary));
+        ToolTipService::SetToolTip(PreferredDeviceButton(), box_value(hs(summary)));
+    }
+
+    void MainWindow::PreferredDeviceButton_Click(IInspectable const&, RoutedEventArgs const&)
+    {
+        showPreferredDeviceDialogAsync();
+    }
+
+    fire_and_forget MainWindow::showPreferredDeviceDialogAsync()
+    {
+        if (preferredDeviceDialogOpen)
+            co_return;
+
+        preferredDeviceDialogOpen = true;
+        auto lifetime = get_strong();
+        auto picker = StackPanel();
+        picker.Spacing(16);
+        picker.MinWidth(440);
+        const int originalBackendIndex = CustomRecoveryBackendBox().SelectedIndex();
+        const int originalInputIndex = CustomRecoveryInputBox().SelectedIndex();
+        const int originalOutputIndex = CustomRecoveryOutputBox().SelectedIndex();
+        ContentDialogResult result = ContentDialogResult::None;
+
+        try
+        {
+            CustomRecoveryBackendBoxHost().Children().Clear();
+            CustomRecoveryInputBoxHost().Children().Clear();
+            CustomRecoveryOutputBoxHost().Children().Clear();
+
+            CustomRecoveryBackendBox().Header(box_value(localization.text("settings.persistence.backend", L"Audio backend")));
+            const bool isAsio = selectedComboText(CustomRecoveryBackendBox()) == "ASIO";
+            CustomRecoveryInputBox().Header(box_value(localization.text(
+                isAsio ? "settings.persistence.device" : "settings.persistence.inputDevice",
+                isAsio ? L"Device" : L"Input device")));
+            CustomRecoveryOutputBox().Header(box_value(localization.text("settings.persistence.outputDevice", L"Output device")));
+            CustomRecoveryOutputBox().Visibility(isAsio ? Visibility::Collapsed : Visibility::Visible);
+
+            auto hint = TextBlock();
+            hint.Text(localization.text(
+                "settings.persistence.preferredDescription",
+                L"Select the backend and device Light Host Modern should retry."));
+            hint.TextWrapping(TextWrapping::Wrap);
+            hint.Foreground(resourceBrush(L"AppTextSecondaryBrush", themedFallback(makeColor(96, 96, 96), makeColor(190, 200, 214))));
+            Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(hint, L"PreferredDeviceDialogHint");
+            picker.Children().Append(hint);
+            picker.Children().Append(CustomRecoveryBackendBox());
+            picker.Children().Append(CustomRecoveryInputBox());
+            picker.Children().Append(CustomRecoveryOutputBox());
+
+            auto dialog = ContentDialog();
+            dialog.XamlRoot(RootLayout().XamlRoot());
+            dialog.Title(box_value(localization.text("settings.persistence.preferred", L"Preferred device")));
+            dialog.Content(picker);
+            dialog.PrimaryButtonText(localization.text("common.save", L"Save"));
+            dialog.CloseButtonText(localization.text("common.cancel", L"Cancel"));
+            dialog.DefaultButton(ContentDialogButton::Primary);
+            enableDialogBackgroundDefocus(dialog);
+            result = co_await dialog.ShowAsync();
+            dialog.Content(nullptr);
+        }
+        catch (hresult_error const& error)
+        {
+            winUILog("Preferred device dialog failed: " + to_string(error.message()));
+        }
+        catch (...)
+        {
+            winUILog("Preferred device dialog failed with an unknown error.");
+        }
+
+        picker.Children().Clear();
+        CustomRecoveryBackendBox().Header(nullptr);
+        CustomRecoveryInputBox().Header(nullptr);
+        CustomRecoveryOutputBox().Header(nullptr);
+        CustomRecoveryOutputBox().Visibility(Visibility::Visible);
+        CustomRecoveryBackendBoxHost().Children().Append(CustomRecoveryBackendBox());
+        CustomRecoveryInputBoxHost().Children().Append(CustomRecoveryInputBox());
+        CustomRecoveryOutputBoxHost().Children().Append(CustomRecoveryOutputBox());
+
+        if (result != ContentDialogResult::Primary)
+        {
+            if (originalBackendIndex >= 0)
+                sendCommand("set-audio-persistence-custom-backend:" + std::to_string(originalBackendIndex));
+            if (originalInputIndex >= 0)
+                sendCommand("set-audio-persistence-custom-input:" + std::to_string(originalInputIndex));
+            if (originalOutputIndex >= 0)
+                sendCommand("set-audio-persistence-custom-output:" + std::to_string(originalOutputIndex));
+            refreshSnapshot();
+        }
+
+        updatePreferredDeviceSummary();
+        preferredDeviceDialogOpen = false;
+    }
+
     void MainWindow::RetryAudioDevice_Click(IInspectable const&, RoutedEventArgs const&)
     {
         if (sendCommand("retry-audio-device"))
@@ -4380,9 +4669,9 @@ namespace winrt::LightHostWinUI::implementation
         {
             auto dialog = ContentDialog();
             dialog.XamlRoot(RootLayout().XamlRoot());
-            dialog.Title(box_value(hstring(L"Enabled devices")));
-            dialog.Content(box_value(hstring(L"Light Host Modern is not connected to the audio host.")));
-            dialog.CloseButtonText(L"Close");
+            dialog.Title(box_value(localization.text("dialogs.enabledDevices.title", L"Enabled devices")));
+            dialog.Content(box_value(localization.text("dialogs.enabledDevices.disconnected", L"Light Host Modern is not connected to the audio host.")));
+            dialog.CloseButtonText(localization.text("common.close", L"Close"));
             dialog.ShowAsync();
             return;
         }
@@ -4392,9 +4681,9 @@ namespace winrt::LightHostWinUI::implementation
         {
             auto dialog = ContentDialog();
             dialog.XamlRoot(RootLayout().XamlRoot());
-            dialog.Title(box_value(hstring(L"Enabled devices")));
-            dialog.Content(box_value(hstring(L"Could not load the available audio device list.")));
-            dialog.CloseButtonText(L"Close");
+            dialog.Title(box_value(localization.text("dialogs.enabledDevices.title", L"Enabled devices")));
+            dialog.Content(box_value(localization.text("dialogs.enabledDevices.loadFailed", L"Could not load the available audio device list.")));
+            dialog.CloseButtonText(localization.text("common.close", L"Close"));
             dialog.ShowAsync();
             return;
         }
@@ -4408,9 +4697,9 @@ namespace winrt::LightHostWinUI::implementation
         {
             auto dialog = ContentDialog();
             dialog.XamlRoot(RootLayout().XamlRoot());
-            dialog.Title(box_value(hstring(L"Enabled devices")));
-            dialog.Content(box_value(hstring(L"No audio backends were detected.")));
-            dialog.CloseButtonText(L"Close");
+            dialog.Title(box_value(localization.text("dialogs.enabledDevices.title", L"Enabled devices")));
+            dialog.Content(box_value(localization.text("dialogs.enabledDevices.noBackends", L"No audio backends were detected.")));
+            dialog.CloseButtonText(localization.text("common.close", L"Close"));
             dialog.ShowAsync();
             return;
         }
@@ -4424,11 +4713,16 @@ namespace winrt::LightHostWinUI::implementation
 
         auto backendBox = ComboBox();
         styleCombo(backendBox);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(backendBox, L"EnabledAudioBackend");
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(
+            backendBox,
+            localization.text("settings.persistence.backend", L"Audio backend"));
         setComboItems(backendBox, allAudioBackendNames, 0);
 
         auto backendToggle = CheckBox();
-        backendToggle.Content(box_value(hstring(L"Enable this audio backend")));
+        backendToggle.Content(box_value(localization.text("dialogs.enabledDevices.enableBackend", L"Enable this audio backend")));
         backendToggle.MinHeight(40);
+        Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(backendToggle, L"EnabledAudioBackendToggle");
 
         auto deviceSections = StackPanel();
         deviceSections.Spacing(12);
@@ -4450,7 +4744,7 @@ namespace winrt::LightHostWinUI::implementation
 
             deviceSections.Children().Clear();
 
-            auto appendSection = [this, backendName, enabled, deviceEnabled, deviceSections, updating](std::string const& role, wchar_t const* title)
+            auto appendSection = [this, backendName, enabled, deviceEnabled, deviceSections, updating](std::string const& role, hstring const& title)
             {
                 auto section = StackPanel();
                 section.Spacing(10);
@@ -4484,6 +4778,9 @@ namespace winrt::LightHostWinUI::implementation
                     box.HorizontalAlignment(HorizontalAlignment::Center);
                     box.MinHeight(32);
                     box.MinWidth(32);
+                    Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
+                        box,
+                        hstring(L"EnabledAudioDevice" + std::to_wstring(i)));
                     box.Checked([deviceEnabled, updating, i](IInspectable const&, RoutedEventArgs const&)
                     {
                         if (*updating)
@@ -4527,18 +4824,18 @@ namespace winrt::LightHostWinUI::implementation
             const bool isAsio = backendName == "ASIO";
             if (isAsio)
             {
-                appendSection("device", L"Devices");
+                appendSection("device", localization.text("dialogs.enabledDevices.devices", L"Devices"));
             }
             else
             {
-                appendSection("input", L"Input devices");
-                appendSection("output", L"Output devices");
+                appendSection("input", localization.text("dialogs.enabledDevices.inputs", L"Input devices"));
+                appendSection("output", localization.text("dialogs.enabledDevices.outputs", L"Output devices"));
             }
 
             if (deviceSections.Children().Size() == 0)
             {
                 auto emptyText = TextBlock();
-                emptyText.Text(L"No devices were detected for this backend.");
+                emptyText.Text(localization.text("dialogs.enabledDevices.noDevices", L"No devices were detected for this backend."));
                 emptyText.Foreground(resourceBrush(L"AppTextSecondaryBrush", themedFallback(makeColor(96, 96, 96), makeColor(190, 200, 214))));
                 deviceSections.Children().Append(emptyText);
             }
@@ -4578,7 +4875,9 @@ namespace winrt::LightHostWinUI::implementation
         auto modeStack = StackPanel();
         modeStack.Spacing(10);
         auto hint = TextBlock();
-        hint.Text(L"Choose an audio backend, then enable only the devices Light Host Modern may use.");
+        hint.Text(localization.text(
+            "dialogs.enabledDevices.description",
+            L"Choose an audio backend, then enable only the devices Light Host Modern may use."));
         hint.Foreground(resourceBrush(L"AppTextSecondaryBrush", themedFallback(makeColor(96, 96, 96), makeColor(190, 200, 214))));
         hint.TextWrapping(TextWrapping::Wrap);
         modeStack.Children().Append(hint);
@@ -4601,11 +4900,13 @@ namespace winrt::LightHostWinUI::implementation
 
         auto dialog = ContentDialog();
         dialog.XamlRoot(RootLayout().XamlRoot());
-        dialog.Title(box_value(hstring(L"Enabled devices")));
+        dialog.Title(box_value(localization.text("dialogs.enabledDevices.title", L"Enabled devices")));
         dialog.Content(scroller);
-        dialog.PrimaryButtonText(L"Save");
-        dialog.CloseButtonText(L"Cancel");
+        dialog.PrimaryButtonText(localization.text("common.save", L"Save"));
+        dialog.CloseButtonText(localization.text("common.cancel", L"Cancel"));
         dialog.DefaultButton(ContentDialogButton::Primary);
+        sizeDialogToViewport(dialog, RootLayout(), 0.75);
+        enableDialogBackgroundDefocus(dialog);
 
         auto operation = dialog.ShowAsync();
         operation.Completed([this, backendEnabled, deviceEnabled, originalBackendEnabled, originalDeviceEnabled](auto const& async, winrt::Windows::Foundation::AsyncStatus const status)
@@ -4639,8 +4940,11 @@ namespace winrt::LightHostWinUI::implementation
 
                 refreshSnapshot();
                 showNotification(changedCount == 0
-                    ? L"Enabled devices unchanged."
-                    : std::to_wstring(changedCount) + L" enabled device setting(s) updated.");
+                    ? localization.text("dialogs.enabledDevices.unchanged", L"Enabled devices unchanged.").c_str()
+                    : localization.format(
+                        "dialogs.enabledDevices.updated",
+                        L"{0} enabled device setting(s) updated.",
+                        { std::to_wstring(changedCount) }).c_str());
             });
         });
     }

@@ -5,6 +5,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <StaticResource x:Key="AppSidebarBrush" ResourceKey="LayerFillColorDefaultBrush" />
@@ -67,6 +70,27 @@
                     <StaticResource x:Key="AppStatusCriticalStrokeBrush" ResourceKey="SystemColorButtonTextColorBrush" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+            <Style x:Key="AppCardStyle" TargetType="Border">
+                <Setter Property="MinHeight" Value="72" />
+                <Setter Property="Padding" Value="16" />
+                <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource AppCardStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+            </Style>
+            <Style x:Key="CompactToggleSwitchStyle" TargetType="ToggleSwitch">
+                <Setter Property="Width" Value="52" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="OnContent" Value="" />
+                <Setter Property="OffContent" Value="" />
+            </Style>
+            <Style x:Key="CompactNumberBoxStyle" TargetType="NumberBox">
+                <Setter Property="Width" Value="128" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="SpinButtonPlacementMode" Value="Hidden" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

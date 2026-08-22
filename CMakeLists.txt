@@ -229,7 +229,7 @@ target_link_libraries(LightHost
 
 if(MSVC)
     set(LIGHTHOST_WINUI_SOURCE_DIR
-        "${CMAKE_CURRENT_SOURCE_DIR}/WinUI/x64/$<CONFIG>/LightHost.WinUI")
+        "${CMAKE_CURRENT_SOURCE_DIR}/WinUI/LightHost.WinUI/x64/$<CONFIG>/LightHost.WinUI")
     set(LIGHTHOST_WINUI_TARGET_DIR
         "$<TARGET_FILE_DIR:LightHost>/WinUI/x64/$<CONFIG>/LightHost.WinUI")
 

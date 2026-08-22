@@ -149,7 +149,7 @@
     <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Locales\en-us.json">
+    <Content Include="Locales\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
@@ -218,8 +218,8 @@
     <AppxPackagePayload Include="Assets\support-me-on-kofi.png">
       <TargetPath>Assets\support-me-on-kofi.png</TargetPath>
     </AppxPackagePayload>
-    <AppxPackagePayload Include="Locales\en-us.json">
-      <TargetPath>Locales\en-us.json</TargetPath>
+    <AppxPackagePayload Include="Locales\*.json">
+      <TargetPath>Locales\%(Filename)%(Extension)</TargetPath>
     </AppxPackagePayload>
   </ItemGroup>
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
