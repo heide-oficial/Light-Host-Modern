@@ -3192,6 +3192,7 @@ namespace winrt::LightHostWinUI::implementation
         try
         {
             BrandLogoImage().Source(BitmapImage(Windows::Foundation::Uri(L"ms-appx:///Assets/" + asset)));
+            CompactLogoIcon().UriSource(Windows::Foundation::Uri(L"ms-appx:///Assets/" + asset));
         }
         catch (...)
         {

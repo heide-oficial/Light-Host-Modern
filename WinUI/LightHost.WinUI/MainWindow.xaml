@@ -51,7 +51,7 @@
                     IsEnabled="False"
                     SelectsOnInvoked="False">
                     <NavigationViewItem.Icon>
-                        <BitmapIcon ShowAsMonochrome="False" UriSource="Assets/logo.png" />
+                        <BitmapIcon x:Name="CompactLogoIcon" ShowAsMonochrome="False" UriSource="Assets/logo.png" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
