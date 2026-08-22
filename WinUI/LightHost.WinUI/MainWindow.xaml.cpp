@@ -4463,7 +4463,17 @@ namespace winrt::LightHostWinUI::implementation
         if (syncingConfigControls)
             return;
 
-        sendCommand(std::string("set-start-with-windows:") + (isChecked(StartWithWindowsCheckBox()) ? "1" : "0"));
+        const bool enabled = isChecked(StartWithWindowsCheckBox());
+        if (!sendCommand(std::string("set-start-with-windows:") + (enabled ? "1" : "0")))
+        {
+            syncingConfigControls = true;
+            StartWithWindowsCheckBox().IsOn(!enabled);
+            syncingConfigControls = false;
+            updateToggleStateLabels();
+            showNotification(localization.text(
+                "settings.startWindows.failed",
+                L"Light Host Modern could not update the Windows startup entry.").c_str());
+        }
     }
 
     void MainWindow::CloseBehaviorRadioButton_Checked(IInspectable const&, RoutedEventArgs const&)

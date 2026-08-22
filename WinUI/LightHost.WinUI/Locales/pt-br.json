@@ -102,6 +102,7 @@
   "plugins.status.error": "Erro",
   "settings.general": "Geral",
   "settings.startWindows": "Iniciar com o Windows",
+  "settings.startWindows.failed": "O Light Host Modern não conseguiu atualizar a entrada de inicialização do Windows.",
   "settings.closeToTray": "Fechar para a bandeja",
   "settings.enableVst2": "Ativar plugins VST2",
   "settings.vst2Unavailable": "Status do VST2 indisponível.",

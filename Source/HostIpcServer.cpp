@@ -12,6 +12,11 @@ namespace
 	const wchar_t* startupRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 	const wchar_t* startupValueName = L"Light Host Modern";
 
+	String startupCommand()
+	{
+		return "\"" + File::getSpecialLocation(File::currentExecutableFile).getFullPathName() + "\" --startup";
+	}
+
 	String normaliseTrayIconMode(String mode)
 	{
 		mode = mode.trim().toLowerCase();
@@ -60,9 +65,13 @@ namespace
 
 		wchar_t value[2048] = {};
 		DWORD valueSize = sizeof(value);
-		const auto result = RegQueryValueExW(key, startupValueName, nullptr, nullptr, reinterpret_cast<LPBYTE>(value), &valueSize);
+		DWORD valueType = 0;
+		const auto result = RegQueryValueExW(key, startupValueName, nullptr, &valueType, reinterpret_cast<LPBYTE>(value), &valueSize);
 		RegCloseKey(key);
-		return result == ERROR_SUCCESS && value[0] != L'\0';
+		if (result != ERROR_SUCCESS || (valueType != REG_SZ && valueType != REG_EXPAND_SZ) || value[0] == L'\0')
+			return false;
+
+		return String(value).trim().equalsIgnoreCase(startupCommand());
 	}
 
 	bool setStartWithWindows(bool enabled)
@@ -74,7 +83,7 @@ namespace
 		bool success = false;
 		if (enabled)
 		{
-			const String command = "\"" + File::getSpecialLocation(File::currentExecutableFile).getFullPathName() + "\"";
+			const String command = startupCommand();
 			const auto wide = command.toWideCharPointer();
 			const DWORD byteCount = (DWORD) ((wcslen(wide) + 1) * sizeof(wchar_t));
 			success = RegSetValueExW(key, startupValueName, 0, REG_SZ, reinterpret_cast<const BYTE*>(wide), byteCount) == ERROR_SUCCESS;
