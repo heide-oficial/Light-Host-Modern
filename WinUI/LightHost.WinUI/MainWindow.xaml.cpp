@@ -2923,12 +2923,12 @@ namespace winrt::LightHostWinUI::implementation
         try
         {
             Windows::Web::Http::HttpClient client;
-            client.DefaultRequestHeaders().UserAgent().ParseAdd(L"LightHostModern/1.2.0");
+            client.DefaultRequestHeaders().UserAgent().ParseAdd(L"LightHostModern/1.2.1");
             const auto response = co_await client.GetStringAsync(Windows::Foundation::Uri(L"https://api.github.com/repos/heide-oficial/Light-Host-Modern/releases/latest"));
             const auto json = Windows::Data::Json::JsonObject::Parse(response);
             const auto latestTag = json.GetNamedString(L"tag_name", L"");
             const auto releaseUrl = json.GetNamedString(L"html_url", L"");
-            if (semanticVersion(latestTag.c_str()) > semanticVersion(L"1.2.0") && !releaseUrl.empty())
+            if (semanticVersion(latestTag.c_str()) > semanticVersion(L"1.2.1") && !releaseUrl.empty())
             {
                 latestReleaseUrl = releaseUrl.c_str();
                 latestReleaseTag = latestTag.c_str();
