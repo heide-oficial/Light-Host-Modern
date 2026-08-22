@@ -170,6 +170,7 @@
   "dialogs.scanPaths.add": "Add new path",
   "dialogs.scanPaths.addDescription": "Create another folder entry and edit it immediately.",
   "dialogs.scanPaths.path": "Plugin scan path",
+  "dialogs.scanPaths.placeholder": "Enter the path here",
   "dialogs.scanPaths.browse": "Browse folder",
   "dialogs.scanPaths.remove": "Remove path",
   "dialogs.scanPaths.saved": "{0} scan paths saved.",

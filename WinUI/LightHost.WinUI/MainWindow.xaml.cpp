@@ -4100,9 +4100,9 @@ namespace winrt::LightHostWinUI::implementation
         pathEntries.Spacing(8);
 
         auto editors = std::make_shared<std::vector<TextBox>>();
-        auto values = std::make_shared<std::vector<std::wstring>>();
+        auto values = std::make_shared<std::vector<std::shared_ptr<std::wstring>>>();
         for (auto const& path : pluginScanPaths)
-            values->push_back(utf8ToWide(path));
+            values->push_back(std::make_shared<std::wstring>(utf8ToWide(path)));
 
         auto addPathButton = Button();
         addPathButton.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -4156,6 +4156,7 @@ namespace winrt::LightHostWinUI::implementation
 
             for (int i = 0; i < (int) values->size(); ++i)
             {
+                const auto entry = (*values)[(size_t) i];
                 auto row = Grid();
                 row.ColumnSpacing(10);
                 row.ColumnDefinitions().Append(ColumnDefinition());
@@ -4166,8 +4167,8 @@ namespace winrt::LightHostWinUI::implementation
                 row.ColumnDefinitions().GetAt(2).Width(GridLengthHelper::FromPixels(44));
 
                 auto editor = TextBox();
-                editor.Text(hstring((*values)[(size_t) i]));
-                editor.PlaceholderText(L"C:\\Program Files\\Common Files\\VST3");
+                editor.Text(hstring(*entry));
+                editor.PlaceholderText(localization.text("dialogs.scanPaths.placeholder", L"Enter the path here"));
                 editor.MinHeight(40);
                 Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
                     editor,
@@ -4176,13 +4177,30 @@ namespace winrt::LightHostWinUI::implementation
                     editor,
                     localization.text("dialogs.scanPaths.path", L"Plugin scan path"));
                 const auto weakEditor = make_weak(editor);
-                editor.TextChanged([values, weakEditor, i](IInspectable const&, TextChangedEventArgs const&)
+                editor.TextChanged([entry, weakEditor](IInspectable const&, TextChangedEventArgs const&)
                 {
-                    if (const auto currentEditor = weakEditor.get();
-                        currentEditor && i >= 0 && i < (int) values->size())
+                    if (const auto currentEditor = weakEditor.get())
+                        *entry = std::wstring(currentEditor.Text().c_str());
+                });
+                editor.LostFocus([values, entry, weakRebuildRows, weakEditor](IInspectable const&, RoutedEventArgs const&)
+                {
+                    const auto currentEditor = weakEditor.get();
+                    if (!currentEditor || !trimPath(wideToUtf8(currentEditor.Text().c_str())).empty())
+                        return;
+
+                    currentEditor.DispatcherQueue().TryEnqueue([values, entry, weakRebuildRows]()
                     {
-                        (*values)[(size_t) i] = std::wstring(currentEditor.Text().c_str());
-                    }
+                        if (!trimPath(wideToUtf8(*entry)).empty())
+                            return;
+
+                        const auto match = std::find(values->begin(), values->end(), entry);
+                        if (match == values->end())
+                            return;
+
+                        values->erase(match);
+                        if (const auto rebuild = weakRebuildRows.lock())
+                            (*rebuild)();
+                    });
                 });
                 editors->push_back(editor);
                 row.Children().Append(editor);
@@ -4194,18 +4212,15 @@ namespace winrt::LightHostWinUI::implementation
                 Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
                     browseButton,
                     hstring(L"BrowseScanPath" + std::to_wstring(i)));
-                browseButton.Click([values, weakRebuildRows, i](IInspectable const&, RoutedEventArgs const&)
+                browseButton.Click([entry, weakRebuildRows](IInspectable const&, RoutedEventArgs const&)
                 {
                     const auto picked = pickFolderPath();
                     if (picked.empty())
                         return;
 
-                    if (i >= 0 && i < (int) values->size())
-                    {
-                        (*values)[(size_t) i] = picked;
-                        if (const auto rebuild = weakRebuildRows.lock())
-                            (*rebuild)();
-                    }
+                    *entry = picked;
+                    if (const auto rebuild = weakRebuildRows.lock())
+                        (*rebuild)();
                 });
                 Grid::SetColumn(browseButton, 1);
                 row.Children().Append(browseButton);
@@ -4217,14 +4232,13 @@ namespace winrt::LightHostWinUI::implementation
                 Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
                     removeButton,
                     hstring(L"RemoveScanPath" + std::to_wstring(i)));
-                removeButton.Click([values, weakRebuildRows, i](IInspectable const&, RoutedEventArgs const&)
+                removeButton.Click([values, entry, weakRebuildRows](IInspectable const&, RoutedEventArgs const&)
                 {
-                    if (i >= 0 && i < (int) values->size())
-                    {
-                        values->erase(values->begin() + i);
-                        if (const auto rebuild = weakRebuildRows.lock())
-                            (*rebuild)();
-                    }
+                    const auto match = std::find(values->begin(), values->end(), entry);
+                    if (match != values->end())
+                        values->erase(match);
+                    if (const auto rebuild = weakRebuildRows.lock())
+                        (*rebuild)();
                 });
                 Grid::SetColumn(removeButton, 2);
                 row.Children().Append(removeButton);
@@ -4241,12 +4255,12 @@ namespace winrt::LightHostWinUI::implementation
         };
         addPathButton.Click([values, editors, rebuildRows](IInspectable const&, RoutedEventArgs const&)
         {
-            values->push_back(L"");
+            values->insert(values->begin(), std::make_shared<std::wstring>());
             (*rebuildRows)();
             if (editors->empty())
                 return;
 
-            const auto editor = editors->back();
+            const auto editor = editors->front();
             editor.Focus(FocusState::Programmatic);
             editor.SelectAll();
         });
@@ -4297,9 +4311,11 @@ namespace winrt::LightHostWinUI::implementation
                 std::wstring text;
                 for (auto const& value : *values)
                 {
+                    if (trimPath(wideToUtf8(*value)).empty())
+                        continue;
                     if (!text.empty())
                         text += L"\r\n";
-                    text += value;
+                    text += *value;
                 }
                 pluginScanPaths = parsePaths(text);
                 showNotification(localization.format(

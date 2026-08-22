@@ -170,6 +170,7 @@
   "dialogs.scanPaths.add": "Adicionar novo caminho",
   "dialogs.scanPaths.addDescription": "Crie outra entrada de pasta e edite-a imediatamente.",
   "dialogs.scanPaths.path": "Caminho de busca de plugins",
+  "dialogs.scanPaths.placeholder": "Digite o caminho aqui",
   "dialogs.scanPaths.browse": "Procurar pasta",
   "dialogs.scanPaths.remove": "Remover caminho",
   "dialogs.scanPaths.saved": "{0} caminhos de busca salvos.",
