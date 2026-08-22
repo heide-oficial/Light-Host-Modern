@@ -24,13 +24,13 @@ Light Host Modern is a native Windows audio plugin host for running VST3 and opt
 
 ## 🖼️ Demo
 
-![Light Host Modern dashboard](https://i.imgur.com/sEBRC3e.png)
+![Light Host Modern dashboard](https://i.imgur.com/CPhkOgy.png)
 
-![Audio device and stream configuration](https://i.imgur.com/S0SbkSI.png)
+![Audio device and stream configuration](https://i.imgur.com/EVMlX0A.png)
 
-![Running and installed plugin management](https://i.imgur.com/0NKJ9mP.png)
+![Running and installed plugin management](https://i.imgur.com/Nl3Jsfu.png)
 
-![Windows 11-style settings](https://i.imgur.com/r4lECTa.png)
+![Windows 11-style settings](https://i.imgur.com/XGLSiXE.png)
 
 ## 🚀 Usage
 
@@ -45,8 +45,6 @@ For detailed descriptions of the screens, workflows, and internal implementation
 ## ⚙️ Requirements
 
 - Windows 10 version 1809 (`10.0.17763`) or newer; Windows 11 is recommended.
-- A 64-bit Windows installation for the published x64 packages.
-- A working Windows Audio, DirectSound, or ASIO input/output configuration.
 - Compatible 64-bit VST3 plugins, or VST2 plugins when VST2 support is included and enabled.
 
 ## ⬇️ Installation
@@ -90,6 +88,7 @@ You can support continued development by [donating on Ko-fi](https://ko-fi.com/h
 
 - Modern Windows fork maintained by [Matheus Heidemann - heide-oficial](https://github.com/heide-oficial).
 - Based on the original [Light Host](https://github.com/opencma/LightHost) by Rolando Islas / OpenCMA.
+- [multimattia](https://github.com/multimattia) contributed the [RNNoise VST3 loading fix for plugins with incomplete scan channel metadata](https://github.com/heide-oficial/Light-Host-Modern/pull/4).
 - Built with [JUCE](https://github.com/juce-framework/JUCE), the [Steinberg VST3 SDK](https://github.com/steinbergmedia/vst3sdk), the [ASIO SDK](https://github.com/audiosdk/asio), and optional [Xaymar VST2 headers](https://github.com/Xaymar/vst2sdk).
 
 ## 📄 License
