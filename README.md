@@ -88,8 +88,8 @@ You can support continued development by [donating on Ko-fi](https://ko-fi.com/h
 
 - Modern Windows fork maintained by [Matheus Heidemann - heide-oficial](https://github.com/heide-oficial).
 - Based on the original [Light Host](https://github.com/opencma/LightHost) by Rolando Islas / OpenCMA.
-- [multimattia](https://github.com/multimattia) contributed the [RNNoise VST3 loading fix for plugins with incomplete scan channel metadata](https://github.com/heide-oficial/Light-Host-Modern/pull/4).
 - Built with [JUCE](https://github.com/juce-framework/JUCE), the [Steinberg VST3 SDK](https://github.com/steinbergmedia/vst3sdk), the [ASIO SDK](https://github.com/audiosdk/asio), and optional [Xaymar VST2 headers](https://github.com/Xaymar/vst2sdk).
+- [multimattia](https://github.com/multimattia) contributed the [RNNoise VST3 loading fix for plugins with incomplete scan channel metadata](https://github.com/heide-oficial/Light-Host-Modern/pull/4).
 
 ## 📄 License
 
