@@ -2854,6 +2854,9 @@ namespace winrt::LightHostWinUI::implementation
         if (!root)
             return;
 
+        if (root == LanguageBox())
+            return;
+
         if (const auto textBlock = root.try_as<TextBlock>())
             textBlock.Text(localization.translatedSource(textBlock.Text()));
 
