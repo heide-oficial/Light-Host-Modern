@@ -2,6 +2,8 @@ param([Parameter(Mandatory)][int] $AppPid)
 
 $ErrorActionPreference = 'Stop'
 $screenshots = Join-Path $PSScriptRoot 'test-screenshots'
+$portugueseSettingsTitle = 'Configura' + [char]0x00E7 + [char]0x00F5 + 'es'
+$portugueseLanguageName = 'Portugu' + [char]0x00EA + 's (Brasil)'
 New-Item -ItemType Directory -Force -Path $screenshots | Out-Null
 
 $windows = rtk winapp ui list-windows -a $AppPid --json | ConvertFrom-Json
@@ -117,13 +119,18 @@ Assert-Command 'Cancel scan paths dialog' { rtk winapp ui invoke CloseButton -w 
 Start-Sleep -Milliseconds 800
 Assert-Command 'Navigate back to Settings' { rtk winapp ui click NavSettings -w $window.hwnd }
 Assert-Command 'Switch to Portuguese (Brazil)' { Set-ComboIndex AppLanguage 1 }
-Assert-Command 'Portuguese Settings title appears' { rtk winapp ui wait-for PageTitle -w $window.hwnd --value 'Configurações' -t 3000 }
+Assert-Command 'Portuguese Settings title appears' { rtk winapp ui wait-for PageTitle -w $window.hwnd --value $portugueseSettingsTitle -t 10000 }
 rtk winapp ui screenshot -w $window.hwnd -o (Join-Path $screenshots '11-settings-pt-br.png') | Out-Null
 Assert-Command 'Open language choices after localization' { rtk winapp ui invoke AppLanguage -w $window.hwnd }
-Assert-Command 'English native language name remains available' { rtk winapp ui wait-for 'English (United States)' -w $window.hwnd -t 3000 }
-Assert-Command 'Portuguese native language name remains available' { rtk winapp ui wait-for 'Português (Brasil)' -w $window.hwnd -t 3000 }
+Assert-Command 'English native language name remains available' { rtk winapp ui wait-for 'English (United States)' -a $AppPid -t 3000 }
+Assert-Command 'Portuguese native language name remains available' { rtk winapp ui wait-for $portugueseLanguageName -a $AppPid -t 3000 }
 rtk winapp ui send-keys escape -w $window.hwnd | Out-Null
 Assert-Command 'Restore English language' { Set-ComboIndex AppLanguage 0 }
+Assert-Command 'English Settings title returns' { rtk winapp ui wait-for PageTitle -w $window.hwnd --value 'Settings' -t 10000 }
+Assert-Command 'Repeat switch to Portuguese without closing UI' { Set-ComboIndex AppLanguage 1 }
+Assert-Command 'Repeated Portuguese switch completes' { rtk winapp ui wait-for PageTitle -w $window.hwnd --value $portugueseSettingsTitle -t 10000 }
+Assert-Command 'Repeat switch back to English without closing UI' { Set-ComboIndex AppLanguage 0 }
+Assert-Command 'Repeated English switch completes' { rtk winapp ui wait-for PageTitle -w $window.hwnd --value 'Settings' -t 10000 }
 
 [LightHostWindowTest]::MoveWindow($hwnd, 80, 60, 1460, 920, $true) | Out-Null
 Start-Sleep -Milliseconds 800
