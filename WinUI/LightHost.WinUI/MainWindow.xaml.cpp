@@ -36,6 +36,15 @@ namespace
     constexpr wchar_t GITHUB_SHOWCASE_URL[] = L"https://github.com/heide-oficial/Light-Host-Modern/issues/new?title=%5BSHOWCASE%20VIDEO%5D%20Video%20title%20here&labels=showcase%20video&body=Here%27s%20my%20video%20showcasing%20or%20featuring%20the%20app%3A%20%5BINSERT%20LINK%20HERE%5D";
     constexpr wchar_t KOFI_URL[] = L"https://ko-fi.com/heide_oficial";
     constexpr wchar_t APP_VERSION[] = L"1.2.1";
+    constexpr wchar_t TRUSTED_RELEASE_URL_PREFIX[] = L"https://github.com/heide-oficial/Light-Host-Modern/releases/";
+    constexpr wchar_t INSTALLER_ASSET_NAME[] = L"LightHostModern-Setup.msi";
+
+    bool isTrustedReleaseUrl(std::wstring const& value)
+    {
+        constexpr size_t prefixLength = (sizeof(TRUSTED_RELEASE_URL_PREFIX) / sizeof(wchar_t)) - 1;
+        return value.size() > prefixLength
+            && _wcsnicmp(value.c_str(), TRUSTED_RELEASE_URL_PREFIX, prefixLength) == 0;
+    }
 
     std::string toLower(std::string value)
     {
@@ -2243,7 +2252,8 @@ namespace winrt::LightHostWinUI::implementation
             return;
 
         languageChangeQueued = true;
-        const bool queued = DispatcherQueue().TryEnqueue([this]()
+        auto lifetime = get_strong();
+        const bool queued = DispatcherQueue().TryEnqueue([this, lifetime]()
         {
             languageChangeQueued = false;
             try
@@ -2830,12 +2840,10 @@ namespace winrt::LightHostWinUI::implementation
         SupportShowcaseButton().Content(box_value(localization.text("support.showcase.action", L"Create video showcase post")));
         UpdateAvailableTitleText().Text(localization.text("settings.update.title", L"Update available"));
         if (!latestReleaseTag.empty())
-        {
-            std::wstring message = localization.text("settings.update.body", L"A newer version of Light Host Modern is available.").c_str();
-            message += L" ";
-            message += latestReleaseTag;
-            UpdateAvailableBodyText().Text(message);
-        }
+            UpdateAvailableBodyText().Text(localization.format(
+                "settings.update.bodyVersion",
+                L"Light Host Modern {0} is available.",
+                { latestReleaseTag }));
         DownloadUpdateButton().Content(box_value(localization.text("settings.update.download", L"Download and install")));
         HideSupportTitleText().Text(localization.text("settings.support.hide", L"Hide the Support me tab"));
         LanguageTitleText().Text(localization.text("settings.language.title", L"Language"));
@@ -2960,7 +2968,7 @@ namespace winrt::LightHostWinUI::implementation
             const auto json = Windows::Data::Json::JsonObject::Parse(response);
             const auto latestTag = json.GetNamedString(L"tag_name", L"");
             const auto releaseUrl = json.GetNamedString(L"html_url", L"");
-            if (semanticVersion(latestTag.c_str()) > semanticVersion(APP_VERSION) && !releaseUrl.empty())
+            if (semanticVersion(latestTag.c_str()) > semanticVersion(APP_VERSION) && isTrustedReleaseUrl(releaseUrl.c_str()))
             {
                 latestReleaseUrl = releaseUrl.c_str();
                 latestReleaseTag = latestTag.c_str();
@@ -2976,20 +2984,24 @@ namespace winrt::LightHostWinUI::implementation
 
                         const auto asset = assetValue.GetObject();
                         const std::wstring name = asset.GetNamedString(L"name", L"").c_str();
-                        if (name.size() < 4 || _wcsicmp(name.c_str() + name.size() - 4, L".msi") != 0)
+                        if (_wcsicmp(name.c_str(), INSTALLER_ASSET_NAME) != 0)
                             continue;
 
-                        latestInstallerUrl = asset.GetNamedString(L"browser_download_url", L"").c_str();
+                        const std::wstring installerUrl = asset.GetNamedString(L"browser_download_url", L"").c_str();
+                        if (!isTrustedReleaseUrl(installerUrl))
+                            continue;
+
+                        latestInstallerUrl = installerUrl;
                         if (asset.HasKey(L"digest") && asset.GetNamedValue(L"digest").ValueType() == Windows::Data::Json::JsonValueType::String)
                             latestInstallerDigest = asset.GetNamedString(L"digest").c_str();
                         break;
                     }
                 }
 
-                std::wstring message = localization.text("settings.update.body", L"A newer version of Light Host Modern is available.").c_str();
-                message += L" ";
-                message += latestTag.c_str();
-                UpdateAvailableBodyText().Text(message);
+                UpdateAvailableBodyText().Text(localization.format(
+                    "settings.update.bodyVersion",
+                    L"Light Host Modern {0} is available.",
+                    { latestTag.c_str() }));
                 UpdateAvailableCard().Visibility(Visibility::Visible);
                 winUILog("Update available: " + to_string(latestTag));
             }
@@ -3075,6 +3087,7 @@ namespace winrt::LightHostWinUI::implementation
 
             winUILog("Verified update installer launched for " + to_string(latestReleaseTag));
             sendCommand("quit-host");
+            Close();
             co_return;
         }
         catch (hresult_error const& error)

@@ -25,6 +25,7 @@
   "support.showcase.automation": "Criar uma publicação de demonstração em vídeo",
   "settings.update.title": "Atualização disponível",
   "settings.update.body": "Uma nova versão do Light Host Modern está disponível.",
+  "settings.update.bodyVersion": "O Light Host Modern {0} está disponível.",
   "settings.update.download": "Baixar e instalar",
   "settings.update.downloading": "Baixando o instalador verificado…",
   "settings.update.verifying": "Verificando a integridade do instalador…",
