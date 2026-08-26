@@ -1157,6 +1157,9 @@ if (!(Test-Path -LiteralPath (Join-Path $builtWinUIOutput "LightHostWinUI.exe"))
     throw "Built WinUI output was not found: $builtWinUIOutput"
 }
 
+if (Test-Path -LiteralPath $hostWinUIOutput) {
+    Remove-Item -LiteralPath $hostWinUIOutput -Recurse -Force
+}
 New-Item -ItemType Directory -Force -Path $hostWinUIOutput | Out-Null
 Copy-Item -Path (Join-Path $builtWinUIOutput "*") -Destination $hostWinUIOutput -Recurse -Force
 
