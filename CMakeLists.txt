@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(LightHost VERSION 1.2.1 LANGUAGES C CXX)
+project(LightHost VERSION 1.2.2 LANGUAGES C CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "Light Host Modern is now maintained as a Windows-only application.")

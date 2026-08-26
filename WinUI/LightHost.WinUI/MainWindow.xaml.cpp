@@ -35,7 +35,7 @@ namespace
     constexpr wchar_t GITHUB_REPOSITORY_URL[] = L"https://github.com/heide-oficial/Light-Host-Modern";
     constexpr wchar_t GITHUB_SHOWCASE_URL[] = L"https://github.com/heide-oficial/Light-Host-Modern/issues/new?title=%5BSHOWCASE%20VIDEO%5D%20Video%20title%20here&labels=showcase%20video&body=Here%27s%20my%20video%20showcasing%20or%20featuring%20the%20app%3A%20%5BINSERT%20LINK%20HERE%5D";
     constexpr wchar_t KOFI_URL[] = L"https://ko-fi.com/heide_oficial";
-    constexpr wchar_t APP_VERSION[] = L"1.2.1";
+    constexpr wchar_t APP_VERSION[] = L"1.2.2";
     constexpr wchar_t TRUSTED_RELEASE_URL_PREFIX[] = L"https://github.com/heide-oficial/Light-Host-Modern/releases/";
     constexpr wchar_t INSTALLER_ASSET_NAME[] = L"LightHostModern-Setup.msi";
 

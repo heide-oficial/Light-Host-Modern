@@ -27,7 +27,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $appName = "Light Host Modern"
-$appVersion = "1.2.1"
+$appVersion = "1.2.2"
 $exeName = "Light Host Modern.exe"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $outRoot = Join-Path $repoRoot "out\release"
