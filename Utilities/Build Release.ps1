@@ -17,7 +17,11 @@ param(
 
     [switch] $SkipBuild,
 
-    [switch] $KeepStage
+    [switch] $KeepStage,
+
+    [string] $SigningThumbprint = $env:LIGHTHOST_SIGNING_THUMBPRINT,
+
+    [string] $SigningTimestampUrl = "http://timestamp.digicert.com"
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,9 +33,8 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $outRoot = Join-Path $repoRoot "out\release"
 $stageRoot = Join-Path $outRoot "payload"
 $packageWorkRoot = Join-Path $outRoot "package-work"
-$payloadZip = Join-Path $outRoot "LightHostModern-payload.zip"
 $installerMsi = Join-Path $outRoot "LightHostModern-Setup.msi"
-$portableExe = Join-Path $outRoot "LightHostModern-Portable.exe"
+$portableZip = Join-Path $outRoot "LightHostModern-Portable.zip"
 $releaseIcon = Join-Path $repoRoot "Icon\logo.ico"
 
 function Resolve-CMake {
@@ -73,6 +76,45 @@ function Resolve-MSBuild {
     }
 
     throw "MSBuild was not found. Install Visual Studio 2022/2026 with Desktop development with C++ and Windows App SDK tooling."
+}
+
+function Resolve-SignTool {
+    $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    $kitsBin = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
+    if (Test-Path -LiteralPath $kitsBin) {
+        $candidate = Get-ChildItem -LiteralPath $kitsBin -Recurse -Filter signtool.exe -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+        if ($null -ne $candidate) {
+            return $candidate.FullName
+        }
+    }
+
+    throw "signtool.exe was not found. Install the Windows SDK signing tools."
+}
+
+function Sign-ReleaseFile {
+    param([Parameter(Mandatory)][string] $Path)
+
+    if ([string]::IsNullOrWhiteSpace($SigningThumbprint)) {
+        return
+    }
+
+    $signTool = Resolve-SignTool
+    Invoke-Checked -FilePath $signTool -Arguments @(
+        "sign", "/sha1", $SigningThumbprint, "/fd", "SHA256",
+        "/tr", $SigningTimestampUrl, "/td", "SHA256", $Path
+    )
+
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+        throw "The generated signature is not valid for '$Path': $($signature.StatusMessage)"
+    }
 }
 
 function Resolve-VCVars64 {
@@ -993,18 +1035,27 @@ The installed application includes the full LICENSE file. The license is also av
 
     $wxs = New-Object System.Collections.Generic.List[string]
     $wxs.Add("<?xml version=`"1.0`" encoding=`"UTF-8`"?>")
-    $wxs.Add("<Wix xmlns=`"http://wixtoolset.org/schemas/v4/wxs`" xmlns:ui=`"http://wixtoolset.org/schemas/v4/wxs/ui`">")
-    $wxs.Add("  <Package Name=`"$productName`" Manufacturer=`"$manufacturer`" Version=`"$appVersion`" UpgradeCode=`"$upgradeCode`" ProductCode=`"$productCode`" Scope=`"perUserOrMachine`">")
+    $wxs.Add("<Wix xmlns=`"http://wixtoolset.org/schemas/v4/wxs`" xmlns:ui=`"http://wixtoolset.org/schemas/v4/wxs/ui`" xmlns:util=`"http://wixtoolset.org/schemas/v4/wxs/util`">")
+    $wxs.Add("  <Package Name=`"$productName`" Manufacturer=`"$manufacturer`" Version=`"$appVersion`" UpgradeCode=`"$upgradeCode`" ProductCode=`"$productCode`" Scope=`"perMachine`">")
     $wxs.Add("    <MajorUpgrade AllowSameVersionUpgrades=`"yes`" DowngradeErrorMessage=`"A newer version of $productName is already installed.`" />")
     $wxs.Add("    <MediaTemplate EmbedCab=`"yes`" />")
     $wxs.Add("    <Icon Id=`"AppIcon.ico`" SourceFile=`"$escapedIconPath`" />")
     $wxs.Add("    <Property Id=`"ARPPRODUCTICON`" Value=`"AppIcon.ico`" />")
     $wxs.Add("    <Property Id=`"ApplicationFolderName`" Value=`"$productName`" />")
     $wxs.Add("    <Property Id=`"WixAppFolder`" Value=`"WixPerMachineFolder`" />")
+    $wxs.Add("    <Property Id=`"LEGACYINSTALLFOLDER`">")
+    $wxs.Add("      <RegistrySearch Id=`"FindLegacyInstallFolder`" Root=`"HKCU`" Key=`"Software\Microsoft\Windows\CurrentVersion\Uninstall\LightHostModern`" Name=`"InstallLocation`" Type=`"raw`" />")
+    $wxs.Add("    </Property>")
     $wxs.Add("    <WixVariable Id=`"WixUILicenseRtf`" Value=`"$licenseRtf`" />")
     $wxs.Add("    <ui:WixUI Id=`"WixUI_Advanced`" />")
     $wxs.Add("    <StandardDirectory Id=`"ProgramFiles64Folder`">")
     $wxs.Add("      <Directory Id=`"APPLICATIONFOLDER`" Name=`"$productName`">")
+    $legacyCleanupGuid = New-StableGuid "$upgradeCode|legacy-install-cleanup"
+    $wxs.Add("        <Component Id=`"LegacyInstallCleanupComponent`" Guid=`"$legacyCleanupGuid`">")
+    $wxs.Add("          <RegistryValue Root=`"HKLM`" Key=`"Software\LightHostModern`" Name=`"LegacyMigration`" Type=`"string`" Value=`"$appVersion`" KeyPath=`"yes`" />")
+    $wxs.Add("          <RemoveRegistryKey Id=`"RemoveLegacyUninstallEntry`" Root=`"HKCU`" Key=`"Software\Microsoft\Windows\CurrentVersion\Uninstall\LightHostModern`" Action=`"removeOnInstall`" />")
+    $wxs.Add("          <util:RemoveFolderEx Id=`"RemoveLegacyInstallFolder`" Property=`"LEGACYINSTALLFOLDER`" On=`"install`" />")
+    $wxs.Add("        </Component>")
     foreach ($line in $installDirectoryLines) {
         $wxs.Add($line)
     }
@@ -1026,6 +1077,7 @@ The installed application includes the full LICENSE file. The license is also av
     $wxs.Add("      </Component>")
     $wxs.Add("    </StandardDirectory>")
     $wxs.Add("    <Feature Id=`"ApplicationFeature`" Title=`"$productName`" Level=`"1`">")
+    $wxs.Add("      <ComponentRef Id=`"LegacyInstallCleanupComponent`" />")
     foreach ($line in $featureRefs) {
         $wxs.Add($line)
     }
@@ -1043,13 +1095,19 @@ The installed application includes the full LICENSE file. The license is also av
     $wixVersionOutput = & $wix --version
     $wixVersion = ($wixVersionOutput | Select-Object -First 1).Trim()
     $wixExtensionPackage = "WixToolset.UI.wixext/$wixVersion"
+    $wixUtilExtensionPackage = "WixToolset.Util.wixext/$wixVersion"
 
     & $wix extension add $wixExtensionPackage | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to install or enable the WiX UI extension."
     }
 
-    & $wix build $wxsPath -ext WixToolset.UI.wixext -arch x64 -o $TargetMsi | Out-Host
+    & $wix extension add $wixUtilExtensionPackage | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to install or enable the WiX Util extension."
+    }
+
+    & $wix build $wxsPath -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -arch x64 -o $TargetMsi | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "WiX failed to build the MSI installer."
     }
@@ -1120,6 +1178,21 @@ Get-ChildItem -LiteralPath $stageRoot -Recurse -File |
 
 Copy-VCRuntime -Destination $stageRoot
 
+if (![string]::IsNullOrWhiteSpace($SigningThumbprint)) {
+    $signTargets = @(
+        (Join-Path $stageRoot $exeName),
+        (Join-Path $stageRoot "WinUI\x64\$Configuration\LightHost.WinUI\LightHostWinUI.exe"),
+        (Join-Path $stageRoot "WinUI\x64\$Configuration\LightHost.WinUI\RestartAgent.exe")
+    )
+    foreach ($signTarget in $signTargets) {
+        if (Test-Path -LiteralPath $signTarget) {
+            Sign-ReleaseFile -Path $signTarget
+        }
+    }
+} else {
+    Write-Warning "Release signing is not configured. Public releases should set LIGHTHOST_SIGNING_THUMBPRINT to a trusted code-signing certificate."
+}
+
 $releaseInfo = [ordered]@{
     name = $appName
     version = $appVersion
@@ -1131,15 +1204,13 @@ $releaseInfo = [ordered]@{
 
 $releaseInfo | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stageRoot "release-info.json") -Encoding UTF8
 
-if (Test-Path -LiteralPath $payloadZip) {
-    Remove-Item -LiteralPath $payloadZip -Force
+if (Test-Path -LiteralPath $portableZip) {
+    Remove-Item -LiteralPath $portableZip -Force
 }
 
-Compress-Archive -Path (Join-Path $stageRoot "*") -DestinationPath $payloadZip -Force
+Compress-Archive -Path (Join-Path $stageRoot "*") -DestinationPath $portableZip -Force
 
 $installerWork = Join-Path $packageWorkRoot "installer"
-$portableWork = Join-Path $packageWorkRoot "portable"
-Write-PortablePayload -TargetDir $portableWork
 
 $legacyInstallerExe = Join-Path $outRoot "LightHostModern-Setup.exe"
 if (Test-Path -LiteralPath $legacyInstallerExe) {
@@ -1151,15 +1222,19 @@ if (Test-Path -LiteralPath $legacyInstallerExe) {
 }
 
 New-WixMsiPackage -SourceDir $stageRoot -WorkDir $installerWork -TargetMsi $installerMsi -IconPath $releaseIcon
-New-NativeSelfExtractPackage -Name "Light Host Modern Portable" -WorkDir $portableWork -PayloadZipPath (Join-Path $portableWork "payload.zip") -EntryScriptPath (Join-Path $portableWork "run-portable.ps1") -TargetExe $portableExe -IconPath $releaseIcon
+Sign-ReleaseFile -Path $installerMsi
+
+$legacyPortableExe = Join-Path $outRoot "LightHostModern-Portable.exe"
+if (Test-Path -LiteralPath $legacyPortableExe) {
+    Remove-Item -LiteralPath $legacyPortableExe -Force
+}
 
 if (!$KeepStage) {
     Remove-Item -LiteralPath $stageRoot -Recurse -Force
     Remove-Item -LiteralPath $packageWorkRoot -Recurse -Force
-    Remove-Item -LiteralPath $payloadZip -Force
 }
 
 Write-Host ""
 Write-Host "Release artifacts created:"
 Write-Host "  Installer: $installerMsi"
-Write-Host "  Portable:  $portableExe"
+Write-Host "  Portable:  $portableZip"
