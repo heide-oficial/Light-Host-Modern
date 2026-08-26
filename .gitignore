@@ -54,7 +54,15 @@ JuceLibraryCode/
 *.appx
 *.appxsym
 *.msix
+*.msixbundle
 *.msixupload
+*.appinstaller
+*.msi
+*.wixpdb
+*.cab
+*.zip
+*.7z
+*.rar
 
 # WinUI generated output
 WinUI/.vs/
@@ -74,11 +82,16 @@ WinUI/test-screenshots/
 
 # Test and analysis output
 screenshots/
+TestResults/
 test-results.json
 test-screenshot.png
 *.trx
 *.coverage
 *.coveragexml
+*.cache
+.cache/
+tmp/
+temp/
 
 # Local runtime state / logs
 *.log
@@ -93,11 +106,16 @@ test-screenshot.png
 *.pfx
 *.p12
 *.key
+*.pem
+*.pvk
+*.snk
 
 # OS/editor noise
 .DS_Store
 Thumbs.db
 desktop.ini
+*.userosscache
+*.sln.docstates
 .vscode/
 .idea/
 
