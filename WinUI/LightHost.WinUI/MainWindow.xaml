@@ -512,7 +512,20 @@
                                     <TextBlock x:Name="UpdateAvailableTitleText" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Update available" />
                                     <TextBlock x:Name="UpdateAvailableBodyText" Text="A newer version of Light Host Modern is available." TextWrapping="Wrap" />
                                 </StackPanel>
-                                <Button x:Name="DownloadUpdateButton" Grid.Column="1" Content="Download update" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <ProgressRing
+                                        x:Name="UpdateProgressRing"
+                                        AutomationProperties.AutomationId="UpdateProgress"
+                                        Width="20"
+                                        Height="20"
+                                        IsActive="False"
+                                        Visibility="Collapsed" />
+                                    <Button
+                                        x:Name="DownloadUpdateButton"
+                                        AutomationProperties.AutomationId="InstallUpdate"
+                                        Content="Download and install"
+                                        VerticalAlignment="Center" />
+                                </StackPanel>
                             </Grid>
                         </InfoBar>
                         <StackPanel Spacing="8">

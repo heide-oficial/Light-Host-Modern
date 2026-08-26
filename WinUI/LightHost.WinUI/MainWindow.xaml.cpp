@@ -9,6 +9,7 @@
 #include <winrt/Windows.UI.Text.h>
 #include <algorithm>
 #include <cctype>
+#include <cwctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -34,6 +35,7 @@ namespace
     constexpr wchar_t GITHUB_REPOSITORY_URL[] = L"https://github.com/heide-oficial/Light-Host-Modern";
     constexpr wchar_t GITHUB_SHOWCASE_URL[] = L"https://github.com/heide-oficial/Light-Host-Modern/issues/new?title=%5BSHOWCASE%20VIDEO%5D%20Video%20title%20here&labels=showcase%20video&body=Here%27s%20my%20video%20showcasing%20or%20featuring%20the%20app%3A%20%5BINSERT%20LINK%20HERE%5D";
     constexpr wchar_t KOFI_URL[] = L"https://ko-fi.com/heide_oficial";
+    constexpr wchar_t APP_VERSION[] = L"1.2.1";
 
     std::string toLower(std::string value)
     {
@@ -2208,7 +2210,9 @@ namespace winrt::LightHostWinUI::implementation
 
     void MainWindow::DownloadUpdate_Click(IInspectable const&, RoutedEventArgs const&)
     {
-        if (!latestReleaseUrl.empty())
+        if (!latestInstallerUrl.empty())
+            downloadAndInstallUpdateAsync();
+        else if (!latestReleaseUrl.empty())
             ShellExecuteW(nullptr, L"open", latestReleaseUrl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
 
@@ -2832,7 +2836,7 @@ namespace winrt::LightHostWinUI::implementation
             message += latestReleaseTag;
             UpdateAvailableBodyText().Text(message);
         }
-        DownloadUpdateButton().Content(box_value(localization.text("settings.update.download", L"Download update")));
+        DownloadUpdateButton().Content(box_value(localization.text("settings.update.download", L"Download and install")));
         HideSupportTitleText().Text(localization.text("settings.support.hide", L"Hide the Support me tab"));
         LanguageTitleText().Text(localization.text("settings.language.title", L"Language"));
         LanguageDescriptionText().Text(localization.text("settings.language.description", L"Choose the language used by the app."));
@@ -2951,15 +2955,37 @@ namespace winrt::LightHostWinUI::implementation
         try
         {
             Windows::Web::Http::HttpClient client;
-            client.DefaultRequestHeaders().UserAgent().ParseAdd(L"LightHostModern/1.2.1");
+            client.DefaultRequestHeaders().UserAgent().ParseAdd(hstring(L"LightHostModern/" + std::wstring(APP_VERSION)));
             const auto response = co_await client.GetStringAsync(Windows::Foundation::Uri(L"https://api.github.com/repos/heide-oficial/Light-Host-Modern/releases/latest"));
             const auto json = Windows::Data::Json::JsonObject::Parse(response);
             const auto latestTag = json.GetNamedString(L"tag_name", L"");
             const auto releaseUrl = json.GetNamedString(L"html_url", L"");
-            if (semanticVersion(latestTag.c_str()) > semanticVersion(L"1.2.1") && !releaseUrl.empty())
+            if (semanticVersion(latestTag.c_str()) > semanticVersion(APP_VERSION) && !releaseUrl.empty())
             {
                 latestReleaseUrl = releaseUrl.c_str();
                 latestReleaseTag = latestTag.c_str();
+                latestInstallerUrl.clear();
+                latestInstallerDigest.clear();
+
+                if (json.HasKey(L"assets") && json.GetNamedValue(L"assets").ValueType() == Windows::Data::Json::JsonValueType::Array)
+                {
+                    for (auto const& assetValue : json.GetNamedArray(L"assets"))
+                    {
+                        if (assetValue.ValueType() != Windows::Data::Json::JsonValueType::Object)
+                            continue;
+
+                        const auto asset = assetValue.GetObject();
+                        const std::wstring name = asset.GetNamedString(L"name", L"").c_str();
+                        if (name.size() < 4 || _wcsicmp(name.c_str() + name.size() - 4, L".msi") != 0)
+                            continue;
+
+                        latestInstallerUrl = asset.GetNamedString(L"browser_download_url", L"").c_str();
+                        if (asset.HasKey(L"digest") && asset.GetNamedValue(L"digest").ValueType() == Windows::Data::Json::JsonValueType::String)
+                            latestInstallerDigest = asset.GetNamedString(L"digest").c_str();
+                        break;
+                    }
+                }
+
                 std::wstring message = localization.text("settings.update.body", L"A newer version of Light Host Modern is available.").c_str();
                 message += L" ";
                 message += latestTag.c_str();
@@ -2976,6 +3002,101 @@ namespace winrt::LightHostWinUI::implementation
         {
             winUILog("Update check failed with an unknown error.");
         }
+    }
+
+    fire_and_forget MainWindow::downloadAndInstallUpdateAsync()
+    {
+        auto lifetime = get_strong();
+        if (updateInstallInProgress || latestInstallerUrl.empty())
+            co_return;
+
+        updateInstallInProgress = true;
+        DownloadUpdateButton().IsEnabled(false);
+        UpdateProgressRing().Visibility(Visibility::Visible);
+        UpdateProgressRing().IsActive(true);
+
+        try
+        {
+            UpdateAvailableBodyText().Text(localization.text(
+                "settings.update.downloading",
+                L"Downloading the verified installer…"));
+
+            Windows::Web::Http::HttpClient client;
+            client.DefaultRequestHeaders().UserAgent().ParseAdd(hstring(L"LightHostModern/" + std::wstring(APP_VERSION)));
+            const auto response = co_await client.GetAsync(Windows::Foundation::Uri(latestInstallerUrl));
+            response.EnsureSuccessStatusCode();
+            const auto installerBuffer = co_await response.Content().ReadAsBufferAsync();
+
+            UpdateAvailableBodyText().Text(localization.text(
+                "settings.update.verifying",
+                L"Verifying the installer integrity…"));
+
+            if (latestInstallerDigest.rfind(L"sha256:", 0) != 0)
+                throw hresult_error(E_FAIL, localization.text(
+                    "settings.update.integrityFailed",
+                    L"The downloaded installer did not match the release checksum and was discarded."));
+
+            const auto hashProvider = Windows::Security::Cryptography::Core::HashAlgorithmProvider::OpenAlgorithm(
+                Windows::Security::Cryptography::Core::HashAlgorithmNames::Sha256());
+            const auto actualDigest = Windows::Security::Cryptography::CryptographicBuffer::EncodeToHexString(
+                hashProvider.HashData(installerBuffer));
+            const std::wstring expectedDigest = latestInstallerDigest.substr(7);
+            if (_wcsicmp(actualDigest.c_str(), expectedDigest.c_str()) != 0)
+                throw hresult_error(E_FAIL, localization.text(
+                    "settings.update.integrityFailed",
+                    L"The downloaded installer did not match the release checksum and was discarded."));
+
+            std::wstring safeTag = latestReleaseTag;
+            std::replace_if(safeTag.begin(), safeTag.end(), [](wchar_t value)
+            {
+                return !std::iswalnum(value) && value != L'.' && value != L'-';
+            }, L'_');
+
+            const auto temporaryFolder = Windows::Storage::ApplicationData::Current().TemporaryFolder();
+            const auto installerFile = co_await temporaryFolder.CreateFileAsync(
+                hstring(L"LightHostModern-" + safeTag + L"-Setup.msi"),
+                Windows::Storage::CreationCollisionOption::ReplaceExisting);
+            co_await Windows::Storage::FileIO::WriteBufferAsync(installerFile, installerBuffer);
+
+            UpdateAvailableBodyText().Text(localization.text(
+                "settings.update.launching",
+                L"The installer is ready. Light Host Modern will close to finish the update."));
+
+            const std::wstring arguments = L"/i \"" + std::wstring(installerFile.Path().c_str()) + L"\"";
+            const auto launchResult = reinterpret_cast<INT_PTR>(ShellExecuteW(
+                nullptr,
+                L"open",
+                L"msiexec.exe",
+                arguments.c_str(),
+                temporaryFolder.Path().c_str(),
+                SW_SHOWNORMAL));
+            if (launchResult <= 32)
+                throw hresult_error(HRESULT_FROM_WIN32(static_cast<DWORD>(launchResult)), L"Windows Installer could not be started.");
+
+            winUILog("Verified update installer launched for " + to_string(latestReleaseTag));
+            sendCommand("quit-host");
+            co_return;
+        }
+        catch (hresult_error const& error)
+        {
+            winUILog("Update installation failed: " + to_string(error.message()));
+        }
+        catch (std::exception const& error)
+        {
+            winUILog(std::string("Update installation failed: ") + error.what());
+        }
+        catch (...)
+        {
+            winUILog("Update installation failed with an unknown error.");
+        }
+
+        UpdateAvailableBodyText().Text(localization.text(
+            "settings.update.failed",
+            L"The update could not be installed. You can download it from the release page."));
+        DownloadUpdateButton().IsEnabled(true);
+        UpdateProgressRing().IsActive(false);
+        UpdateProgressRing().Visibility(Visibility::Collapsed);
+        updateInstallInProgress = false;
     }
 
     void MainWindow::showPluginSubsection(std::wstring const& section)

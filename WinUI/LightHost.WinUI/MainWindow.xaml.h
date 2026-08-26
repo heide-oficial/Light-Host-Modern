@@ -149,6 +149,7 @@ namespace winrt::LightHostWinUI::implementation
         bool sidebarCollapsed = false;
         bool syncingLanguageControls = false;
         bool languageChangeQueued = false;
+        bool updateInstallInProgress = false;
         bool hideSupportTab = false;
         bool compactLayout = false;
         bool compactPluginCards = false;
@@ -159,6 +160,8 @@ namespace winrt::LightHostWinUI::implementation
         std::wstring installedPluginSearch;
         std::wstring latestReleaseUrl;
         std::wstring latestReleaseTag;
+        std::wstring latestInstallerUrl;
+        std::wstring latestInstallerDigest;
         std::wstring pendingLanguageCode;
         std::wstring currentSection = L"Dashboard";
         ::LightHostWinUI::LocalizationCatalog localization;
@@ -268,6 +271,7 @@ namespace winrt::LightHostWinUI::implementation
         void applyLocalization();
         void refreshLanguageItems();
         winrt::fire_and_forget checkForUpdatesAsync();
+        winrt::fire_and_forget downloadAndInstallUpdateAsync();
         void updateDebugControls();
         void resetDefaultPluginScanPaths();
     };
