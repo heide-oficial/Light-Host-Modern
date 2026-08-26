@@ -27,7 +27,7 @@ When disabled, the close flow requests host shutdown, which saves plugin state a
 
 The setting creates a current-user Windows `Run` entry named `Light Host Modern`. It points to the host executable that enabled the option. Disabling the setting removes the value.
 
-Portable users should keep the portable executable in a stable location before enabling startup because the registration follows that executable.
+Portable users should extract the complete ZIP to a stable folder before enabling startup because the registration follows the extracted host executable. Moving or deleting that folder invalidates the startup entry; reopening the app and toggling the option off and on registers its new location.
 
 ## Navigation and responsive layout
 

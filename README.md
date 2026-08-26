@@ -51,11 +51,11 @@ For detailed descriptions of the screens, workflows, and internal implementation
 
 ### Recommended installation
 
-Download `LightHostModern-Setup.msi` from the [latest GitHub release](https://github.com/heide-oficial/Light-Host-Modern/releases/latest), open it, and follow the Windows Installer steps. The application is installed for the current Windows user under `%LOCALAPPDATA%\Programs\Light Host Modern` and receives Start menu and desktop shortcuts.
+Download `LightHostModern-Setup.msi` from the [latest GitHub release](https://github.com/heide-oficial/Light-Host-Modern/releases/latest), open it, and follow the Windows Installer steps. The application is installed under `%ProgramFiles%\Light Host Modern` and receives Start menu and desktop shortcuts. Newer MSI releases upgrade the existing installation; the installer also migrates installations created by the legacy per-user setup.
 
 ### Portable version
 
-Download `LightHostModern-Portable.exe` from the [latest GitHub release](https://github.com/heide-oficial/Light-Host-Modern/releases/latest) and run it directly. The launcher extracts the self-contained payload to a temporary folder and starts the host without requiring a separate Windows App SDK installation.
+Download `LightHostModern-Portable.zip` from the [latest GitHub release](https://github.com/heide-oficial/Light-Host-Modern/releases/latest), extract it to a stable folder, and run `Light Host Modern.exe`. The ZIP contains the complete self-contained app and does not use an extraction launcher or PowerShell at runtime.
 
 ## 🔒 Privacy and disclosures
 
@@ -64,7 +64,7 @@ Download `LightHostModern-Portable.exe` from the [latest GitHub release](https:/
 - Host settings, plugin database entries, chain state, and plugin state are stored locally through JUCE application properties.
 - WinUI preferences are stored in `%LOCALAPPDATA%\LightHostModern\ui-settings.ini`.
 - Debug logs are created under `%APPDATA%\LightHostModern\Logs` only when the host is started with `--debug`.
-- The update checker sends an HTTPS request to the public GitHub Releases API for this repository. It does not upload audio, plugin state, device settings, or personal data.
+- The updater sends an HTTPS request to the public GitHub Releases API for this repository. When an update is accepted, it downloads the release MSI, verifies its published SHA-256 digest, and starts Windows Installer. It does not upload audio, plugin state, device settings, or personal data.
 - Enabling **Start with Windows** creates an entry for the current user under the Windows `Run` registry key.
 - GitHub and Ko-fi pages open in the default browser only after the user activates their corresponding controls. The Support page displays the Ko-fi banner from Ko-fi's content delivery network.
 - The host and WinUI shell are full-trust desktop processes so they can access audio drivers, plugins, local files, the notification area, named pipes, and startup registration.

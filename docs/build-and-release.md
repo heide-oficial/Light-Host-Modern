@@ -74,10 +74,18 @@ Outputs:
 
 ```text
 out\release\LightHostModern-Setup.msi
-out\release\LightHostModern-Portable.exe
+out\release\LightHostModern-Portable.zip
 ```
 
-The MSI installs per user under `%LOCALAPPDATA%\Programs\Light Host Modern`. The portable launcher contains the self-contained payload, extracts it to a temporary directory, and starts the host.
+The MSI installs under `%ProgramFiles%\Light Host Modern`. It uses a stable `UpgradeCode` and a major-upgrade relationship so newer MSI versions replace older ones. During installation it also detects the `InstallLocation` registered by the legacy per-user setup, removes that obsolete payload, and clears its duplicate uninstall entry.
+
+The portable ZIP contains the same self-contained payload without an executable wrapper. Users extract it to a stable folder and launch `Light Host Modern.exe`; no embedded script, temporary extraction, or PowerShell process is used.
+
+Public releases can be Authenticode-signed by setting `LIGHTHOST_SIGNING_THUMBPRINT` to the thumbprint of a trusted code-signing certificate installed in the current user's certificate store. The build signs the host, WinUI executables, and MSI with SHA-256 and a timestamp. Unsigned local builds remain supported but produce an explicit warning and should not be published as official artifacts.
+
+## Application updates
+
+The WinUI shell checks the repository's latest GitHub release over HTTPS. If its semantic version is newer, Settings displays an `InfoBar` with the release tag. The update action selects the MSI asset, requires the `sha256:` digest returned by GitHub, downloads the installer into the app temporary folder, verifies the complete file, and then starts `msiexec`. A missing or mismatched digest prevents execution.
 
 ## Repository layout
 
