@@ -76,6 +76,7 @@ namespace winrt::LightHostWinUI::implementation
         winrt::fire_and_forget InputBox_SelectionChanged(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs);
         winrt::fire_and_forget OutputBox_SelectionChanged(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs);
         winrt::fire_and_forget ChannelCheckBox_Changed(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
+        winrt::fire_and_forget MonoInputsSwitch_Toggled(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
         winrt::fire_and_forget InputChannelsToggleAll_Click(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
         winrt::fire_and_forget OutputChannelsToggleAll_Click(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
         winrt::fire_and_forget SampleRateBox_SelectionChanged(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs);
@@ -192,6 +193,7 @@ namespace winrt::LightHostWinUI::implementation
         uint64_t lastScanStatusTick = 0;
         Windows::Foundation::IAsyncAction refreshPluginScanStatus();
         bool globalMuted = false, globalBypassed = false, globalControlPending = false;
+        bool monoInputs = false, monoInputsChangePending = false;
         void updateGlobalAudioControls();
 
         bool asioDeviceMode = false;

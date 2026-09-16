@@ -53,6 +53,8 @@ public:
 	void setGlobalBypassed(bool value) { if (hostProcessor.setGlobalBypassed(value)) ++chainVersion; }
 	bool isGlobalMuted() const { return hostProcessor.isGlobalMuted(); }
 	bool isGlobalBypassed() const { return hostProcessor.isGlobalBypassed(); }
+	void setMonoInputs(bool enabled);
+	bool isMonoInputs() const { return hostProcessor.isMonoInputs(); }
 	void resetClipping(bool input, bool output, int channel = -1)
 	{ hostProcessor.resetClipping(input, output, channel); }
 	std::vector<PluginDescription> getKnownPluginsSorted() const;

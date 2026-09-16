@@ -331,7 +331,44 @@ int main()
             diagnosticsHost->setDiagnosticsEnabled(true); process();
             require(diagnosticsHost->getStats().processedBlocks == before.processedBlocks + 1, "diagnostics did not resume");
         }
-        std::cout << "Channels, asymmetric buses, bounded MIDI, preserved delay history, lifecycle, diagnostics opt-out and Release allocation audit passed\n";
+        {
+            for (int inputs : { 1, 2 })
+            {
+                auto monoHost = std::make_unique<RealtimeHostProcessor>();
+                require(!monoHost->isMonoInputs(), "Mono inputs must start off");
+                monoHost->setPlayConfigDetails(inputs, 2, 48000, 64);
+                monoHost->prepareToPlay(48000, 64);
+                auto monoChain = std::make_shared<ChainSnapshot>();
+                monoChain->slots.push_back(std::make_shared<PluginSlot>(PluginDescription(), std::make_unique<GainPlugin>(2)));
+                monoHost->publishSnapshot(monoChain);
+                AudioBuffer<float> audio(2, 512); MidiBuffer events;
+                monoHost->prepareMidiBuffer(events);
+                // Input 1 carries 0.25; input 2 (when opened) carries 0.125. Unopened channels are silent.
+                const auto process = [&] {
+                    audio.clear();
+                    FloatVectorOperations::fill(audio.getWritePointer(0), 0.25f, 512);
+                    if (inputs == 2) FloatVectorOperations::fill(audio.getWritePointer(1), 0.125f, 512);
+                    monoHost->processBlock(audio, events);
+                };
+                process(); process();
+                require(std::abs(audio.getSample(0, 511) - 0.5f) < 0.0001f
+                    && std::abs(audio.getSample(1, 511) - (inputs == 2 ? 0.25f : 0.0f)) < 0.0001f, "Stereo input routing changed");
+                require(monoHost->setMonoInputs(true) && !monoHost->setMonoInputs(true) && monoHost->isMonoInputs(), "Mono inputs toggle");
+                process(); process();
+                const float expected = inputs == 2 ? 0.75f : 0.5f;
+                for (int ch = 0; ch < 2; ++ch)
+                    require(std::abs(audio.getSample(ch, 511) - expected) < 0.0001f, "Mono inputs must be summed and centered on every channel");
+                const auto meters = monoHost->getInputMeters();
+                require(meters.channels[0].peak == 0.25f && (inputs == 1 || meters.channels[1].peak == 0.125f),
+                    "Input meters must report the device channels before the mono fold");
+                monoHost->setMonoInputs(false);
+                process(); process();
+                require(std::abs(audio.getSample(1, 511) - (inputs == 2 ? 0.25f : 0.0f)) < 0.0001f, "Disabling mono inputs must restore stereo routing");
+            }
+            require(lightHost::realtimeAudit::hostAllocations.load() == 0 && lightHost::realtimeAudit::hostFrees.load() == 0,
+                "Mono input fold allocated in the callback");
+        }
+        std::cout << "Channels, asymmetric buses, bounded MIDI, preserved delay history, lifecycle, diagnostics opt-out, mono inputs and Release allocation audit passed\n";
         return 0;
     }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

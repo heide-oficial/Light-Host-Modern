@@ -41,7 +41,7 @@ inline Arguments argumentsFor(std::string_view command)
         {"set-sample-rate", A::number},
         {"set-all-input-channels", A::boolean}, {"set-all-output-channels", A::boolean},
         {"set-start-with-windows", A::boolean}, {"set-enable-vst2", A::boolean},
-        {"set-global-mute", A::boolean}, {"set-global-bypass", A::boolean},
+        {"set-global-mute", A::boolean}, {"set-global-bypass", A::boolean}, {"set-mono-inputs", A::boolean},
         {"set-diagnostics-enabled", A::boolean}, {"rename-known-plugin", A::twoTexts},
         {"reset-clipping", A::object}, {"rename-plugin", A::twoTexts},
         {"set-audio-persistence-mode", A::text}, {"block-audio-backend", A::text},

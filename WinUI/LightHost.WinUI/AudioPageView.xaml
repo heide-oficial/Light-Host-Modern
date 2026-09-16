@@ -40,6 +40,7 @@
                         <TextBlock Text="Input channels" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" TextWrapping="Wrap" />
                         <Button x:Name="InputChannelsToggleAllButton" Grid.Column="1" Content="Uncheck all" MinHeight="32" />
                     </Grid>
+                    <ToggleSwitch x:Name="MonoInputsSwitch" Header="Separate mono inputs" AutomationProperties.AutomationId="MonoInputsSwitch" />
                     <StackPanel x:Name="InputChannelsPanel" />
                 </StackPanel>
             </Border>

@@ -36,6 +36,9 @@
         Microsoft::UI::Xaml::Controls::Button InputChannelsToggleAllButton() const
         { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->InputChannelsToggleAllButton() : Microsoft::UI::Xaml::Controls::Button{nullptr}; }
 
+        Microsoft::UI::Xaml::Controls::ToggleSwitch MonoInputsSwitch() const
+        { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->MonoInputsSwitch() : Microsoft::UI::Xaml::Controls::ToggleSwitch{nullptr}; }
+
         Microsoft::UI::Xaml::Controls::StackPanel InputChannelsPanel() const
         { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->InputChannelsPanel() : Microsoft::UI::Xaml::Controls::StackPanel{nullptr}; }
 

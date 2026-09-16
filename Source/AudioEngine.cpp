@@ -170,6 +170,7 @@ AudioEngine::AudioEngine(bool startInSafeMode, bool shouldRestoreActivePluginsOn
     sessionLoadSuppressed = safeMode || !restoreActivePluginsOnStartup;
     auto* settings = getAppProperties().getUserSettings();
     setDiagnosticsEnabled(settings->getBoolValue("diagnosticsEnabled", true));
+    hostProcessor.setMonoInputs(settings->getBoolValue("monoInputs", false));
     auto storage = std::make_shared<lightHost::DiskSessionStorage>(settings->getFile());
     const auto recovered = lightHost::SessionStore::recover(*storage);
     if (recovered.document)
@@ -887,6 +888,13 @@ void AudioEngine::setDiagnosticsEnabled(bool enabled)
     if (enabled) startTimer(diagnosticsTimerId, 30000);
     else stopTimer(diagnosticsTimerId);
     getAppProperties().getUserSettings()->setValue("diagnosticsEnabled", enabled);
+    markSettingsDirty();
+}
+
+void AudioEngine::setMonoInputs(bool enabled)
+{
+    if (hostProcessor.setMonoInputs(enabled)) ++chainVersion;
+    getAppProperties().getUserSettings()->setValue("monoInputs", enabled);
     markSettingsDirty();
 }
 

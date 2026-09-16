@@ -17,6 +17,8 @@ The input and output channel sections list the channels exposed by the opened de
 
 Channel masks are saved for the combination of backend, input device, and output device. Returning to the same configuration restores its previous channel choices when possible.
 
+Input channels are listed as stereo pairs by default. Turn on **Separate mono inputs** in the input channel card to list each input channel on its own, for example a microphone on input 1 and an instrument on input 2. In this mode the enabled inputs are summed at unity gain into one mono signal, which is sent to every channel of the chain, so a single source is heard centered on all outputs instead of on one side. Input meters still show each device channel individually. The option is a host preference that applies to every device and is kept across restarts.
+
 ## Sample rate and buffer size
 
 The available sample rates and buffer sizes come from the active driver. Changing either value rebuilds the device setup and prepares the running plugin chain for the new stream configuration.

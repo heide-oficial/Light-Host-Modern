@@ -473,14 +473,15 @@ namespace
     std::vector<ChannelRowData> groupedChannelRows(std::string const& backend,
         std::vector<std::string> const& labels,
         std::vector<bool> const& activeStates,
-        bool input)
+        bool input,
+        bool paired = true)
     {
         std::vector<ChannelRowData> rows;
-        for (int i = 0; i < (int) labels.size(); i += 2)
+        for (int i = 0; i < (int) labels.size(); i += paired ? 2 : 1)
         {
             ChannelRowData row;
             row.startIndex = i;
-            row.endIndex = (std::min)(i + 1, (int) labels.size() - 1);
+            row.endIndex = paired ? (std::min)(i + 1, (int) labels.size() - 1) : i;
 
             const auto first = labels[(size_t) i];
             const auto second = row.endIndex > i ? labels[(size_t) row.endIndex] : std::string();
@@ -1434,6 +1435,9 @@ namespace winrt::LightHostWinUI::implementation
             styleButton(InputChannelsToggleAllButton());
             styleButton(OutputChannelsToggleAllButton());
             InputChannelsToggleAllButton().Click({ this, &MainWindow::InputChannelsToggleAll_Click });
+            MonoInputsSwitch().Toggled({ this, &MainWindow::MonoInputsSwitch_Toggled });
+            ToolTipService::SetToolTip(MonoInputsSwitch(), box_value(localization.text("audio.monoInputsDescription",
+                L"List each input channel on its own and mix the enabled inputs into one centered mono signal for the plugin chain.")));
             OutputChannelsToggleAllButton().Click({ this, &MainWindow::OutputChannelsToggleAll_Click });
             AudioBackendBox().SelectionChanged({ this, &MainWindow::AudioBackendBox_SelectionChanged });
             InputBox().SelectionChanged({ this, &MainWindow::InputBox_SelectionChanged });
@@ -1991,6 +1995,26 @@ namespace winrt::LightHostWinUI::implementation
             command == "set-input-channel", first, last, isChecked(box)))); }
         catch (...) { showNotification(localization.text("audio.selectionFailed", L"Could not apply this audio selection. Refresh the device list and try again.").c_str()); }
 
+    }
+
+    winrt::fire_and_forget MainWindow::MonoInputsSwitch_Toggled(IInspectable, RoutedEventArgs)
+    {
+        auto lifetime = get_strong();
+        if (syncingHostControls || monoInputsChangePending || windowClosing) co_return;
+        const auto toggle = MonoInputsSwitch();
+        const bool enabled = toggle.IsOn();
+        if (enabled == monoInputs) co_return;
+        monoInputsChangePending = true;
+        toggle.IsEnabled(false);
+        co_await sendCommand(std::string("set-mono-inputs:") + (enabled ? "1" : "0"));
+        monoInputsChangePending = false;
+        if (windowClosing || !Pages().AudioLoaded()) co_return;
+        // The snapshot refresh inside sendCommand may have been skipped; restore the host's value.
+        const bool wasSyncing = syncingHostControls;
+        syncingHostControls = true;
+        toggle.IsOn(monoInputs);
+        toggle.IsEnabled(true);
+        syncingHostControls = wasSyncing;
     }
 
     winrt::fire_and_forget MainWindow::InputChannelsToggleAll_Click(IInspectable, RoutedEventArgs)
@@ -3487,7 +3511,13 @@ namespace winrt::LightHostWinUI::implementation
         }
 
         const auto groupedOutputChannels = groupedChannelRows(backend, outputChannelNames, activeOutputChannels, false);
-        const auto groupedInputChannels = groupedChannelRows(backend, inputChannelNames, activeInputChannels, true);
+        monoInputs = extractBool(json, "monoInputs", false);
+        const auto groupedInputChannels = groupedChannelRows(backend, inputChannelNames, activeInputChannels, true, !monoInputs);
+        if (Pages().AudioLoaded())
+        {
+            MonoInputsSwitch().IsOn(monoInputs);
+            MonoInputsSwitch().IsEnabled(!monoInputsChangePending);
+        }
         currentOutputChannelRows = groupedOutputChannels;
         currentInputChannelRows = groupedInputChannels;
         if (Pages().AudioLoaded())

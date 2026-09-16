@@ -130,6 +130,7 @@ RealtimeHostProcessor::ScopedSuspension::~ScopedSuspension()
 void RealtimeHostProcessor::prepareBuffers()
 {
     preparedHostChannels = jlimit(1, maxScratchChannels, jmax(getTotalNumInputChannels(), getTotalNumOutputChannels()));
+    preparedInputChannels = jlimit(0, preparedHostChannels, getTotalNumInputChannels());
     scratchBuffer.setSize(maxScratchChannels, currentBlockSize, false, false, true);
     // JUCE reallocates channel-pointer storage when a view grows beyond its current
     // channel count. Keep one fixed-count view per layout, including 32+ channels.
@@ -289,6 +290,8 @@ void RealtimeHostProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer&
     lastInputLevel.store(collect ? inputMeters.process(buffer.getArrayOfReadPointers(), channels, buffer.getNumSamples())
                                 : buffer.getMagnitude(0, buffer.getNumSamples()), std::memory_order_relaxed);
     if (collect) inputMidiEvents.fetch_add(static_cast<uint64>(midiMessages.getNumEvents()), std::memory_order_relaxed);
+    // Input meters above keep per-channel levels; the chain and its dry paths see the fold.
+    if (monoInputs.load(std::memory_order_relaxed)) foldInputsToMono(buffer);
     auto* const snapshot = realtimeSnapshot.load(std::memory_order_acquire);
     if (resumeFade.exchange(false)) resumeGain = 0.0f;
     const int destinationCapacity = &midiMessages == preparedMidiDestination ? midiCapacity : jmin(midiCapacity, midiMessages.data.size());
@@ -331,6 +334,20 @@ void RealtimeHostProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer&
         processedBlocks.fetch_add(1, std::memory_order_relaxed);
         processedSamples.fetch_add(static_cast<uint64>(buffer.getNumSamples()), std::memory_order_relaxed);
     }
+}
+
+void RealtimeHostProcessor::foldInputsToMono(AudioBuffer<float>& buffer) const noexcept
+{
+    // Device inputs occupy the leading channels; the remainder is silent until
+    // processed. Sum at unity so a single source keeps its level on every side.
+    const int channels = buffer.getNumChannels(), samples = buffer.getNumSamples();
+    const int inputs = jmin(preparedInputChannels, channels);
+    if (inputs < 1 || channels < 2 || samples <= 0) return;
+    auto* const mono = buffer.getWritePointer(0);
+    for (int channel = 1; channel < inputs; ++channel)
+        FloatVectorOperations::add(mono, buffer.getReadPointer(channel), samples);
+    for (int channel = 1; channel < channels; ++channel)
+        FloatVectorOperations::copy(buffer.getWritePointer(channel), mono, samples);
 }
 
 void RealtimeHostProcessor::setDiagnosticsEnabled(bool enabled)

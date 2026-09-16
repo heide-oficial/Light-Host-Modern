@@ -120,6 +120,8 @@
   "audio.outputChannels": "Output channels",
   "audio.checkAll": "Check all",
   "audio.uncheckAll": "Uncheck all",
+  "audio.monoInputs": "Separate mono inputs",
+  "audio.monoInputsDescription": "List each input channel on its own and mix the enabled inputs into one centered mono signal for the plugin chain.",
   "audio.sampleRate": "Sample rate",
   "audio.bufferSize": "Buffer size",
   "plugins.running": "Running",

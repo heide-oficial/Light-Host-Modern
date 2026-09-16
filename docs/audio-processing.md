@@ -21,12 +21,13 @@ Old snapshots are retired and collected outside the callback. Compatible plugin 
 For every audio block:
 
 1. The input peak is calculated.
-2. Channel data is adapted to the scratch buffer and chain requirements.
-3. Each slot is processed in list order.
-4. Bypassed slots pass audio through their compensation path.
-5. Failed slots are disabled for later blocks.
-6. The result is copied to the configured output channels.
-7. The output peak is calculated.
+2. When **Separate mono inputs** is on, the active input channels are summed and copied to every buffer channel.
+3. Channel data is adapted to the scratch buffer and chain requirements.
+4. Each slot is processed in list order.
+5. Bypassed slots pass audio through their compensation path.
+6. Failed slots are disabled for later blocks.
+7. The result is copied to the configured output channels.
+8. The output peak is calculated.
 
 The empty-chain path still routes compatible inputs to outputs instead of producing silence.
 

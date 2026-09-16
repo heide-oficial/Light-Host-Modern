@@ -782,6 +782,7 @@ String HostIpcServer::dispatchRequest(const lightHost::ipc::Request& request)
 
     if (command == "set-global-mute") { engine.setGlobalMuted(static_cast<bool>(args[0])); return commandOk(); }
     if (command == "set-global-bypass") { engine.setGlobalBypassed(static_cast<bool>(args[0])); return commandOk(); }
+    if (command == "set-mono-inputs") { engine.setMonoInputs(static_cast<bool>(args[0])); return commandOk(); }
 
 	if (command == "toggle-bypass")
 	{
@@ -1376,6 +1377,7 @@ String HostIpcServer::buildSnapshot()
 		"\"activePluginCount\":" + String((int) activePlugins.size()) + ","
 		"\"globalMuted\":" + String(engine.isGlobalMuted() ? "true" : "false") + ","
         "\"globalBypassed\":" + String(engine.isGlobalBypassed() ? "true" : "false") + ","
+        "\"monoInputs\":" + String(engine.isMonoInputs() ? "true" : "false") + ","
         "\"chainVersion\":" + String((int64) engine.getChainVersion()) + ","
 		"\"pluginDbVersion\":" + String((int64) engine.getPluginDatabaseVersion()) + ","
 		"\"audioConfigVersion\":" + String((int64) engine.getAudioConfigVersion()) + ","

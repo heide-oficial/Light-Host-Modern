@@ -117,6 +117,8 @@
   "audio.outputChannels": "Canais de saída",
   "audio.checkAll": "Marcar todos",
   "audio.uncheckAll": "Desmarcar todos",
+  "audio.monoInputs": "Entradas mono separadas",
+  "audio.monoInputsDescription": "Lista cada canal de entrada separadamente e mistura as entradas ativas em um único sinal mono centralizado para a cadeia de plugins.",
   "audio.sampleRate": "Taxa de amostragem",
   "audio.bufferSize": "Tamanho do buffer",
   "plugins.running": "Em execução",

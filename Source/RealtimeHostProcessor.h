@@ -114,6 +114,14 @@ public:
 	bool setGlobalBypassed(bool value) { return globalControls.setBypassed(value); }
 	bool isGlobalMuted() const { return globalControls.isMuted(); }
 	bool isGlobalBypassed() const { return globalControls.isBypassed(); }
+	// Folds every active input channel into one centered mono signal before the chain.
+	bool setMonoInputs(bool value) noexcept
+	{
+		if (monoInputs.exchange(value) == value) return false;
+		resumeFade.store(true);
+		return true;
+	}
+	bool isMonoInputs() const noexcept { return monoInputs.load(); }
 	lightHost::MeterSnapshot getInputMeters() const noexcept { return inputMeters.snapshot(); }
 	lightHost::MeterSnapshot getOutputMeters() const noexcept { return outputMeters.snapshot(); }
 	// Read by the meter transport without touching the driver or controller.
@@ -165,6 +173,7 @@ private:
 	void prepareSnapshot(ChainSnapshot& snapshot);
 	void prepareBuffers();
 	void processSlot(PluginSlot& slot, AudioBuffer<float>& buffer, MidiBuffer& midiMessages);
+	void foldInputsToMono(AudioBuffer<float>& buffer) const noexcept;
 
 	mutable std::shared_ptr<ChainSnapshot> activeSnapshot;
 	std::atomic<ChainSnapshot*> realtimeSnapshot { nullptr };
@@ -189,7 +198,9 @@ private:
 	std::atomic<bool> processingSuspended { false };
 	std::atomic<unsigned> callbacksInFlight { 0 };
 	std::atomic<bool> resumeFade { false };
+	std::atomic<bool> monoInputs { false };
 	float resumeGain = 1.0f;
+	int preparedInputChannels = 2;
 	GlobalAudioControls globalControls;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RealtimeHostProcessor)
