@@ -8,6 +8,7 @@ static void require(bool condition, const char* message)
     if (!condition) throw std::runtime_error(message);
 }
 #include "WinUiStateScenarios.h"
+#include "UiCoordinationScenarios.h"
 int main()
 {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
@@ -77,6 +78,8 @@ int main()
         worker.get();
         require(requestAsync(state, name, "snapshot").get().empty(), "closed client rejects queued work");
         runStateScenarios();
+        runUiCoordinationScenarios();
+        runQueuedDeadlineScenario();
         std::cout << "WinUI JSON, bounded FIFO, and paged state transport regressions passed\n";
     }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

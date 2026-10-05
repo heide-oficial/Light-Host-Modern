@@ -181,7 +181,7 @@ void PluginScanController::run()
     for (const auto& file : cacheDirectory.findChildFiles(File::findFiles, false, "*.xml"))
     {
         if (stopping.load()) return;
-        const auto cached = file.getSize() <= lightHostModern::scan::maximumResponseBytes ? XmlDocument::parse(file) : nullptr;
+        const auto cached = lightHostModern::scan::parseScannerXml(file);
         if (!cached || cached->getIntAttribute("cacheVersion") != lightHostModern::scan::metadataCacheVersion) continue;
         for (const auto* item : cached->getChildIterator())
             if (item->hasTagName("ENTRY") && item->getStringAttribute("verifiedMetadata") == "verified")
@@ -243,7 +243,7 @@ void PluginScanController::scan(const Work& work)
         {
             const auto file = batchFile(enumeration.response, enumeration.batches);
             if (!file.existsAsFile()) break; // Only the local per-operation directory is read by the host.
-            auto batch = file.getSize() <= maximumResponseBytes ? XmlDocument::parse(file) : nullptr;
+            auto batch = parseScannerXml(file);
             if (!batch || !batch->hasTagName("BATCH") || batch->getStringAttribute("id") != enumerationId
                 || batch->getIntAttribute("version") != scannerProtocolVersion || batch->getIntAttribute("sequence") != enumeration.batches
                 || batch->getNumChildElements() > batchItems) throw std::runtime_error("invalid_enumeration_result");
@@ -299,7 +299,7 @@ void PluginScanController::scan(const Work& work)
     auto enumerationError = workerFailure(enumerated);
     if (enumerationError.isEmpty())
     {
-        const auto final = enumeration.response.getSize() <= maximumResponseBytes ? XmlDocument::parse(enumeration.response) : nullptr;
+        const auto final = parseScannerXml(enumeration.response);
         if (!final || !final->hasTagName("SCAN") || final->getStringAttribute("id") != enumerationId
             || final->getIntAttribute("version") != scannerProtocolVersion || final->getStringAttribute("mode") != "enumerate"
             || final->getIntAttribute("batches", -1) != enumeration.batches) enumerationError = "invalid_result";
@@ -382,7 +382,7 @@ void PluginScanController::scan(const Work& work)
                 if (error == "cancelled") break;
                 if (error.isEmpty())
                 {
-                    response = files.response.getSize() <= maximumResponseBytes ? XmlDocument::parse(files.response) : nullptr;
+                    response = parseScannerXml(files.response);
                     if (!validResponse(response.get()) || response->getStringAttribute("id") != id) { error = "invalid_result"; response.reset(); }
                 }
             }
@@ -410,7 +410,7 @@ void PluginScanController::scan(const Work& work)
                     lightHostModern::verbose::log("scan.class","path="+candidate.path.toStdString()+" class="+key.toStdString()+" exit="+std::to_string(result.code)+" error="+classError.toStdString());
                     if(classError=="cancelled")break;
                     if(classError.isEmpty()){
-                        auto answer=child.response.getSize()<=maximumResponseBytes?XmlDocument::parse(child.response):nullptr;
+                        auto answer=parseScannerXml(child.response);
                         if(answer&&validResponse(answer.get())&&answer->getStringAttribute("id")==id&&answer->getNumChildElements()==1
                             &&answer->getFirstChildElement()->getStringAttribute("knownId")==key){resultEntry=std::make_unique<XmlElement>(*answer->getFirstChildElement());fingerprintVerified=answer->getBoolAttribute("fingerprintVerified");}
                         else classError="invalid_result";

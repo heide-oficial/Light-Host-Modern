@@ -1,5 +1,6 @@
 #pragma once
 #include "IpcSchema.h"
+#include "BoundedInput.h"
 #include <juce_core/juce_core.h>
 #include <cmath>
 #include <limits>
@@ -24,7 +25,7 @@ inline Request parseRequest(const juce::String& json)
     auto fail = [&](const char* code, const char* message) {
         request.errorCode = code; request.errorMessage = message; return request;
     };
-    if (juce::JSON::parse(json, value).failed() || !value.isObject())
+    if (!boundedJson(json) || juce::JSON::parse(json, value).failed() || !value.isObject())
         return fail("invalid_request", "Expected a versioned JSON request; update both host and UI");
     const auto id = value["id"];
     if (value["hostSession"].isString()) request.hostSession = value["hostSession"].toString();

@@ -3,18 +3,23 @@
 #include <winrt/Windows.Foundation.Collections.h>
 #include <string>
 #include <vector>
+#include "../../Source/JsonLimits.h"
 
 namespace lightHostModern::ipc
 {
 using namespace winrt::Windows::Data::Json;
 
-inline JsonObject parseObject(const std::string& text)
+inline JsonObject parseObject(const std::string& text, size_t maximumBytes = maximumMessageJsonBytes)
 {
+    // Check even on cache hits: a document admitted as a logical snapshot must
+    // not subsequently bypass the smaller limit of a wire/external-data reader.
+    if (text.size() > maximumBytes) return JsonObject();
     // UI parsing occurs on one apartment. Keep only the most recent document.
     thread_local std::string cachedText;
     thread_local JsonObject cached{nullptr};
     if (!cached || cachedText != text)
     {
+        if(!lightHostModern::boundedJsonStructure(text))return JsonObject();
         JsonObject object;
         if (!JsonObject::TryParse(winrt::to_hstring(text), object)) return JsonObject();
         cachedText = text;
@@ -23,9 +28,14 @@ inline JsonObject parseObject(const std::string& text)
     return cached;
 }
 
+inline JsonObject parseSnapshotObject(const std::string& text)
+{ return parseObject(text, maximumSnapshotJsonBytes); }
+
 inline IJsonValue field(const std::string& text, const std::string& key)
 {
-    auto object = parseObject(text);
+    // Field access is also used by presenters on fully reassembled host state.
+    // Transport frames and external documents are checked separately at ingress.
+    auto object = parseSnapshotObject(text);
     const auto name = winrt::to_hstring(key);
     if (object.HasKey(name)) return object.GetNamedValue(name);
     // These are the explicit sections of a host snapshot, never plugin entries.

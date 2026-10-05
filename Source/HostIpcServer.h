@@ -10,15 +10,18 @@
 #include <atomic>
 #include <functional>
 #include <thread>
+#include <deque>
 
 class HostIpcServer : private Timer
 {
 public:
 	explicit HostIpcServer(AudioEngine& engineToExpose);
-	HostIpcServer(AudioEngine& engineToExpose, std::function<void()> trayIconChangedCallback);
+	HostIpcServer(AudioEngine& engineToExpose, std::function<void()> trayIconChangedCallback, std::function<bool(const String&)> releaseNotificationCallback = {});
 	~HostIpcServer();
 
 	String getPipeName() const { return pipeName; }
+    void requestShutdown();
+    void requestLocal(const String&, const Array<var>&, std::function<void(const var&)> completed = {});
 
 private:
 	void run(bool metersOnly = false);
@@ -27,6 +30,10 @@ private:
 	void timerCallback() override;
 	var revisionsJson(const lightHostModern::ipc::StateRevisions&) const;
 	String acceptRequest(const String& json);
+    void drainMutations();
+    std::deque<String> pendingMutations;
+    lightHostModern::IsolatedCaptureBarrier captureBarrier;
+    std::map<std::string, std::function<void(const var&)>> localCompletions;
 	String operationResponse(const lightHostModern::ipc::Request&, const lightHostModern::ipc::OperationRegistry::Record&);
 	String withEnvelope(const String& json, const String& id) const;
 	String processRequestOnMessageThread(const String& request);
@@ -48,6 +55,7 @@ private:
 
 	AudioEngine& engine;
 	std::function<void()> trayIconChanged;
+    std::function<bool(const String&)> releaseNotification;
 	String pipeName;
 	const String hostSession = Uuid().toString();
 	lightHostModern::ipc::OperationRegistry operations;
@@ -55,6 +63,7 @@ private:
 	lightHostModern::ipc::StateSnapshots snapshots;
 	lightHostModern::ipc::StateRevisions publishedRevisions{};
 	std::atomic<uint64_t> operationRevision{0};
+    uint64_t lastSessionStatusSerial = 0;
 	std::atomic<uint64_t> telemetryRequests{0}, snapshotRequests{0}, heartbeatRequests{0}, eventRequests{0};
 	std::atomic<uint64_t> meterRequests{0};
 	std::pair<String, uint64_t> scanRevision;

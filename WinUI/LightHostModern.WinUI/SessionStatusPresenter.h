@@ -1,5 +1,7 @@
 #pragma once
+#include "HoverHelp.h"
 #include "HostJson.h"
+#include "VisualPreferences.h"
 #include "Localization.h"
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
@@ -25,7 +27,9 @@ public:
         const bool pending = ipc::extractBool(state, "pending");
         const bool readOnlyRecovery = !ipc::extractBool(state, "writable") && !recovery.empty();
         const bool saveFailed = !error.empty() && !readOnlyRecovery;
-        pendingText.Text(catalog.text("session.pending", L"Saving session…"));
+        pendingText.Text(L"\xE74E");
+        lightHostModern::ui::HoverHelp::SetToolTip(pendingText,box_value(catalog.text("session.pending", L"Saving session…")));
+        Automation::AutomationProperties::SetName(pendingText,catalog.text("session.pending", L"Saving session…"));
         pendingText.Visibility(pending && error.empty() ? Visibility::Visible : Visibility::Collapsed);
         retry.Content(box_value(catalog.text("session.retry", L"Try saving again")));
         retry.Visibility(saveFailed ? Visibility::Visible : Visibility::Collapsed);
@@ -35,7 +39,7 @@ public:
             saveFailed ? L"Existing files have been kept. Free storage or restore access, then try again."
             : !recovery.empty() ? L"Recoverable data and the original files have been kept. Some information may be unavailable."
             : L"The last valid states have been kept for these plugins."));
-        ToolTipService::SetToolTip(banner, box_value(to_hstring(error.empty() ? recovery : error)));
+        lightHostModern::ui::HoverHelp::SetToolTip(banner, box_value(to_hstring(error.empty() ? recovery : error)));
         banner.Severity(saveFailed ? InfoBarSeverity::Error : InfoBarSeverity::Warning);
         const auto key = error + "\n" + recovery + (captureFailed ? "\ncapture" : "");
         if (key != previous)

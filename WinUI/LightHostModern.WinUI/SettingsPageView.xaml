@@ -5,7 +5,7 @@
             <Button x:Name="UpdateResultLog" AutomationProperties.AutomationId="ViewUpdateLog" Content="View update log" />
         </InfoBar>
         <InfoBar x:Name="UpdateAvailableCard" AutomationProperties.AutomationId="UpdateAvailableInfoBar" IsOpen="True" IsClosable="False" Severity="Informational" Visibility="Collapsed">
-            <Grid ColumnSpacing="24">
+            <Grid ColumnSpacing="24" Margin="0,14,12,14">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -23,8 +23,19 @@
                 </StackPanel>
             </Grid>
         </InfoBar>
+        <StackPanel x:Name="OperatingSettingsHost" />
         <StackPanel Spacing="8">
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="General" />
+            <Border Style="{StaticResource AppCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE946;" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"><TextBlock Text="Enable tooltips when hovering options" Style="{StaticResource BodyStrongTextBlockStyle}"/><TextBlock Text="Show short explanations when hovering app options and Diagnostics values." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock x:Name="HoverTooltipsState" Text="On" VerticalAlignment="Center"/><ToggleSwitch x:Name="HoverTooltipsSwitch" AutomationProperties.AutomationId="HoverTooltipsSwitch" Style="{StaticResource CompactToggleSwitchStyle}"/></StackPanel>
+            </Grid></Border>
+            <Border Style="{StaticResource AppCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE945;" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"><TextBlock x:Name="PerformanceModeTitle" Text="Performance mode" Style="{StaticResource BodyStrongTextBlockStyle}"/><TextBlock x:Name="PerformanceModeDescription" Text="Turn off transparent materials, edge fades and decorative animations. Audio processing and useful status indicators stay active. Your visual preferences are restored when this is off." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock x:Name="PerformanceModeState" Text="On" VerticalAlignment="Center"/><ToggleSwitch x:Name="PerformanceModeSwitch" AutomationProperties.AutomationId="PerformanceModeSwitch" Style="{StaticResource CompactToggleSwitchStyle}"/></StackPanel>
+            </Grid></Border>
             <Border Style="{StaticResource AppCardStyle}">
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
@@ -91,31 +102,6 @@
                         <TextBlock x:Name="DiagnosticsStateText" VerticalAlignment="Center" Text="On" />
                         <ToggleSwitch x:Name="DiagnosticsEnabledSwitch" AutomationProperties.AutomationId="DiagnosticsEnabled" AutomationProperties.Name="Enable diagnostics" Style="{StaticResource CompactToggleSwitchStyle}" />
                     </StackPanel>
-                </Grid>
-            </Border>
-        </StackPanel>
-        <StackPanel Spacing="8" AutomationProperties.AutomationId="PluginDatabaseSettings">
-            <TextBlock x:Name="PluginDatabaseTitle" Style="{StaticResource SubtitleTextBlockStyle}" Text="Plugin database" AutomationProperties.HeadingLevel="Level2" />
-            <Border Style="{StaticResource AppCardStyle}">
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE90F;" VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock x:Name="RemoveMissingTitle" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Remove missing plugins" />
-                        <TextBlock x:Name="RemoveMissingDescription" Style="{StaticResource CaptionTextBlockStyle}" Text="Remove database entries whose plugin files are no longer available." TextWrapping="Wrap" />
-                    </StackPanel>
-                    <Button x:Name="RemoveMissingPluginsButton" Grid.Column="2" AutomationProperties.AutomationId="RemoveMissingPlugins" Content="Remove missing" VerticalAlignment="Center" IsEnabled="False" />
-                </Grid>
-            </Border>
-            <Border Style="{StaticResource AppCardStyle}">
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE74D;" VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock x:Name="ClearDatabaseTitle" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Clear plugin database" />
-                        <TextBlock x:Name="ClearDatabaseDescription" Style="{StaticResource CaptionTextBlockStyle}" Text="Clear all installed entries and the running chain. You will be asked to confirm." TextWrapping="Wrap" />
-                    </StackPanel>
-                    <Button x:Name="ClearPluginDatabaseButton" Grid.Column="2" AutomationProperties.AutomationId="ClearPluginDatabase" Content="Clear database" VerticalAlignment="Center" IsEnabled="False" />
                 </Grid>
             </Border>
         </StackPanel>
@@ -217,6 +203,29 @@
             <Button x:Name="ChooseAudioDeviceButton" Visibility="Collapsed" Content="Choose device" />
         </StackPanel>
         <StackPanel Spacing="8">
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Notifications" />
+            <Border Style="{StaticResource AppCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE946;" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"><TextBlock x:Name="ActionNotificationsTitle" Text="Action notifications" Style="{StaticResource BodyStrongTextBlockStyle}"/><TextBlock x:Name="ActionNotificationsDescription" Text="Show brief confirmations in the lower-right corner for completed actions." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock x:Name="ActionNotificationsState" Text="On" VerticalAlignment="Center"/><ToggleSwitch x:Name="ActionNotificationsSwitch" AutomationProperties.AutomationId="ActionNotificationsSwitch" Style="{StaticResource CompactToggleSwitchStyle}"/></StackPanel>
+            </Grid></Border>
+            <Border Style="{StaticResource AppCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE7BA;" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"><TextBlock Text="Warning and error notifications" Style="{StaticResource BodyStrongTextBlockStyle}"/><TextBlock Text="Show warnings and errors in the lower-right corner of the app." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock x:Name="WarningNotificationsState" Text="On" VerticalAlignment="Center"/><ToggleSwitch x:Name="WarningNotificationsSwitch" AutomationProperties.AutomationId="WarningNotificationsSwitch" Style="{StaticResource CompactToggleSwitchStyle}"/></StackPanel>
+            </Grid></Border>
+            <Border Style="{StaticResource AppCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE946;" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"><TextBlock Text="New release notifications on app" Style="{StaticResource BodyStrongTextBlockStyle}"/><TextBlock Text="Show an update notice in the lower-right corner whenever you reopen the app and a newer release is available." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock x:Name="AppReleaseNotificationsState" Text="On" VerticalAlignment="Center"/><ToggleSwitch x:Name="AppReleaseNotificationsSwitch" AutomationProperties.AutomationId="AppReleaseNotificationsSwitch" Style="{StaticResource CompactToggleSwitchStyle}"/></StackPanel>
+            </Grid></Border>
+            <Border Style="{StaticResource AppCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE7F4;" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"><TextBlock Text="New release notifications on Windows" Style="{StaticResource BodyStrongTextBlockStyle}"/><TextBlock Text="Show a Windows notification when a new release is available. Each release is announced once." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock x:Name="WindowsReleaseNotificationsState" Text="On" VerticalAlignment="Center"/><ToggleSwitch x:Name="WindowsReleaseNotificationsSwitch" AutomationProperties.AutomationId="WindowsReleaseNotificationsSwitch" Style="{StaticResource CompactToggleSwitchStyle}"/></StackPanel>
+            </Grid></Border>
+        </StackPanel>
+        <StackPanel x:Name="AppearanceSection" Spacing="8">
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Appearance" />
             <Border Style="{StaticResource AppCardStyle}">
                 <Grid ColumnSpacing="16">
@@ -251,6 +260,21 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="240" />
                     </Grid.ColumnDefinitions>
+                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Window material" />
+                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Choose the native Windows 11 backdrop used behind the app content." TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel x:Name="BackdropModeBoxHost" Grid.Column="2" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource AppCardStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="240" />
+                    </Grid.ColumnDefinitions>
                     <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="" />
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                         <TextBlock x:Name="LayoutModeTitleText" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Layout mode" />
@@ -270,21 +294,7 @@
                     <StackPanel x:Name="SidebarOnOpenBoxHost" Grid.Column="2" VerticalAlignment="Center" />
                 </Grid>
             </Border>
-            <Border Style="{StaticResource AppCardStyle}">
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="32" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="240" />
-                    </Grid.ColumnDefinitions>
-                    <FontIcon VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" Glyph="" />
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Window material" />
-                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Choose the native Windows 11 backdrop used behind the app content." TextWrapping="Wrap" />
-                    </StackPanel>
-                    <StackPanel x:Name="BackdropModeBoxHost" Grid.Column="2" />
-                </Grid>
-            </Border>
+
             <Border Style="{StaticResource AppCardStyle}">
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
@@ -300,6 +310,23 @@
                     <StackPanel x:Name="IconModeBoxHost" Grid.Column="2" />
                 </Grid>
             </Border>
+            <Border Style="{StaticResource AppCardStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE76B;" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="Hide collapse/expand sidebar option" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        <TextBlock Text="Hide the sidebar button. The sidebar still opens in the state selected above." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock x:Name="HideSidebarToggleState" Text="Off" VerticalAlignment="Center"/><ToggleSwitch x:Name="HideSidebarToggleSwitch" AutomationProperties.AutomationId="HideSidebarToggleSwitch" Style="{StaticResource CompactToggleSwitchStyle}"/></StackPanel>
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource AppCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE8CB;" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"><TextBlock x:Name="EdgeFadeTitle" Text="Fade scroll edges" Style="{StaticResource BodyStrongTextBlockStyle}"/><TextBlock x:Name="EdgeFadeDescription" Text="Soften the top and bottom edges when more content is available to scroll." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock x:Name="EdgeFadeState" Text="On" VerticalAlignment="Center"/><ToggleSwitch x:Name="EdgeFadeSwitch" AutomationProperties.AutomationId="EdgeFadeSwitch" Style="{StaticResource CompactToggleSwitchStyle}"/></StackPanel>
+            </Grid></Border>
+
             <Border Style="{StaticResource AppCardStyle}">
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
@@ -337,6 +364,38 @@
                 </Grid>
             </Border>
         </StackPanel>
+        <StackPanel Spacing="8" AutomationProperties.AutomationId="DangerZoneSection">
+            <TextBlock x:Name="PluginDatabaseTitle" Style="{StaticResource SubtitleTextBlockStyle}" Text="Danger zone" AutomationProperties.HeadingLevel="Level2" />
+            <Border Style="{StaticResource AppCardStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE7BA;" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"><TextBlock Text="Show Danger zone options" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap"/><TextBlock Text="Show cleanup and reset actions for plugins, profiles and app settings. Each action requires confirmation." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock x:Name="DangerOptionsState" Text="Off" VerticalAlignment="Center"/><ToggleSwitch x:Name="ShowDangerOptions" AutomationProperties.AutomationId="ShowDangerOptions" Style="{StaticResource CompactToggleSwitchStyle}"/></StackPanel>
+            </Grid></Border>
+            <StackPanel x:Name="DangerZone" Spacing="8" AutomationProperties.AutomationId="DangerZone" Visibility="Collapsed">
+            <Border Style="{StaticResource AppCardStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE7BA;" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock x:Name="RemoveMissingTitle" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Remove missing plugins" />
+                        <TextBlock x:Name="RemoveMissingDescription" Style="{StaticResource CaptionTextBlockStyle}" Text="Remove database entries whose plugin files are no longer available." TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button x:Name="RemoveMissingPluginsButton" Grid.Column="2" AutomationProperties.AutomationId="RemoveMissingPlugins" Content="Remove missing" VerticalAlignment="Center" IsEnabled="False" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource AppCardStyle}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="32" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE7BA;" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock x:Name="ClearDatabaseTitle" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Clear plugin database" />
+                        <TextBlock x:Name="ClearDatabaseDescription" Style="{StaticResource CaptionTextBlockStyle}" Text="Clear all installed entries and the running chain. You will be asked to confirm." TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button x:Name="ClearPluginDatabaseButton" Grid.Column="2" AutomationProperties.AutomationId="ClearPluginDatabase" Content="Clear database" VerticalAlignment="Center" IsEnabled="False" />
+                </Grid>
+            </Border>
+        </StackPanel>
+        </StackPanel>
         <StackPanel Spacing="8">
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="About" />
             <Border Style="{StaticResource AppCardStyle}">
@@ -352,7 +411,7 @@
                     <StackPanel VerticalAlignment="Center" Spacing="2">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="LightHostModern" />
-                            <TextBlock VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" Text="v1.4.1" />
+                            <TextBlock VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" Text="v2.0.0" />
                         </StackPanel>
                         <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="A Windows-focused fork of Light Host, updated and modernized by Matheus Heidemann." TextWrapping="Wrap" />
                     </StackPanel>

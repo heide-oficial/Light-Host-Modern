@@ -45,6 +45,17 @@ try {
     if ($snapshot.activePlugins.Count -ne 2 -or $snapshot.activePlugins[0].instanceId -ne $first -or $snapshot.activePlugins[1].instanceId -ne $second) { throw 'Migration collapsed or reordered duplicates.' }
     if ($snapshot.diagnostics.sampleRate -ne $null -or $snapshot.activePlugins[0].loading -ne 'missing') { throw 'Missing fixture was not preserved without audio.' }
     if ($snapshot.diagnostics.inputLatency -ne $null -or $snapshot.diagnostics.outputLatency -ne $null) { throw 'Unavailable driver values must be null.' }
+    Invoke-Mutation 'operating-command' @(@{action='card-color';id=$first;color='#801234AB'}) | Out-Null
+    $colored = Send-HostRequest $info.pipe 'snapshot'
+    if ($colored.activePlugins[0].cardColor -ne '#801234AB' -or $colored.activePlugins[1].cardColor -ne '') { throw 'Card color changed the wrong instance.' }
+    Invoke-Mutation 'operating-command' @(@{action='create';name='Color persistence';includeAudio=$false}) | Out-Null
+    $createdState = Send-HostRequest $info.pipe 'operating-state'
+    $createdProfile = $createdState.profiles | Where-Object id -eq $createdState.activeProfile
+    if (!$createdProfile -or $createdProfile.hasUpdates) { throw 'New profile must show Created.' }
+    Start-Sleep -Milliseconds 30
+    Invoke-Mutation 'operating-command' @(@{action='overwrite';id=$createdProfile.id}) | Out-Null
+    $updatedState = Send-HostRequest $info.pipe 'operating-state'
+    if (!(($updatedState.profiles | Where-Object id -eq $createdProfile.id).hasUpdates)) { throw 'Overwritten profile must show Last updated.' }
     $unicodeName = 'Voz: ' + [char]0x65e5 + [char]0x672c + [char]0x8a9e
     Invoke-Mutation 'rename-plugin' @($first, ('  ' + $unicodeName + '  ')) | Out-Null
     $renamed = Send-HostRequest -PipeName $info.pipe -Command 'snapshot'
@@ -81,6 +92,7 @@ try {
     $snapshot = Send-HostRequest -PipeName $info.pipe -Command 'snapshot'
     if ($snapshot.hostSession -eq $session -or $snapshot.activePlugins.Count -ne 2 -or $snapshot.activePlugins[1].instanceId -ne $third) { throw 'Restart repeated migration or changed UUIDs.' }
     if ($snapshot.globalMuted -or $snapshot.globalBypassed) { throw 'Runtime global controls leaked into persistence.' }
+    if ($snapshot.activePlugins[1].cardColor -ne '#801234AB') { throw 'Duplicated card color did not survive restart.' }
     $session = $snapshot.hostSession
     Send-HostRequest -PipeName $info.pipe -Command 'quit-host' -Session $session | Out-Null
     if (!$script:hostProcess.WaitForExit(10000)) { throw 'Restarted host did not shut down.' }

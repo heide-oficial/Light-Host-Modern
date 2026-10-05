@@ -1,4 +1,5 @@
 #include "RealtimeHostProcessor.h"
+#include "RoutingRuntime.h"
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -24,7 +25,7 @@ public:
     int largestBlock = 0;
     std::atomic<bool> hold { false }, entered { false };
     std::atomic<int> preparations { 0 };
-    bool failPreparation = false;
+    bool failPreparation = false, invalidOutput = false;
     void fillInPluginDescription(PluginDescription&) const override {}
     const String getName() const override { return "Simulated gain"; }
     void prepareToPlay(double, int) override
@@ -40,6 +41,7 @@ public:
         samples += buffer.getNumSamples();
         largestBlock = jmax(largestBlock, buffer.getNumSamples());
         buffer.applyGain(2.0f);
+        if (invalidOutput) buffer.setSample(0, 0, std::numeric_limits<float>::quiet_NaN());
     }
     bool isBusesLayoutSupported(const BusesLayout&) const override { return true; }
     bool acceptsMidi() const override { return true; }
@@ -100,12 +102,125 @@ public:
     }
 };
 
+#include "PluginBusScenarios.h"
+
+class LatencyQueryPlugin final : public GainPlugin
+{
+public:
+    LatencyQueryPlugin() : GainPlugin(2) { setLatencySamples(17); }
+    int latencyOnPrepare = -1;
+    void prepareToPlay(double rate, int block) override {
+        GainPlugin::prepareToPlay(rate, block);
+        if (latencyOnPrepare >= 0) setLatencySamples(latencyOnPrepare);
+        delay.prepare(2, block, getLatencySamples(), rate);
+    }
+    void processBlock(AudioBuffer<float>& audio, MidiBuffer&) override {
+        delay.capture(audio);
+        for (int channel = 0; channel < 2; ++channel)
+            audio.copyFrom(channel, 0, delay.output(), channel, 0, audio.getNumSamples());
+    }
+private:
+    DryDelay delay;
+};
+
+static void verifyBusQueryLatency()
+{
+    for (const bool graph : {false, true}) for (const bool duringPrepare : {false, true}) {
+        RealtimeHostProcessor host; host.setPlayConfigDetails(2, 2, 48000, 64); host.prepareToPlay(48000, 64);
+        auto snapshot = std::make_shared<ChainSnapshot>();
+        auto slot = std::make_shared<PluginSlot>(PluginDescription{}, std::make_unique<LatencyQueryPlugin>());
+        slot->instanceId = "latency"; snapshot->slots.push_back(slot); snapshot->graphMode = graph;
+        if (graph) {
+            snapshot->graph = lightHostModern::RoutingGraph::empty(2, 2);
+            lightHostModern::RouteNode node; node.id = slot->instanceId; node.kind = "plugin"; node.inputs = node.outputs = 2;
+            snapshot->graph.nodes.push_back(node);
+            snapshot->graph.edges = {{"in", "audio-in", "latency", 0, 0, 2, 2},
+                {"wet", "latency", "audio-out", 0, 0, 1, 1}, {"parallel", "audio-in", "audio-out", 1, 1, 1, 1}};
+        }
+        host.publishSnapshot(snapshot);
+        auto* plugin = static_cast<LatencyQueryPlugin*>(slot->processor.get());
+        if (duringPrepare) plugin->latencyOnPrepare = 97; else plugin->setLatencySamples(97);
+        const auto inspect = [&] {
+            RealtimeHostProcessor::ScopedSuspension pause(host);
+            slot->release(); const auto inventory = lightHostModern::pluginBuses::inventory(*plugin);
+            require(inventory.isObject(), "Bus query failed"); slot->prepare(48000, 64, 2);
+            host.refreshLatencies();
+        };
+        inspect();
+        require(slot->getLatencySamples() == 97 && host.getStats().chainLatencySamples == 97 && !slot->hasPendingLatency(),
+            "Bus inventory consumed latency invalidation before List/Chain plan update");
+        require(plugin->preparations.load() == 2, "Latency reconciliation reprepared the plugin");
+        const auto routing = snapshot->routing;
+        inspect(); require(snapshot->routing == routing, "Unchanged inventory discarded the routing delay history");
+        AudioBuffer<float> audio(2, 64); MidiBuffer midi;
+        for (const int bypass : {0, 1, 2}) {
+            slot->bypassed.store(bypass == 1); host.setGlobalBypassed(bypass == 2);
+            for (int block = 0; block < 12; ++block) { audio.clear(); host.processBlock(audio, midi); }
+            for (int block = 0; block < 3; ++block) {
+                audio.clear(); if (block == 0) { audio.setSample(0, 0, 1); audio.setSample(1, 0, 1); }
+                { lightHostModern::realtimeAudit::Scope audit(lightHostModern::realtimeAudit::Origin::host); host.processBlock(audio, midi); }
+                for (int channel = 0; channel < 2; ++channel) for (int sample = 0; sample < 64; ++sample)
+                    require(std::abs(audio.getSample(channel, sample) - (block * 64 + sample == 97 ? 1.f : 0.f)) < .0001f,
+                        "Bus query misaligned parallel audio or bypass impulse");
+            }
+        }
+    }
+}
+
 int main()
 {
     try
     {
         ScopedJuceInitialiser_GUI juce;
         require(installRealtimeAllocationAudit(), "Release CRT allocation interception was not installed");
+        verifyBusQueryLatency();
+        // Malicious latency and invalid samples must never reach buffers or the device.
+        for (int latency : {-1, std::numeric_limits<int>::max(), 480001}) {
+            DryDelay dry; bool rejected = false;
+            try { dry.prepare(2, 64, latency, 48000); } catch (const std::exception&) { rejected = true; }
+            require(rejected && dry.allocatedSamples() == 0, "Invalid latency allocated a dry buffer");
+        }
+        for (bool graphMode : {false, true}) {
+            auto host = std::make_unique<RealtimeHostProcessor>();
+            host->setPlayConfigDetails(2, 2, 48000, 64); host->prepareToPlay(48000, 64);
+            auto chain = std::make_shared<ChainSnapshot>();
+            auto plugin = std::make_unique<GainPlugin>(2); plugin->invalidOutput = true;
+            auto slot = std::make_shared<PluginSlot>(PluginDescription{}, std::move(plugin)); slot->instanceId = "invalid"; slot->bypassed.store(true);
+            chain->slots.push_back(slot); chain->graphMode = graphMode;
+            if (graphMode) {
+                chain->graph = lightHostModern::RoutingGraph::empty(2, 2);
+                lightHostModern::RouteNode node; node.id = "invalid"; node.kind = "plugin"; node.inputs = node.outputs = 2;
+                chain->graph.nodes.push_back(node);
+                chain->graph.edges = {{"first", "audio-in", "invalid", 0, 0, 2, 2}, {"last", "invalid", "audio-out", 0, 0, 2, 2}};
+            }
+            host->publishSnapshot(chain); AudioBuffer<float> audio(2,64); MidiBuffer midi;
+            for (int block = 0; block < 10; ++block) {
+                for (int c = 0; c < 2; ++c) FloatVectorOperations::fill(audio.getWritePointer(c), .25f, 64);
+                host->processBlock(audio, midi);
+                for (int c = 0; c < 2; ++c) for (int n = 0; n < 64; ++n)
+                    require(std::isfinite(audio.getSample(c,n)), "Invalid plugin sample escaped containment");
+            }
+            require(slot->processFailed.load() && host->getStats().processFailures > 0, "Invalid output must be diagnosed");
+        }
+        {
+            ChainSnapshot snapshot; snapshot.sampleRate = 48000; snapshot.blockSize = 64;
+            snapshot.graph = lightHostModern::RoutingGraph::empty(2,2);
+            for (int n = 0; n < 126; ++n) { lightHostModern::RouteNode node; node.id = "mix" + String(n); node.kind = "mixer"; node.inputs = node.outputs = 2; node.gains = {1}; node.muted = {false}; snapshot.graph.nodes.push_back(node); }
+            const auto runtime = RoutingRuntime::compile(snapshot); size_t midiBytes = 0;
+            for (const auto& node : runtime->nodes) midiBytes += node->midi.data.getAllocatedCapacity();
+            require(midiBytes == 0, "Mixer-only graph allocated unused MIDI buffers");
+        }
+        // Variable mixer inputs sum once; every output pair receives that stereo mix.
+        for(int pairs:{1,5,128}) {
+            ChainSnapshot snapshot;snapshot.sampleRate=48000;snapshot.blockSize=64;snapshot.graph=lightHostModern::RoutingGraph::empty(2,4);
+            lightHostModern::RouteNode mix;mix.id="mix";mix.kind="mixer";mix.inputs=pairs*2;mix.outputs=4;mix.gains.assign(pairs,.5f);mix.muted.assign(pairs,false);snapshot.graph.nodes.push_back(mix);
+            for(int i=0;i<pairs;++i)snapshot.graph.edges.push_back({"in"+String(i),"audio-in","mix",0,i*2,2,2});
+            snapshot.graph.edges.push_back({"out0","mix","audio-out",0,0,2,2});snapshot.graph.edges.push_back({"out1","mix","audio-out",2,2,2,2});
+            auto routing=RoutingRuntime::compile(snapshot);AudioBuffer<float> audio(4,64);audio.clear();
+            FloatVectorOperations::fill(audio.getWritePointer(0),.1f,64);FloatVectorOperations::fill(audio.getWritePointer(1),.2f,64);std::atomic<uint64> failures{0};
+            { lightHostModern::realtimeAudit::Scope audit(lightHostModern::realtimeAudit::Origin::host);routing->process(audio,2,4,failures); }
+            for(int c=0;c<4;++c)for(int sample=0;sample<64;++sample)require(std::abs(audio.getSample(c,sample)-pairs*(c%2?.1f:.05f))<.0001f,"Dynamic mixer output mismatch");
+        }
         // Regression tests for the reviewed mono PR: unity sum, smooth toggle,
         // real stereo, mono plugin routing and dry paths use the same matrix.
         for (int pluginChannels : {0, 1, 2})
@@ -423,6 +538,7 @@ int main()
             diagnosticsHost->setDiagnosticsEnabled(true); process();
             require(diagnosticsHost->getStats().processedBlocks == before.processedBlocks + 1, "diagnostics did not resume");
         }
+        verifyPluginBusChanges();
         std::cout << "Channels, asymmetric buses, bounded MIDI, preserved delay history, lifecycle, diagnostics opt-out and Release allocation audit passed\n";
         return 0;
     }

@@ -42,6 +42,27 @@ int main()
         require(!parseRequest("{invalid"), "malformed JSON rejected");
         const auto response = juce::JSON::parse(errorResponse(incompatible));
         require(response["id"].toString() == "test" && response["error"]["code"].toString() == "incompatible_version", "structured error retains id");
+        const auto deep = juce::String::repeatedString("[", 50000) + "0" + juce::String::repeatedString("]", 50000);
+        require(!parseRequest(deep), "Nested message rejected before recursive JSON parsing");
+        require(lightHostModern::boundedJson(R"({"text":"[ { \" ] }","a":[[]]})"), "Quoted delimiters do not consume depth");
+        require(!lightHostModern::boundedJson("{[}]"), "Mismatched nesting rejected");
+        require(!lightHostModern::parseBoundedXml(juce::String::repeatedString("<a>",50000)+juce::String::repeatedString("</a>",50000)), "Deep XML rejected before recursive parsing");
+        require(!lightHostModern::parseBoundedXml(juce::String("<!DOCTYPE a [<!ENTITY x 'expanded'>]><a>&x;</a>")), "DTD expansion rejected");
+        require(bool(lightHostModern::parseBoundedXml(juce::String("<?xml version=\"1.0\"?><a label=\"&lt;x&gt;\"><!-- <ignored> --><![CDATA[<ignored>]]><b/></a>"))), "Comments, CDATA and attributes remain compatible");
+        require(!lightHostModern::parseBoundedXml(juce::String("<a><b/></a>"), 8), "Per-entry XML byte limit");
+        require(!lightHostModern::parseBoundedXml(juce::String("<a><b><c/></b></a>"), 128, 1), "Per-entry XML depth limit");
+        require(!lightHostModern::parseBoundedXml(juce::String("<a><b/><c/></a>"), 128, 8, 3), "Per-entry XML tag limit");
+        require(!lightHostModern::parseBoundedXml(juce::String("<a><![CDATA[truncated")), "Truncated CDATA rejected");
+        require(!lightHostModern::parseBoundedXml(juce::String("<a><b>")), "Truncated elements rejected");
+        size_t bytes = 0;
+        for (const auto* invalid : {"2147483647.A", "-1.A", "99999999999999.A", "4.A", "1.AA!", "0.A", "."})
+            require(!lightHostModern::validPluginState(invalid, bytes), "Invalid state rejected without allocating declared size");
+        for (int length : {0, 1, 2, 3, 64, 65537}) {
+            juce::MemoryBlock original(static_cast<size_t>(length), true), decoded;
+            for (int n = 0; n < length; ++n) static_cast<unsigned char*>(original.getData())[n] = static_cast<unsigned char>(n);
+            require(lightHostModern::decodePluginState(original.toBase64Encoding(), decoded) && decoded == original,
+                "JUCE state encoding round trip remains compatible");
+        }
         juce::PropertySet settings;
         settings.setValue("legacy-state-first", "distinct-state-a");
         settings.setValue("legacy-state-second", "distinct-state-b");

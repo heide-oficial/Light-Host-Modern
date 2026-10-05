@@ -3,6 +3,7 @@
 #include "IpcPipe.h"
 #include <functional>
 #include <memory>
+#include <optional>
 #include <thread>
 
 namespace lightHostModern
@@ -29,6 +30,15 @@ public:
     bool running() const noexcept
     {
         return process && WaitForSingleObject(process->get(), 0) == WAIT_TIMEOUT;
+    }
+    std::optional<DWORD> processId() const noexcept
+    {
+        if (!process) return DWORD{0};
+        const auto status = WaitForSingleObject(process->get(), 0);
+        if (status == WAIT_OBJECT_0) return DWORD{0};
+        if (status != WAIT_TIMEOUT) return std::nullopt;
+        const auto id = GetProcessId(process->get());
+        return id ? std::optional<DWORD>(id) : std::nullopt;
     }
     bool endedUnexpectedly() const noexcept
     {

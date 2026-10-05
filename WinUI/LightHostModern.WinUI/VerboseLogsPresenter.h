@@ -1,5 +1,8 @@
 #pragma once
+#include "HoverHelp.h"
+#include "DialogPresentation.h"
 #include "HostConnection.h"
+#include "VisualPreferences.h"
 #include "Localization.h"
 #include "../../Source/VerboseLog.h"
 #include <shobjidl.h>
@@ -63,7 +66,7 @@ public:
     }
     void translate(const ::LightHostModernWinUI::LocalizationCatalog& language) {
         catalog=language;title.Text(text("title"));description.Text(text("description"));
-        winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(toggle,winrt::box_value(text("tooltip")));
+        lightHostModern::ui::HoverHelp::SetToolTip(toggle,winrt::box_value(text("tooltip")));
         winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(toggle,text("track"));
         render();
     }
@@ -98,7 +101,7 @@ private:
         using namespace winrt;using namespace Microsoft::UI::Xaml::Controls;
         ContentDialog dialog;dialog.XamlRoot(toggle.XamlRoot());dialog.Title(box_value(text("restartTitle")));dialog.Content(box_value(text("restartBody")));
         dialog.PrimaryButtonText(text("restart"));dialog.CloseButtonText(text("later"));dialog.DefaultButton(ContentDialogButton::Close);
-        if(co_await dialog.ShowAsync()==ContentDialogResult::Primary&&!closed) {
+        if(co_await lightHostModern::ui::showAppDialog(dialog)==ContentDialogResult::Primary&&!closed) {
             const auto payload="restart-host:{\"uiPid\":"+std::to_string(GetCurrentProcessId())+",\"uiCreated\":\""+std::to_string(verbose::processBirth(GetCurrentProcess()))+"\"}";
             if(!(co_await send(payload)))message=to_string(text("failed"));
         }

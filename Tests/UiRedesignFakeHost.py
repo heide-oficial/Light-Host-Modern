@@ -134,7 +134,7 @@ def main():
             time.sleep(previous_control.get('monoDelayMs', 0) / 1000)
         with lock:
             snap = snapshot()
-            base = dict(version=4, id=request['id'], hostSession=state['hostSession'], status='ok')
+            base = dict(version=5, id=request['id'], hostSession=state['hostSession'], status='ok')
             if command == 'meter-levels':
                 meters = snap['diagnostics']['meters']
                 return dict(base, inputPeak=meters['input']['aggregate']['peak'], outputPeak=meters['output']['aggregate']['peak'])

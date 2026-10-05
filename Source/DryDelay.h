@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
+#include "AudioLimits.h"
 
 // Controller-owned allocation; capture() only accesses prepared storage. The
 // ring retains recent input even at zero latency, allowing short live changes.
@@ -8,22 +9,33 @@ class DryDelay
 public:
     bool prepare(int channels, int blockSize, int latency, double sampleRate)
     {
-        latency = juce::jmax(0, latency);
+        lightHostModern::audioLimits::format(channels, blockSize, sampleRate);
+        lightHostModern::audioLimits::latency(latency, sampleRate);
         const int transition = juce::jmax(1, static_cast<int>(sampleRate * 0.005));
         if (channels == history.getNumChannels() && blockSize == dry.getNumSamples()
             && latency == delaySamples && rate == sampleRate) return true;
         const bool compatible = rate == sampleRate && channels == history.getNumChannels()
             && latency <= validSamples;
         const int retainedDelay = compatible ? delaySamples : latency;
-        const int capacity = juce::jmax(latency, retainedDelay) + blockSize + transition + 1;
+        using namespace lightHostModern::audioLimits;
+        const auto total = add(add(static_cast<size_t>(juce::jmax(latency, retainedDelay)), blockSize), transition + 1);
+        const auto bytes = multiply(multiply(add(total, blockSize), channels), sizeof(float));
+        if (total > static_cast<size_t>(std::numeric_limits<int>::max()) || bytes > maximumBufferBytes)
+            throw std::length_error("Dry audio buffer exceeds the 64 MiB limit");
+        const int capacity = static_cast<int>(total);
+        Reservation nextMemory(bytes);
         juce::AudioBuffer<float> replacement(channels, capacity);
         replacement.clear();
+        juce::AudioBuffer<float> nextDry(channels, blockSize);
+        nextDry.clear();
         const int retained = rate == sampleRate ? juce::jmin(validSamples, capacity - 1) : 0;
         for (int channel = 0; channel < juce::jmin(channels, history.getNumChannels()); ++channel)
             for (int age = 1; age <= retained; ++age)
                 replacement.setSample(channel, capacity - age, history.getSample(channel,
                     (position + history.getNumSamples() - age) % history.getNumSamples()));
         history = std::move(replacement);
+        dry = std::move(nextDry);
+        memory = std::move(nextMemory);
         validSamples = retained;
         position = 0;
         oldDelaySamples = delaySamples;
@@ -31,8 +43,6 @@ public:
         transitionLength = transition;
         delaySamples = latency;
         rate = sampleRate;
-        dry.setSize(channels, blockSize, false, false, true);
-        dry.clear();
         return compatible;
     }
 
@@ -79,9 +89,10 @@ public:
     }
     const juce::AudioBuffer<float>& output() const noexcept { return dry; }
     int channels() const noexcept { return dry.getNumChannels(); }
-    size_t allocatedSamples() const noexcept { return static_cast<size_t>(history.getNumChannels()) * history.getNumSamples(); }
+    size_t allocatedSamples() const noexcept { return static_cast<size_t>(history.getNumChannels()) * (history.getNumSamples() + dry.getNumSamples()); }
 
 private:
+    lightHostModern::audioLimits::Reservation memory;
     juce::AudioBuffer<float> history, dry;
     int position = 0, validSamples = 0, delaySamples = 0, oldDelaySamples = 0;
     int transitionRemaining = 0, transitionLength = 1;

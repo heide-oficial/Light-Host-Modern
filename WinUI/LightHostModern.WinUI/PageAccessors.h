@@ -1,12 +1,12 @@
 // Named controls belong to lazily created page views.
-        Microsoft::UI::Xaml::Controls::ToggleSwitch MonoOutputSwitch() const
-        { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->MonoOutputSwitch() : Microsoft::UI::Xaml::Controls::ToggleSwitch{nullptr}; }
+        Microsoft::UI::Xaml::Controls::ComboBox OutputModeBox() const
+        { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->OutputModeBox() : Microsoft::UI::Xaml::Controls::ComboBox{nullptr}; }
         Microsoft::UI::Xaml::Controls::ComboBox InputGroupingBox() const
         { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->InputGroupingBox() : Microsoft::UI::Xaml::Controls::ComboBox{nullptr}; }
         Microsoft::UI::Xaml::Controls::ComboBox OutputGroupingBox() const
         { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->OutputGroupingBox() : Microsoft::UI::Xaml::Controls::ComboBox{nullptr}; }
-        Microsoft::UI::Xaml::Controls::ToggleSwitch MonoInputsSwitch() const
-        { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->MonoInputsSwitch() : Microsoft::UI::Xaml::Controls::ToggleSwitch{nullptr}; }
+        Microsoft::UI::Xaml::Controls::ComboBox InputModeBox() const
+        { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->InputModeBox() : Microsoft::UI::Xaml::Controls::ComboBox{nullptr}; }
         Microsoft::UI::Xaml::Controls::InfoBar AudioUnavailableNotice() const
         { return audioPageView ? winrt::get_self<AudioPageView>(audioPageView)->AudioUnavailableNotice() : Microsoft::UI::Xaml::Controls::InfoBar{nullptr}; }
 

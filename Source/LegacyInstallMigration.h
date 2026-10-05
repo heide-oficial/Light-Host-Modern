@@ -1,5 +1,6 @@
 #pragma once
 #include "UpdateWindows.h"
+#include "BoundedInput.h"
 #include "StartupRegistration.h"
 #include <shlobj.h>
 #include <juce_core/juce_core.h>
@@ -79,7 +80,7 @@ inline int run(const std::filesystem::path& currentRoot)
         || !legacyExecutable(root / L"Light Host Modern.exe", version)) return 1;
     const auto relativeNew = currentRoot.lexically_relative(root);
     if (!relativeNew.empty() && *relativeNew.begin() != L"..") return 1;
-    const auto inventory = juce::JSON::parse(juce::File(juce::String((currentRoot / L"legacy-payload-files.json").c_str())));
+    const auto inventory = lightHostModern::parseBoundedJson(juce::File(juce::String((currentRoot / L"legacy-payload-files.json").c_str())));
     if (!inventory.isArray() || inventory.size() > 20000) return 1;
     wchar_t local[32768]{}; if (!GetEnvironmentVariableW(L"LOCALAPPDATA", local, 32768)) return 1;
     const path backup = path(local) / L"LightHostModern/Migrations" / (std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(GetCurrentProcessId()));

@@ -60,6 +60,20 @@ int wmain(int argc, wchar_t** argv)
             TerminateProcess(child.get(), 0);
             require(WaitForSingleObject(notified.get(), 150) == WAIT_TIMEOUT, "destroyed monitor cannot invoke callback");
         }
+        {
+            Handle child(launch(L"wait"));
+            const auto pid = GetProcessId(child.get());
+            for (DWORD access : {DWORD(SYNCHRONIZE), DWORD(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION)}) {
+                lightHostModern::UiProcessLifetime lifetime(eventName());
+                require(lifetime.processId() == DWORD{0}, "closed UI has known zero identity");
+                lifetime.monitor(OpenProcess(access, FALSE, pid), [] {});
+                const auto observed = lifetime.processId();
+                require(access == SYNCHRONIZE ? !observed.has_value() : observed == pid,
+                    "query failure must be unavailable; packaged UI handle must permit identity query");
+            }
+            TerminateProcess(child.get(), 0);
+            require(WaitForSingleObject(child.get(), 5000) == WAIT_OBJECT_0, "metrics child exits");
+        }
         std::cout << "UI process lifetime passed\n";
         return 0;
     }

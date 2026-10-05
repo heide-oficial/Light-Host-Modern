@@ -1,6 +1,8 @@
 #pragma once
 #include "Localization.h"
+#include "DialogPresentation.h"
 #include "PluginRows.h"
+#include "DisplayNameDialog.h"
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
@@ -43,6 +45,9 @@ inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> showPluginDia
     {
         dialog.Title(box_value(catalog.text(running ? "plugins.rename" : "plugins.renameInstalled", running ? L"Rename instance" : L"Rename plugin")));
         dialog.PrimaryButtonText(catalog.text("common.save", L"Save"));
+        dialog.SecondaryButtonText(catalog.text("plugins.restoreName", L"Restore original name"));
+        dialog.Resources().Insert(box_value(L"ContentDialogMaxWidth"), box_value(760.0));
+        body.MinWidth(560);
         name.Header(box_value(catalog.text("plugins.customName", L"Custom name")));
         name.Text(to_hstring(ipc::extractString(details, "customName")));
         name.PlaceholderText(to_hstring(ipc::extractString(details, "name")));
@@ -54,7 +59,7 @@ inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> showPluginDia
         name.TextChanged([weak = make_weak(dialog)](winrt::Windows::Foundation::IInspectable const& sender, TextChangedEventArgs const&) {
             if (auto current = weak.get()) current.IsPrimaryButtonEnabled(validInstanceName(sender.as<TextBox>().Text()));
         });
-        dialog.Opened([name](const auto&, const auto&) { name.Focus(FocusState::Programmatic); name.SelectAll(); });
+        focusDialogTextBox(dialog,owner,name);
     }
     else if (action == "swap")
     {
@@ -137,7 +142,9 @@ inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> showPluginDia
         body.Children().Append(scroll);
     }
     dialog.Content(body);
-    const auto result = co_await dialog.ShowAsync();
+    const auto result = co_await lightHostModern::ui::showAppDialog(dialog);
+    if (action == "rename" && result == ContentDialogResult::Secondary)
+        co_return to_hstring(std::string(running ? "rename-plugin:" : "rename-known-plugin:") + id + ":");
     if (result != ContentDialogResult::Primary) co_return L"";
     if (action == "rename") co_return to_hstring(std::string(running ? "rename-plugin:" : "rename-known-plugin:") + id + ":" + to_string(name.Text()));
     if (action == "swap" && destinations.SelectedIndex() >= 0)

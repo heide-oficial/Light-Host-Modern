@@ -1,5 +1,7 @@
 #pragma once
+#include "HoverHelp.h"
 #include "Localization.h"
+#include "VisualPreferences.h"
 #include <algorithm>
 #include <filesystem>
 #include <functional>
@@ -37,7 +39,7 @@ public:
         Automation::AutomationProperties::SetName(editor, catalog->text("dialogs.scanPaths.add", L"Add new path"));
         const auto nameButton = [](Button const& button, hstring const& name) {
             Automation::AutomationProperties::SetName(button, name);
-            ToolTipService::SetToolTip(button, box_value(name));
+            lightHostModern::ui::HoverHelp::SetToolTip(button, box_value(name));
         };
         nameButton(picker, catalog->text("dialogs.scanPaths.browse", L"Browse folder"));
         nameButton(saveButton, catalog->text("dialogs.scanPaths.savePath", L"Save path"));
@@ -61,7 +63,7 @@ private:
         FontIcon icon; icon.Glyph(glyph); icon.FontSize(18); button.Content(icon);
         Automation::AutomationProperties::SetAutomationId(button, id);
         Automation::AutomationProperties::SetName(button, name);
-        ToolTipService::SetToolTip(button, box_value(name));
+        lightHostModern::ui::HoverHelp::SetToolTip(button, box_value(name));
         return button;
     }
     static std::wstring trim(std::wstring value)

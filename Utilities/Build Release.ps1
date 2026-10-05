@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet("Release", "Debug")]
     [string] $Configuration = "Release",
 
@@ -25,36 +25,36 @@ param(
 
     [string] $SigningThumbprint = $env:LIGHTHOST_SIGNING_THUMBPRINT,
 
-    [string] $SigningTimestampUrl = "http://timestamp.digicert.com"
+    [string] $SigningTimestampUrl = "http://timestamp.digicert.com",
+    [string] $ManifestSigningThumbprint = $env:LIGHTHOST_MANIFEST_SIGNING_THUMBPRINT
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'Build Environment.ps1')
+. (Join-Path $PSScriptRoot 'Portable Layout.ps1')
+. (Join-Path $PSScriptRoot 'Update Signing.ps1')
+
+if ([string]::IsNullOrWhiteSpace($ManifestSigningThumbprint)) {
+    $ManifestSigningThumbprint = Get-ConfiguredManifestSigningThumbprint
+}
+if (![string]::IsNullOrWhiteSpace($ManifestSigningThumbprint)) {
+    Assert-UpdateSigningTrust $ManifestSigningThumbprint (Join-Path $PSScriptRoot '..\Source\UpdateTrustKeys.h')
+}
 
 $appName = "LightHostModern"
-$appVersion = "1.4.1"
+$appVersion = "2.0.0"
 $exeName = "LightHostModern.exe"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$outRoot = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $repoRoot "out\release" }
-$stageRoot = Join-Path $outRoot "payload"
-$packageWorkRoot = Join-Path $outRoot "package-work"
+$outRoot = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $repoRoot "releases\v$appVersion" }
+$packageWorkRoot = Join-Path $repoRoot ("out\package-work\v$appVersion-" + [guid]::NewGuid().ToString('N'))
+$stageRoot = Join-Path $packageWorkRoot "payload"
 $installerMsi = Join-Path $outRoot "LightHostModern-$appVersion-Setup.msi"
 $installerAlias = Join-Path $outRoot "LightHostModern-Setup.msi"
 $portableZip = Join-Path $outRoot "LightHostModern-Portable.zip"
-$portableDirectory = Join-Path $outRoot "LightHostModern-Portable"
 $releaseIcon = Join-Path $repoRoot "Icon\logo.ico"
 
 function Resolve-CMake {
-    $cmake = Get-Command cmake -ErrorAction SilentlyContinue
-    if ($null -ne $cmake) {
-        return $cmake.Source
-    }
-
-    $defaultCMake = Join-Path $env:ProgramFiles "CMake\bin\cmake.exe"
-    if (Test-Path -LiteralPath $defaultCMake) {
-        return $defaultCMake
-    }
-
-    throw "CMake 3.22+ was not found. Install current CMake and Visual Studio Build Tools 2022."
+    return Get-ProjectCMake
 }
 
 function Resolve-MSBuild {
@@ -172,6 +172,7 @@ function Copy-VCRuntime {
     )
 
     $redistRoots = @(
+        "C:\Program Files (x86)\Microsoft Visual Studio\18",
         "C:\Program Files\Microsoft Visual Studio\18",
         "C:\Program Files\Microsoft Visual Studio\2022",
         "C:\Program Files (x86)\Microsoft Visual Studio\2022"
@@ -208,8 +209,10 @@ function New-Directory {
 
 function Assert-BuildOutputPath([string] $Path) {
     $resolved = [IO.Path]::GetFullPath($Path)
-    $allowed = [IO.Path]::GetFullPath((Join-Path $repoRoot 'out')) + '\'
-    if (!$resolved.StartsWith($allowed, [StringComparison]::OrdinalIgnoreCase)) { throw "Build output must be inside $allowed" }
+    $allowedRoots = @('out', 'releases') | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $repoRoot $_)) + '\' }
+    if (!(@($allowedRoots | Where-Object { $resolved.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count)) {
+        throw 'Build output must be inside a subdirectory of out or releases.'
+    }
     for ($ancestor = $resolved; $ancestor.Length -gt $repoRoot.Length; $ancestor = [IO.Path]::GetDirectoryName($ancestor)) {
         if ((Test-Path -LiteralPath $ancestor) -and ((Get-Item -LiteralPath $ancestor).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Reparse point in build output: $ancestor" }
     }
@@ -221,26 +224,20 @@ function Remove-BuildDirectory([string] $Path) {
     if (Test-Path -LiteralPath $checked) { Remove-Item -LiteralPath $checked -Recurse -Force }
 }
 
-function Publish-VerifiedPortableDirectory {
-    # Test the archive that will be delivered, then publish that exact extraction.
-    # Previously only payload and ZIP were refreshed, leaving an older, runnable
-    # LightHostModern-Portable folder beside a newly generated archive.
+function Verify-PortableArchive {
+    # Verify the delivered ZIP in temporary staging. Runnable development copies
+    # are published separately, with build numbers, by Build Dev.ps1.
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $extracted = Assert-BuildOutputPath (Join-Path $packageWorkRoot 'portable-verified')
-    $destination = Assert-BuildOutputPath $portableDirectory
-    $running = @(Get-CimInstance Win32_Process | Where-Object {
-        $_.ExecutablePath -and $_.ExecutablePath.StartsWith($destination + '\', [StringComparison]::OrdinalIgnoreCase)
-    })
-    if ($running.Count) { throw "Close the portable application before replacing '$destination'." }
     New-Directory $extracted
     [IO.Compression.ZipFile]::ExtractToDirectory($portableZip, $extracted)
 
-    $expectedFiles = @(Get-ChildItem -LiteralPath $stageRoot -Recurse -File)
+    $expectedFiles = @(Get-ChildItem -LiteralPath $portableStage -Recurse -File)
     $actualFiles = @(Get-ChildItem -LiteralPath $extracted -Recurse -File)
     if ($expectedFiles.Count -ne $actualFiles.Count) { throw 'Portable ZIP file count does not match staging.' }
     $fileHashes = [ordered]@{}
     foreach ($file in $expectedFiles) {
-        $relative = $file.FullName.Substring($stageRoot.Length).TrimStart('\')
+        $relative = $file.FullName.Substring($portableStage.Length).TrimStart('\')
         $expandedFile = Join-Path $extracted $relative
         if (!(Test-Path -LiteralPath $expandedFile -PathType Leaf)) { throw "Portable ZIP is missing '$relative'." }
         $expectedHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
@@ -249,32 +246,21 @@ function Publish-VerifiedPortableDirectory {
         }
         $fileHashes[$relative.Replace('\', '/')] = $expectedHash
     }
-    foreach ($required in @($exeName, 'LightHostModernScanner.exe', 'LightHostModernUpdateHelper.exe',
+    foreach ($required in @($exeName, 'LightHostModernScanner.exe', 'LightHostModernWorker.exe', 'LightHostModernUpdateHelper.exe',
+        'LICENSE', 'THIRD-PARTY-NOTICES.txt',
         "WinUI/x64/$Configuration/LightHostModern.WinUI/LightHostModernWinUI.exe",
         "WinUI/x64/$Configuration/LightHostModern.WinUI/MainWindow.xbf",
         "WinUI/x64/$Configuration/LightHostModern.WinUI/SettingsPageView.xbf")) {
-        if (!$fileHashes.Contains($required)) { throw "Required portable component is missing: '$required'." }
+        $payloadName = ('versions/' + $portableLayout.initial.id + '/' + $required)
+        if (!$fileHashes.Contains($payloadName)) { throw "Required portable component is missing: '$payloadName'." }
     }
 
-    $backup = $null
-    if (Test-Path -LiteralPath $destination) {
-        $backup = Assert-BuildOutputPath (Join-Path $outRoot ('portable-backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N')))
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backup) | Out-Null
-        Move-Item -LiteralPath $destination -Destination $backup
-    }
-    try { Move-Item -LiteralPath $extracted -Destination $destination }
-    catch {
-        if ($backup -and !(Test-Path -LiteralPath $destination)) { Move-Item -LiteralPath $backup -Destination $destination }
-        throw
-    }
     [ordered]@{
         status = 'passed'
         version = $appVersion
         verifiedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
         archive = $portableZip
         archiveSha256 = (Get-FileHash -LiteralPath $portableZip -Algorithm SHA256).Hash
-        portableDirectory = $destination
-        previousDirectoryBackup = $backup
         extractedFromDeliveredArchive = $true
         verifiedFileCount = $expectedFiles.Count
         files = $fileHashes
@@ -355,9 +341,11 @@ function New-WixMsiPackage {
     $licenseText = @"
 $appName
 
-This software is licensed under the GNU General Public License version 3.
+The project's original license grant is provided in LICENSE. Bundled components have their own license terms and copyright notices.
 
-The installed application includes the full LICENSE file. The license is also available from the project repository.
+This release uses the GPLv3 option of the original GPL-2.0-or-later grant, combined with JUCE under AGPLv3 and ASIO under GPLv3. Other components retain their own terms.
+
+The installed application includes LICENSE, THIRD-PARTY-NOTICES.txt and the Licenses folder. Please read these files for the applicable terms. Source code and build instructions are available from the project repository.
 "@
     "{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}\fs20 " + (ConvertTo-RtfText $licenseText) + "}" |
         Set-Content -LiteralPath $licenseRtf -Encoding ASCII
@@ -431,6 +419,9 @@ The installed application includes the full LICENSE file. The license is also av
     $msiProductName = "Light Host Modern"
     $manufacturer = "LightHostModern"
     $escapedIconPath = ConvertTo-WixXmlText $IconPath
+    $installerActions = Join-Path $buildDirectory "installer-actions\$Configuration\LightHostModernInstallerActions.dll"
+    if (!(Test-Path -LiteralPath $installerActions -PathType Leaf)) { throw 'Rebuild the installer actions before creating the MSI.' }
+    $escapedActionsPath = ConvertTo-WixXmlText $installerActions
     $upgradeCode = "8F28E61C-DC90-4927-B7B4-3E74E4B5960B"
     $productCode = New-StableGuid "$upgradeCode|$appVersion"
     $mainExeTarget = "[APPLICATIONFOLDER]$exeName"
@@ -441,8 +432,12 @@ The installed application includes the full LICENSE file. The license is also av
     $wxs.Add("  <Package Name=`"$msiProductName`" Manufacturer=`"$manufacturer`" Version=`"$appVersion`" UpgradeCode=`"$upgradeCode`" ProductCode=`"$productCode`" Scope=`"perMachine`">")
     $wxs.Add("    <MajorUpgrade Schedule=`"afterInstallInitialize`" AllowSameVersionUpgrades=`"yes`" DowngradeErrorMessage=`"A newer version of $productName is already installed.`" />")
     $wxs.Add("    <MediaTemplate EmbedCab=`"yes`" />")
+    $wxs.Add("    <Property Id=`"APPLICATIONFOLDER`" Secure=`"yes`" />")
+    $wxs.Add("    <Binary Id=`"InstallerActions`" SourceFile=`"$escapedActionsPath`" />")
+    $wxs.Add("    <CustomAction Id=`"PreserveInstallLocation`" BinaryRef=`"InstallerActions`" DllEntry=`"PreserveInstallLocation`" Execute=`"firstSequence`" Return=`"check`" />")
+    $wxs.Add("    <InstallUISequence><Custom Action=`"PreserveInstallLocation`" Before=`"CostInitialize`" Condition=`"NOT Installed`" /></InstallUISequence>")
     $wxs.Add("    <CustomAction Id=`"MigrateLegacyPayload`" FileRef=`"MigrationHelperFile`" ExeCommand=`"--migrate-legacy-install`" Execute=`"commit`" Impersonate=`"yes`" Return=`"ignore`" />")
-    $wxs.Add("    <InstallExecuteSequence><Custom Action=`"MigrateLegacyPayload`" After=`"InstallFiles`" Condition=`"NOT Installed`" /></InstallExecuteSequence>")
+    $wxs.Add("    <InstallExecuteSequence><Custom Action=`"PreserveInstallLocation`" Before=`"CostInitialize`" Condition=`"NOT Installed`" /><Custom Action=`"MigrateLegacyPayload`" After=`"InstallFiles`" Condition=`"NOT Installed`" /></InstallExecuteSequence>")
     $wxs.Add("    <Icon Id=`"AppIcon.ico`" SourceFile=`"$escapedIconPath`" />")
     $wxs.Add("    <Property Id=`"ARPPRODUCTICON`" Value=`"AppIcon.ico`" />")
     $wxs.Add("    <Property Id=`"ApplicationFolderName`" Value=`"$productName`" />")
@@ -516,15 +511,15 @@ The installed application includes the full LICENSE file. The license is also av
 $outRoot = Assert-BuildOutputPath $outRoot
 if (!$SkipBuild) {
     $msbuild = Resolve-MSBuild
+    Restore-ProjectNuGet -MSBuildPath $msbuild
     $winUIProject = Join-Path $repoRoot "WinUI\LightHostModern.WinUI.sln"
 
-    Invoke-Checked -FilePath $msbuild -Arguments @(
+    Invoke-Checked -FilePath $msbuild -Arguments (@(
         $winUIProject,
-        "/restore",
         "/m",
         "/p:Configuration=$Configuration",
         "/p:Platform=$Platform"
-    )
+    ) + @(Get-LocalNuGetArguments))
 
     $cmakePath = Resolve-CMake
     $configureArgs = @(
@@ -533,6 +528,7 @@ if (!$SkipBuild) {
         "-DLIGHTHOST_VST2_PROVIDER=$Vst2Provider",
         "-DLIGHTHOST_REALTIME_AUDIT=OFF"
     )
+    $configureArgs += @(Get-LocalDependencyArguments)
 
     if (![string]::IsNullOrWhiteSpace($Vst2SdkDir)) {
         $configureArgs += "-DLIGHTHOST_VST2_SDK_DIR=$Vst2SdkDir"
@@ -575,19 +571,21 @@ if (!(Test-Path -LiteralPath (Join-Path $hostOutput 'LightHostModernScanner.exe'
     throw 'LightHostModernScanner.exe is missing from the host build output.'
 }
 if (!(Test-Path -LiteralPath (Join-Path $hostOutput 'LightHostModernUpdateHelper.exe'))) { throw 'LightHostModernUpdateHelper.exe is missing from the host build output.' }
-foreach ($releaseExecutable in @($hostExe, $winUIOutput, (Join-Path $hostOutput 'LightHostModernScanner.exe'), (Join-Path $hostOutput 'LightHostModernUpdateHelper.exe'))) {
+foreach ($releaseExecutable in @($hostExe, $winUIOutput, (Join-Path $hostOutput 'LightHostModernScanner.exe'), (Join-Path $hostOutput 'LightHostModernWorker.exe'), (Join-Path $hostOutput 'LightHostModernUpdateHelper.exe'))) {
     $versionInfo = (Get-Item -LiteralPath $releaseExecutable).VersionInfo
     if ($versionInfo.ProductVersion -ne $appVersion -or $versionInfo.FileVersion -ne $appVersion) {
         throw "Executable version does not match release ${appVersion}: $releaseExecutable (product: $($versionInfo.ProductVersion), file: $($versionInfo.FileVersion)). Rebuild before packaging."
     }
 }
 New-Item -ItemType Directory -Force -Path $outRoot | Out-Null
-foreach ($name in $exeName, 'LightHostModernScanner.exe', 'LightHostModernUpdateHelper.exe', 'Light Host Modern.exe', 'LightHostScanner.exe', 'LightHostUpdateHelper.exe', 'LightHostWinUI.exe', 'WinUI') {
+foreach ($name in $exeName, 'LightHostModernScanner.exe', 'LightHostModernWorker.exe', 'LightHostModernUpdateHelper.exe', 'Light Host Modern.exe', 'LightHostScanner.exe', 'LightHostUpdateHelper.exe', 'LightHostWinUI.exe', 'WinUI') {
     Copy-Item -LiteralPath (Join-Path $hostOutput $name) -Destination $stageRoot -Recurse -Force
 }
-foreach ($name in 'LICENSE', 'README.md') {
-    if (Test-Path -LiteralPath (Join-Path $repoRoot $name)) { Copy-Item -LiteralPath (Join-Path $repoRoot $name) -Destination $stageRoot }
+Copy-Item -LiteralPath (Join-Path $repoRoot 'license') -Destination (Join-Path $stageRoot 'LICENSE')
+foreach ($name in 'README.md', 'THIRD-PARTY-NOTICES.txt') {
+    Copy-Item -LiteralPath (Join-Path $repoRoot $name) -Destination $stageRoot
 }
+Copy-Item -LiteralPath (Join-Path $repoRoot 'ThirdParty\Licenses') -Destination (Join-Path $stageRoot 'Licenses') -Recurse
 
 Get-ChildItem -LiteralPath $stageRoot -Recurse -File |
     Where-Object { $_.Extension -in @(".pdb", ".ilk", ".exp", ".lib", ".appxsym") } |
@@ -599,6 +597,7 @@ if (![string]::IsNullOrWhiteSpace($SigningThumbprint)) {
     $signTargets = @(
         (Join-Path $stageRoot $exeName),
         (Join-Path $stageRoot "LightHostModernScanner.exe"),
+        (Join-Path $stageRoot "LightHostModernWorker.exe"),
         (Join-Path $stageRoot "LightHostModernUpdateHelper.exe"),
         (Join-Path $stageRoot "WinUI\x64\$Configuration\LightHostModern.WinUI\LightHostModernWinUI.exe"),
         (Join-Path $stageRoot "WinUI\x64\$Configuration\LightHostModern.WinUI\RestartAgent.exe")
@@ -625,7 +624,7 @@ $releaseInfo = [ordered]@{
 $releaseInfo | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stageRoot "release-info.json") -Encoding UTF8
 
 $forbidden = @(Get-ChildItem -LiteralPath $stageRoot -Recurse -File | Where-Object {
-    $_.Extension -in '.vst3', '.vst', '.clap' -or $_.Name -match 'Dragonfly|LightHostModern.*Tests|Fixture' -or $_.FullName -match '[\\/](fixtures|test-profiles|Tests)[\\/]'
+    $_.Extension -in '.vst3', '.vst', '.clap', '.pfx', '.p12', '.key', '.pem', '.pvk', '.snk' -or $_.Name -match 'Dragonfly|LightHostModern.*Tests|Fixture' -or $_.FullName -match '[\\/](fixtures|test-profiles|Tests)[\\/]'
 })
 if ($forbidden.Count) { throw "Test files or third-party plugin fixtures found in payload: $($forbidden.FullName -join ', ')" }
 
@@ -643,7 +642,11 @@ $legacyFiles = @(Get-ChildItem -LiteralPath $stageRoot -File -Recurse | ForEach-
 $legacyFiles = @($legacyFiles + 'Uninstall-LightHostModern.ps1' | Sort-Object -Unique)
 ConvertTo-Json -InputObject $legacyFiles | Set-Content -LiteralPath (Join-Path $stageRoot 'legacy-payload-files.json') -Encoding UTF8
 
-Compress-Archive -Path (Join-Path $stageRoot "*") -DestinationPath $portableZip -Force
+$portableStage = Join-Path $packageWorkRoot 'portable'
+$launcher = Join-Path $hostOutput 'LightHostModernLauncher.exe'
+Sign-ReleaseFile -Path $launcher
+$portableLayout = New-VersionedPortable $stageRoot $portableStage $launcher
+Compress-Archive -Path (Join-Path $portableStage "*") -DestinationPath $portableZip -Force
 
 $installerWork = Join-Path $packageWorkRoot "installer"
 
@@ -670,13 +673,22 @@ $artifactMetadata = foreach ($pair in @(@($installerMsi, 'installed'), @($instal
 }
 [ordered]@{ formatVersion = 1; artifacts = @($artifactMetadata) } | ConvertTo-Json -Depth 5 |
     Set-Content -LiteralPath (Join-Path $outRoot 'release-artifacts.json') -Encoding UTF8
+if ($ManifestSigningThumbprint) {
+    Write-SignedUpdateManifest $outRoot $appVersion $artifactMetadata $portableLayout.initial.inventoryHash $ManifestSigningThumbprint
+    foreach ($artifact in $artifactMetadata) {
+        & (Join-Path $hostOutput 'LightHostModernUpdateHelper.exe') --mode validate-signed --operation $outRoot --package (Join-Path $outRoot $artifact.name) --version $appVersion --size $artifact.size --sha256 $artifact.digest --distribution $artifact.distribution
+        if ($LASTEXITCODE -ne 0) { throw 'Signed release was rejected by the embedded trust roots. Configure and rebuild UpdateTrustKeys.h before publishing.' }
+    }
+} else {
+    Write-Warning 'Update-manifest signing is not configured. This package supports manual installation only.'
+}
 
 $legacyPortableExe = Join-Path $outRoot "LightHostModern-Portable.exe"
 if (Test-Path -LiteralPath $legacyPortableExe) {
     Remove-Item -LiteralPath $legacyPortableExe -Force
 }
 
-Publish-VerifiedPortableDirectory
+Verify-PortableArchive
 
 if (!$KeepStage) {
     Remove-BuildDirectory $stageRoot
@@ -687,4 +699,3 @@ Write-Host ""
 Write-Host "Release artifacts created:"
 Write-Host "  Installer: $installerMsi"
 Write-Host "  Portable:  $portableZip"
-Write-Host "  Extracted: $portableDirectory"

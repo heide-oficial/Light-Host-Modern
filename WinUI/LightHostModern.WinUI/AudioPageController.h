@@ -1,5 +1,6 @@
 #pragma once
 #include "HostConnection.h"
+#include "DialogPresentation.h"
 #include "Localization.h"
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
@@ -20,7 +21,7 @@ public:
 
     static JsonObject draft(const std::string& snapshot)
     {
-        const auto state = ipc::parseObject(snapshot).GetNamedObject(L"audioSelection");
+        const auto state = ipc::parseSnapshotObject(snapshot).GetNamedObject(L"audioSelection");
         auto result = JsonObject::Parse(state.GetNamedObject(L"editable").Stringify());
         result.SetNamedValue(L"expectedGeneration", state.GetNamedValue(L"generation"));
         return result;
@@ -164,7 +165,7 @@ inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> showPreferred
     using namespace Microsoft::UI::Xaml;
     using namespace Microsoft::UI::Xaml::Controls;
     const auto snapshot = connection->snapshotJson;
-    const auto generation = ipc::parseObject(snapshot).GetNamedObject(L"audioSelection").GetNamedValue(L"generation");
+    const auto generation = ipc::parseSnapshotObject(snapshot).GetNamedObject(L"audioSelection").GetNamedValue(L"generation");
     auto names = ipc::extractStringArray(snapshot, "backendNames");
     auto selectedBackend = ipc::extractString(snapshot, "audioPersistenceCustomBackend");
     if (selectedBackend.empty() && !names.empty()) selectedBackend = names.front();
@@ -207,7 +208,7 @@ inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> showPreferred
     });
     if (index >= 0) load(selectedBackend, ipc::extractString(snapshot, "audioPersistenceCustomInputDevice"), ipc::extractString(snapshot, "audioPersistenceCustomOutputDevice"), true);
     ContentDialogResult result = ContentDialogResult::None;
-    try { result = co_await dialog.ShowAsync(); }
+    try { result = co_await lightHostModern::ui::showAppDialog(dialog); }
     catch (...) { state->closed = true; backend.SelectionChanged(changed); throw; }
     state->closed = true; backend.SelectionChanged(changed);
     if (result != ContentDialogResult::Primary || backend.SelectedIndex() < 0) co_return L"";

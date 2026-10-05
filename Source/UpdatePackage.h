@@ -1,5 +1,7 @@
+#include "BoundedInput.h"
 #pragma once
 #include "UpdateWindows.h"
+#include "PortableLayout.h"
 #include <juce_core/juce_core.h>
 #include <msiquery.h>
 #include <set>
@@ -90,13 +92,28 @@ inline void validateZip(const std::filesystem::path& path, const Artifact& artif
     require(manifestIndex >= 0 && zip.getEntry(manifestIndex)->uncompressedSize <= 1024 * 1024, "package_incomplete");
     auto manifestStream = std::unique_ptr<juce::InputStream>(zip.createStreamForEntry(manifestIndex));
     require(manifestStream != nullptr, "package_invalid");
-    const auto manifest = juce::JSON::parse(manifestStream->readEntireStreamAsString());
+    const auto manifest = lightHostModern::parseBoundedJson(manifestStream->readEntireStreamAsString());
     require(manifest.isObject() && manifest["name"].toString() == "LightHostModern", "artifact_mismatch");
     require(parseVersion(manifest["version"].toString().toWideCharPointer()) == parseVersion(artifact.version), "version_mismatch");
     require(manifest["platform"].toString() == "x64", "architecture_mismatch");
-    for (const auto& name : {juce::String("LightHostModern.exe"), juce::String("LightHostModernScanner.exe"), juce::String("LightHostModernUpdateHelper.exe"),
+    juce::String prefix;
+    const auto layoutIndex=zip.getIndexOfFileName("portable-layout.json");
+    if(layoutIndex>=0) {
+        require(zip.getEntry(layoutIndex)->uncompressedSize<=65536,"metadata_invalid");
+        auto stream=std::unique_ptr<juce::InputStream>(zip.createStreamForEntry(layoutIndex));require(bool(stream),"package_invalid");
+        const auto layout=parseBoundedJson(stream->readEntireStreamAsString());require((int)layout["formatVersion"]==portableLayoutVersion,"layout_unsupported");
+        const auto ref=PayloadRef::parse(layout["initial"]);prefix="versions/"+ref.id+"/";
+        const auto inventoryName=prefix+"payload-manifest.json";int inventoryIndex=zip.getIndexOfFileName(inventoryName);
+        if(inventoryIndex<0)inventoryIndex=zip.getIndexOfFileName(inventoryName.replaceCharacter('/','\\'));
+        require(inventoryIndex>=0&&zip.getEntry(inventoryIndex)->uncompressedSize<=4*1024*1024,"package_incomplete");
+        auto inventory=std::unique_ptr<juce::InputStream>(zip.createStreamForEntry(inventoryIndex));require(bool(inventory),"package_invalid");
+        const auto bytes=inventory->readEntireStreamAsString().toStdString();Sha256 hash;hash.append(bytes.data(),bytes.size());
+        require(hash.finish()==normalizedDigest(ref.inventoryHash.toWideCharPointer()),"checksum_mismatch");
+    }
+    for (const auto& component : {juce::String("LightHostModern.exe"), juce::String("LightHostModernScanner.exe"), juce::String("LightHostModernUpdateHelper.exe"),
                             juce::String("WinUI/x64/Release/LightHostModern.WinUI/LightHostModernWinUI.exe")})
     {
+        const auto name=prefix+component;
         // Compress-Archive uses backslashes on some PowerShell versions.
         int index = zip.getIndexOfFileName(name);
         if (index < 0) index = zip.getIndexOfFileName(name.replaceCharacter('/', '\\'));

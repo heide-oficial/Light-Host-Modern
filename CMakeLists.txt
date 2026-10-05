@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(LightHostModern VERSION 1.4.1 LANGUAGES C CXX)
+project(LightHostModern VERSION 2.0.0 LANGUAGES C CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "LightHostModern is now maintained as a Windows-only application.")
@@ -39,8 +39,10 @@ if(BUILD_TESTING)
     set_tests_properties(ipc-lifetime-and-transport PROPERTIES TIMEOUT 15)
     if(MSVC)
         add_executable(LightHostModernWinUiTransportTests Tests/WinUiTransportTests.cpp)
+        set(_program_files_x86 "ProgramFiles(x86)")
         find_path(LIGHTHOST_CPPWINRT_INCLUDE_DIR winrt/Windows.Foundation.h
             HINTS "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows Kits\\Installed Roots;KitsRoot10]/Include/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/cppwinrt"
+                  "$ENV{${_program_files_x86}}/Windows Kits/10/Include/${CMAKE_SYSTEM_VERSION}/cppwinrt"
             REQUIRED)
         target_include_directories(LightHostModernWinUiTransportTests PRIVATE WinUI/LightHostModern.WinUI "${LIGHTHOST_CPPWINRT_INCLUDE_DIR}")
         target_link_libraries(LightHostModernWinUiTransportTests PRIVATE windowsapp)
@@ -78,8 +80,7 @@ if(LIGHTHOST_JUCE_DIR)
 else()
     FetchContent_Declare(juce
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-        GIT_TAG 8.0.13
-        GIT_SHALLOW TRUE)
+        GIT_TAG 7c9d3783b127263d72bb65fe0a7e2dc8a02a7ac2) # JUCE 8.0.13
     FetchContent_MakeAvailable(juce)
     include("${CMAKE_CURRENT_SOURCE_DIR}/Utilities/PatchJuce.cmake")
 endif()
@@ -89,8 +90,7 @@ if(LIGHTHOST_VST3_SDK_DIR)
 else()
     FetchContent_Declare(vst3sdk
         GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
-        GIT_TAG v3.8.0_build_66
-        GIT_SHALLOW TRUE
+        GIT_TAG 9fad9770f2ae8542ab1a548a68c1ad1ac690abe0 # VST3 3.8.0 build 66
         SOURCE_SUBDIR cmake-skip)
     FetchContent_MakeAvailable(vst3sdk)
 endif()
@@ -142,7 +142,7 @@ if(BUILD_TESTING)
     add_executable(LightHostModernDeviceRecoveryTests Tests/DeviceRecoveryTests.cpp Source/DeviceController.cpp)
     target_include_directories(LightHostModernDeviceRecoveryTests PRIVATE Source)
     target_compile_definitions(LightHostModernDeviceRecoveryTests PRIVATE JUCE_USE_CURL=0)
-    target_link_libraries(LightHostModernDeviceRecoveryTests PRIVATE juce::juce_audio_devices juce::juce_data_structures)
+    target_link_libraries(LightHostModernDeviceRecoveryTests PRIVATE juce::juce_audio_devices juce::juce_data_structures juce::juce_cryptography)
     add_test(NAME device-recovery-scenarios COMMAND LightHostModernDeviceRecoveryTests)
     set_tests_properties(device-recovery-scenarios PROPERTIES TIMEOUT 20)
 endif()
@@ -157,6 +157,7 @@ set(LIGHTHOST_VST2_SEARCH_DIRS)
 if(LIGHTHOST_VST2_PROVIDER_UPPER STREQUAL "XAYMAR")
     FetchContent_Declare(xaymar_vst2sdk
         URL https://github.com/Xaymar/vst2sdk/archive/refs/tags/v0.4.0.zip
+        URL_HASH SHA256=de2bad3db73f5e062f3b9a258207a7eacec396ecf069f2f029f7c6424f85896b
         SOURCE_SUBDIR cmake-skip
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
     FetchContent_MakeAvailable(xaymar_vst2sdk)
@@ -234,8 +235,7 @@ if(LIGHTHOST_ASIO_SDK_DIR)
 else()
     FetchContent_Declare(asio_sdk
         GIT_REPOSITORY https://github.com/audiosdk/asio.git
-        GIT_TAG 496a076
-        GIT_SHALLOW TRUE
+        GIT_TAG 496a0765b8bb9c26f764f22f9a9712a937177db2
         SOURCE_SUBDIR cmake-skip)
     FetchContent_MakeAvailable(asio_sdk)
 endif()
@@ -250,6 +250,8 @@ add_library(LightHostModernCore STATIC)
 target_sources(LightHostModernCore
     PRIVATE
         Source/AudioEngine.cpp
+        Source/IsolatedPlugin.cpp
+        Source/OperatingProfiles.cpp
         Source/SessionStore.cpp
         Source/DeviceController.cpp
         Source/LightHostModernController.cpp
@@ -320,16 +322,60 @@ set_target_properties(LightHostModernScanner PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/LightHostModern_artefacts/$<CONFIG>")
 add_dependencies(LightHostModern LightHostModernScanner)
 
+juce_add_console_app(LightHostModernWorker PRODUCT_NAME "LightHostModernWorker")
+target_sources(LightHostModernWorker PRIVATE Source/PluginWorkerMain.cpp)
+target_link_libraries(LightHostModernWorker PRIVATE LightHostModernCore avrt)
+target_include_directories(LightHostModernWorker PRIVATE "${LIGHTHOST_ASIO_INCLUDE_DIR}" ${LIGHTHOST_VST2_INCLUDE_DIRS})
+target_compile_definitions(LightHostModernWorker PRIVATE LIGHTHOST_WORKER_TEST_FIXTURES=0)
+set_target_properties(LightHostModernWorker PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/LightHostModern_artefacts/$<CONFIG>")
+add_dependencies(LightHostModern LightHostModernWorker)
+if(BUILD_TESTING)
+    juce_add_console_app(LightHostModernWorkerFixture PRODUCT_NAME "LightHostModernWorkerFixture")
+    target_sources(LightHostModernWorkerFixture PRIVATE Source/PluginWorkerMain.cpp)
+    target_link_libraries(LightHostModernWorkerFixture PRIVATE LightHostModernCore avrt)
+    target_include_directories(LightHostModernWorkerFixture PRIVATE "${LIGHTHOST_ASIO_INCLUDE_DIR}" ${LIGHTHOST_VST2_INCLUDE_DIRS})
+    target_compile_definitions(LightHostModernWorkerFixture PRIVATE LIGHTHOST_WORKER_TEST_FIXTURES=1)
+    add_executable(LightHostModernIsolatedPluginTests Tests/IsolatedPluginTests.cpp Source/RealtimeAllocationAudit.cpp)
+    target_link_libraries(LightHostModernIsolatedPluginTests PRIVATE LightHostModernCore)
+    target_include_directories(LightHostModernIsolatedPluginTests PRIVATE "${LIGHTHOST_ASIO_INCLUDE_DIR}" ${LIGHTHOST_VST2_INCLUDE_DIRS})
+    add_dependencies(LightHostModernIsolatedPluginTests LightHostModernWorkerFixture)
+    add_test(NAME isolated-plugin-crash-hang-and-audio COMMAND LightHostModernIsolatedPluginTests "$<TARGET_FILE:LightHostModernWorkerFixture>")
+    set_tests_properties(isolated-plugin-crash-hang-and-audio PROPERTIES TIMEOUT 100)
+    add_executable(LightHostModernIsolatedRealPluginTests EXCLUDE_FROM_ALL Tests/IsolatedRealPluginTests.cpp)
+    target_link_libraries(LightHostModernIsolatedRealPluginTests PRIVATE LightHostModernCore)
+    target_include_directories(LightHostModernIsolatedRealPluginTests PRIVATE "${LIGHTHOST_ASIO_INCLUDE_DIR}" ${LIGHTHOST_VST2_INCLUDE_DIRS})
+    add_dependencies(LightHostModernIsolatedRealPluginTests LightHostModernWorker)
+endif()
+
+add_library(LightHostModernInstallerActions SHARED Source/InstallerActions.cpp)
+target_link_libraries(LightHostModernInstallerActions PRIVATE msi)
+target_compile_options(LightHostModernInstallerActions PRIVATE /utf-8)
+set_target_properties(LightHostModernInstallerActions PROPERTIES
+    CXX_STANDARD 17 MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/installer-actions/$<CONFIG>")
+add_dependencies(LightHostModern LightHostModernInstallerActions)
+
 juce_add_console_app(LightHostModernUpdateHelper PRODUCT_NAME "LightHostModernUpdateHelper")
 target_sources(LightHostModernUpdateHelper PRIVATE Source/UpdateHelperMain.cpp)
 target_include_directories(LightHostModernUpdateHelper PRIVATE Source)
-target_compile_definitions(LightHostModernUpdateHelper PRIVATE JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 NOMINMAX)
+target_compile_definitions(LightHostModernUpdateHelper PRIVATE JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 NOMINMAX LIGHTHOST_APP_VERSION="${PROJECT_VERSION}")
 target_compile_options(LightHostModernUpdateHelper PRIVATE /utf-8)
 target_link_libraries(LightHostModernUpdateHelper PRIVATE juce::juce_core msi bcrypt winhttp shell32 version)
 set_target_properties(LightHostModernUpdateHelper PROPERTIES
     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/LightHostModern_artefacts/$<CONFIG>")
 add_dependencies(LightHostModern LightHostModernUpdateHelper)
+
+juce_add_gui_app(LightHostModernLauncher PRODUCT_NAME "LightHostModernLauncher" ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Icon/logo.png")
+target_sources(LightHostModernLauncher PRIVATE Source/PortableLauncherMain.cpp)
+target_include_directories(LightHostModernLauncher PRIVATE Source)
+target_compile_definitions(LightHostModernLauncher PRIVATE JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 NOMINMAX)
+target_compile_options(LightHostModernLauncher PRIVATE /utf-8)
+target_link_libraries(LightHostModernLauncher PRIVATE juce::juce_core msi bcrypt winhttp shell32)
+set_target_properties(LightHostModernLauncher PROPERTIES
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/LightHostModern_artefacts/$<CONFIG>")
+add_dependencies(LightHostModern LightHostModernLauncher)
 
 add_executable(LightHostModernLegacyLauncher WIN32 Source/LegacyLauncher.cpp)
 set_target_properties(LightHostModernLegacyLauncher PROPERTIES OUTPUT_NAME "Light Host Modern"
@@ -343,7 +389,7 @@ add_dependencies(LightHostModern LightHostModernLegacyLauncher)
 
 # JUCE's resource command does not track Info.txt itself. Regenerate version
 # resources when project metadata changes, including in incremental builds.
-foreach(app_target IN ITEMS LightHostModern LightHostModernScanner LightHostModernUpdateHelper)
+foreach(app_target IN ITEMS LightHostModern LightHostModernScanner LightHostModernWorker LightHostModernUpdateHelper LightHostModernLauncher)
     get_target_property(app_generated_sources ${app_target} JUCE_GENERATED_SOURCES_DIRECTORY)
     get_target_property(app_info_file ${app_target} JUCE_INFO_FILE)
     add_custom_command(OUTPUT "${app_generated_sources}/${app_target}_resources.rc"
@@ -352,6 +398,18 @@ endforeach()
 
 if(BUILD_TESTING)
     add_executable(LightHostModernUpdateTests Tests/UpdateTests.cpp)
+    # Local portable upgrade integration only: the release helper refuses its
+    # own version, so exercise its unchanged source with an older fixture gate.
+    # This target has no production dependency or packaging/staging rule.
+    add_executable(LightHostModernUpdateHelperBaselineFixture Source/UpdateHelperMain.cpp)
+    target_include_directories(LightHostModernUpdateHelperBaselineFixture PRIVATE Source)
+    target_compile_definitions(LightHostModernUpdateHelperBaselineFixture PRIVATE
+        JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 NOMINMAX LIGHTHOST_APP_VERSION="1.9.9")
+    target_compile_options(LightHostModernUpdateHelperBaselineFixture PRIVATE /utf-8)
+    target_link_libraries(LightHostModernUpdateHelperBaselineFixture PRIVATE juce::juce_core msi bcrypt winhttp shell32 version)
+    set_target_properties(LightHostModernUpdateHelperBaselineFixture PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test-fixtures/$<CONFIG>")
     add_executable(LightHostModernLegacyMigrationTests Tests/LegacyMigrationTests.cpp)
     target_include_directories(LightHostModernLegacyMigrationTests PRIVATE Source)
     target_compile_definitions(LightHostModernLegacyMigrationTests PRIVATE JUCE_USE_CURL=0 NOMINMAX)
@@ -396,7 +454,8 @@ target_sources(LightHostModern
         Source/DebugLog.cpp
         Source/HostIpcServer.cpp
         Source/HostStartup.cpp
-        Source/IconMenu.cpp)
+        Source/IconMenu.cpp
+        Source/PluginTrayMenu.cpp)
 
 if(LIGHTHOST_REALTIME_AUDIT)
     target_sources(LightHostModern PRIVATE Source/RealtimeAllocationAudit.cpp)

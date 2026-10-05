@@ -1,3 +1,4 @@
+#include "BoundedInput.h"
 #pragma once
 #include <juce_core/juce_core.h>
 #include <chrono>
@@ -13,14 +14,14 @@ class StateSnapshots
 public:
     using Clock = std::chrono::steady_clock;
     explicit StateSnapshots(std::function<Clock::time_point()> now = [] { return std::chrono::steady_clock::now(); },
-        size_t maximumBytes = 32 * 1024 * 1024, size_t maximumEntries = 8)
+        size_t maximumBytes = maximumSnapshotJsonBytes, size_t maximumEntries = 8)
         : clock(std::move(now)), byteLimit(maximumBytes), entryLimit(maximumEntries) {}
 
     juce::var capture(const juce::String& json, const juce::String& session, uint64_t sequence, const juce::var& revisions)
     {
         prune();
         if (json.getNumBytesAsUTF8() > byteLimit || entryLimit == 0) return error("snapshot_capacity", "The logical snapshot exceeds the retention limit");
-        auto snapshot = juce::JSON::parse(json);
+        auto snapshot = lightHostModern::parseBoundedJson(json, std::min(byteLimit, maximumSnapshotJsonBytes));
         if (!snapshot.isObject()) return error("internal_error", "Invalid logical snapshot");
         const auto id = juce::Uuid().toString();
         snapshot.getDynamicObject()->setProperty("snapshotId", id);

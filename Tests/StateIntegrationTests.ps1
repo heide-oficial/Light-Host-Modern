@@ -14,7 +14,7 @@ function Start-EventRead($manifest) {
     $script:eventPipe = [IO.Pipes.NamedPipeClientStream]::new('.', ($info.pipe + '-events').Replace('\\.\pipe\', ''), [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
     $eventPipe.Connect(5000)
     $eventPipe.ReadMode = [IO.Pipes.PipeTransmissionMode]::Message
-    $wire = @{version=4; id='event-read'; command='events'; args=@(@{hostSession=$manifest.hostSession; afterSequence=$manifest.eventSequence; waitMs=4000})} | ConvertTo-Json -Depth 8 -Compress
+    $wire = @{version=5; id='event-read'; command='events'; args=@(@{hostSession=$manifest.hostSession; afterSequence=$manifest.eventSequence; waitMs=4000})} | ConvertTo-Json -Depth 8 -Compress
     $bytes = [Text.Encoding]::UTF8.GetBytes($wire)
     $eventPipe.Write($bytes, 0, $bytes.Length)
     $script:buffer = [byte[]]::new(65536)

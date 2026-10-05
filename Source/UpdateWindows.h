@@ -19,6 +19,15 @@ namespace lightHostModern::update
 {
 inline void windowsCheck(bool ok, const char* code)
 { if (!ok) throw Error(code, std::string(code) + ": " + std::to_string(GetLastError())); }
+// Versioned payloads add staging directories to otherwise ordinary install
+// paths. Use extended absolute paths without requiring a machine-wide setting.
+inline std::wstring extendedFilePath(const std::filesystem::path& path)
+{
+    auto value = std::filesystem::absolute(path).lexically_normal().make_preferred().wstring();
+    if (value.rfind(LR"(\\?\)", 0) == 0) return value;
+    if (value.rfind(LR"(\\)", 0) == 0) return LR"(\\?\UNC\)" + value.substr(2);
+    return LR"(\\?\)" + value;
+}
 struct Handle
 {
     HANDLE value = nullptr;
@@ -60,7 +69,7 @@ class FileOutput final : public Output
     Handle file;
 public:
     explicit FileOutput(const std::filesystem::path& path)
-        : file(CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr))
+        : file(CreateFileW(extendedFilePath(path).c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr))
     { windowsCheck(bool(file), "storage_failed"); }
     void write(const void* bytes, size_t count) override
     {
@@ -74,7 +83,7 @@ class FileInput final : public Input
     Handle file;
 public:
     explicit FileInput(const std::filesystem::path& path)
-        : file(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+        : file(CreateFileW(extendedFilePath(path).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                           FILE_FLAG_SEQUENTIAL_SCAN | FILE_FLAG_OPEN_REPARSE_POINT, nullptr))
     {
         windowsCheck(bool(file), "package_unavailable");
@@ -103,7 +112,7 @@ public:
         const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
         const std::wstring route = std::wstring(parts.lpszUrlPath, parts.dwUrlPathLength)
             + std::wstring(parts.lpszExtraInfo ? parts.lpszExtraInfo : L"", parts.dwExtraInfoLength);
-        session.value = WinHttpOpen(L"LightHostModern/1.4.1", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0);
+        session.value = WinHttpOpen(L"LightHostModern/2.0.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0);
         windowsCheck(session.value != nullptr, "network_failed");
         windowsCheck(WinHttpSetTimeouts(session.value, 5000, 5000, 5000, 5000), "network_failed");
         connection.value = WinHttpConnect(session.value, host.c_str(), parts.nPort, 0);
@@ -152,10 +161,10 @@ inline std::filesystem::path download(const Artifact& artifact, const std::files
             transfer(injectedInput ? *injectedInput : *network, output, digest, artifact, cancelled, progress);
         }
         checkCancelled(cancelled);
-        windowsCheck(MoveFileExW(partial.c_str(), final.c_str(), MOVEFILE_WRITE_THROUGH), "storage_failed");
+        windowsCheck(MoveFileExW(extendedFilePath(partial).c_str(), extendedFilePath(final).c_str(), MOVEFILE_WRITE_THROUGH), "storage_failed");
         return final;
     }
-    catch (...) { DeleteFileW(partial.c_str()); throw; }
+    catch (...) { DeleteFileW(extendedFilePath(partial).c_str()); throw; }
 }
 inline uint64_t processCreation(HANDLE process)
 {

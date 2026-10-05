@@ -1,6 +1,7 @@
 #pragma once
 #include "AudioDeviceState.h"
 #include "AudioSelection.h"
+#include "BoundedInput.h"
 #include <chrono>
 #include <functional>
 
@@ -29,6 +30,7 @@ public:
     AudioRecoveryConfiguration getAudioRecoveryConfiguration() const;
     AudioBlocklistConfiguration getAudioBlocklistConfiguration() const;
     AvailableAudioChoicesConfiguration getAvailableAudioChoicesConfiguration();
+    String updateEnabledChoices(const var& request);
     bool isAudioBackendBlocked(const String& backendName) const;
     bool isAudioDeviceBlocked(const String& backendName, const String& role, const String& deviceName) const;
     bool isAudioDeviceChoiceAllowed(const String& backendName,
@@ -44,6 +46,7 @@ public:
     bool applyPreferredAudioDevice(AudioRecoveryConfiguration const& recoveryConfig, bool manualRetry);
     bool setAudioBackendByIndex(int backendIndex);
     bool selectConfiguration(const AudioDeviceSelection&);
+    bool restoreProfileConfiguration(const AudioDeviceSelection&);
     bool setPreferredDevice(const String& backend, const String& input, const String& output, uint64 expectedGeneration);
     var selectionState() const;
     var optionsForBackend(const String& backend);
@@ -82,7 +85,7 @@ private:
     void markSettingsDirty() { if (dirty) dirty(); }
     void loadActivePlugins() { if (reconfigure) reconfigure(); }
     PropertySet* preferencesPtr() const { return &preferences; }
-    std::unique_ptr<XmlElement> getXmlValueOrClear(const String& key) { return preferences.getXmlValue(key); }
+    std::unique_ptr<XmlElement> getXmlValueOrClear(const String& key) { return lightHostModern::parseBoundedXml(preferences.getValue(key), 4 * 1024 * 1024); }
     AudioDeviceManager& deviceManager;
     PropertySet& preferences;
     std::function<void()> dirty, reconfigure;

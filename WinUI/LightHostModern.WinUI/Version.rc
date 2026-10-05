@@ -1,8 +1,8 @@
 #include <windows.h>
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,4,1,0
- PRODUCTVERSION 1,4,1,0
+ FILEVERSION 2,0,0,0
+ PRODUCTVERSION 2,0,0,0
  FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
 #ifdef _DEBUG
  FILEFLAGS VS_FF_DEBUG
@@ -19,11 +19,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "LightHostModern\0"
             VALUE "FileDescription", "LightHostModern user interface\0"
-            VALUE "FileVersion", "1.4.1\0"
+            VALUE "FileVersion", "2.0.0\0"
             VALUE "InternalName", "LightHostModernWinUI\0"
             VALUE "OriginalFilename", "LightHostModernWinUI.exe\0"
             VALUE "ProductName", "LightHostModern\0"
-            VALUE "ProductVersion", "1.4.1\0"
+            VALUE "ProductVersion", "2.0.0\0"
         END
     END
     BLOCK "VarFileInfo"

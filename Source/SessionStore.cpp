@@ -59,7 +59,7 @@ std::optional<SessionDocument> SessionCodec::decode(const std::string& bytes, ju
 {
     error = "Invalid or unsupported session file";
     if (bytes.size() > maximumFileBytes) { error = "Session exceeds the 256 MiB storage capacity"; return {}; }
-    const auto root = juce::JSON::parse(juce::String::fromUTF8(bytes.data(), static_cast<int>(bytes.size())));
+    const auto root = parseBoundedJson(juce::String::fromUTF8(bytes.data(), static_cast<int>(bytes.size())), maximumFileBytes);
     if (!root.isObject() || !root["formatVersion"].isInt() || static_cast<int>(root["formatVersion"]) != 1
         || !root["revision"].isString() || !root["intentionalEmpty"].isBool() || !root["migrationId"].isString()
         || !root["contentHash"].isString() || !root["sessionXml"].isString()) return {};
@@ -72,7 +72,7 @@ std::optional<SessionDocument> SessionCodec::decode(const std::string& bytes, ju
     const auto xmlText = root["sessionXml"].toString();
     if (root["contentHash"].toString() != digest(contentForHash(xmlText, document.migrationId, document.intentionalEmpty)))
     { error = "Session content checksum does not match"; return {}; }
-    const auto xml = juce::parseXML(xmlText);
+    const auto xml = parseBoundedXml(xmlText);
     if (!xml || !document.instances.deserialize(*xml)
         || document.instances.records.empty() != document.intentionalEmpty) return {};
     error.clear();
@@ -236,7 +236,7 @@ SessionStore::SessionStore(std::shared_ptr<SessionStorage> io, const SessionReco
     {
         current.requestedRevision = current.savedRevision = recovery.document->revision;
         if (recovery.source == Slot::primary && recovery.warning.isEmpty())
-            savedDigest = juce::JSON::parse(juce::String::fromUTF8(recovery.bytes.data(), static_cast<int>(recovery.bytes.size())))["contentHash"].toString();
+            savedDigest = parseBoundedJson(juce::String::fromUTF8(recovery.bytes.data(), static_cast<int>(recovery.bytes.size())), SessionCodec::maximumFileBytes)["contentHash"].toString();
     }
     writable = !recovery.found || recovery.document.has_value();
     if (!writable) current.error = recovery.warning;

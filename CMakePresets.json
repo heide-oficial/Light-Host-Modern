@@ -13,7 +13,7 @@
       "binaryDir": "${sourceDir}/out/build/windows-vs2022",
       "architecture": {
         "value": "x64",
-        "strategy": "external"
+        "strategy": "set"
       },
       "cacheVariables": {
         "CMAKE_SYSTEM_VERSION": "10.0.22621.0",

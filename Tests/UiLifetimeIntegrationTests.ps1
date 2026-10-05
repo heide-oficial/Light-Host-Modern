@@ -20,13 +20,14 @@ public static class LifetimeWindow {
   [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr window,StringBuilder name,int count);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window,uint message,IntPtr wParam,IntPtr lParam);
   public static void OpenTray(uint process) {
-    // The JUCE tray component receives WM_USER+100 / WM_LBUTTONDOWN.
-    // Dispatch only to JUCE windows owned by this isolated host PID.
+    // Reopen through the real tray notification callback (NIN_BALLOONUSERCLICK).
+    // This lifecycle test does not post a Windows notification or try to drive
+    // the transient Quick Access popup with a synthetic mouse-down.
     EnumWindows((window,data)=> {
       uint owner; GetWindowThreadProcessId(window,out owner);
       var cls=new StringBuilder(256);GetClassName(window,cls,256);
       if(owner==process && cls.ToString().StartsWith("JUCE"))
-        PostMessage(window,1124,IntPtr.Zero,new IntPtr(513));
+        PostMessage(window,1124,IntPtr.Zero,new IntPtr(1029));
       return true;
     },IntPtr.Zero);
   }
@@ -44,22 +45,29 @@ function Find-Ui {
         if ($found) {
             if (@($found).Count -ne 1) { throw 'Duplicate UI processes for one profile.' }
             $script:uiProcess=Get-Process -Id $found.ProcessId
+            $null=$script:uiProcess.Handle
             if ($script:uiProcess.MainWindowHandle -ne [IntPtr]::Zero) { break }
         }
-        if ([DateTime]::UtcNow -ge $deadline) { throw 'Host-launched UI did not become ready.' }
+        if ([DateTime]::UtcNow -ge $deadline) {
+            Get-CimInstance Win32_Process | Where-Object {$_.Name -like '*LightHost*'} | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Depth 3 | Set-Content (Join-Path $OutputDirectory 'startup-processes.json') -Encoding UTF8
+            throw 'Host-launched UI did not become ready.'
+        }
         Start-Sleep -Milliseconds 100
     } while ($true)
     UI @('wait-for','NavDashboard','-t','10000') | Out-Null
 }
 function Start-Host {
     $script:hostProcess=Start-Process -FilePath $HostExecutable -ArgumentList @("--test-profile=$testProfileName","--profile-root=`"$root`"",'--show-ui') -WindowStyle Hidden -PassThru
+    $null=$script:hostProcess.Handle
     $metadata=Join-Path $profile 'profile.json'; $deadline=[DateTime]::UtcNow.AddSeconds(25)
     do {
-        if ((Test-Path $metadata) -and (Get-Content $metadata -Raw | ConvertFrom-Json).pid -eq $hostProcess.Id) { break }
+        $metadataReady=$false; $info=$null
+        try { $info=Get-Content -LiteralPath $metadata -Raw | ConvertFrom-Json; $metadataReady=$info.pid -eq $hostProcess.Id -and $info.pipe } catch { }
+        if ($metadataReady) { break }
         if ($hostProcess.HasExited -or [DateTime]::UtcNow -ge $deadline) { throw 'Host startup failed.' }
         Start-Sleep -Milliseconds 100
     } while ($true)
-    $script:pipe=(Get-Content $metadata -Raw | ConvertFrom-Json).pipe
+    $script:pipe=$info.pipe
     $script:session=(Send-HostRequest $pipe 'hello').hostSession
     Find-Ui
     $snapshot=Send-HostRequest $pipe 'snapshot'
@@ -71,7 +79,9 @@ function Mutate([string]$Command,[object[]]$Arguments=@()) {
     if ($result.status -ne 'ok') { throw ($result | ConvertTo-Json -Depth 6) }
 }
 function Close-Ui {
-    UI @('invoke','Close') | Out-Null
+    # Exercise the native close path without a name selector that can also
+    # match Settings controls such as "Close to tray".
+    if (![LifetimeWindow]::PostMessage($uiProcess.MainWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Cannot request window close' }
     if (!$uiProcess.WaitForExit(10000)) { throw 'Normal UI close did not exit.' }
     if ($hostProcess.HasExited) { throw 'Close to tray incorrectly stopped the host.' }
     $script:uiProcess=$null
@@ -115,6 +125,9 @@ try {
         Sidebar 'Collapse sidebar'
     }
     Scenario 'Forced UI termination exits its audio host' {
+        # The following restart also enables diagnostic evidence for the close
+        # path. It remains exclusively in this test profile.
+        Mutate 'set-verbose-logs' @($true)
         Stop-Process -Id $uiProcess.Id -Force
         if (!$hostProcess.WaitForExit(12000)) { throw 'Host survived forced UI termination.' }
         $script:uiProcess=$null
@@ -122,11 +135,28 @@ try {
     Scenario 'Full restart preserves Expanded and close-with-quit exits both processes' {
         Start-Host
         Sidebar 'Collapse sidebar'
-        Mutate 'set-close-behavior' @('quit')
         UI @('invoke','NavSettings') | Out-Null
-        Start-Sleep -Milliseconds 1000
-        UI @('invoke','Close') | Out-Null
-        if (!$hostProcess.WaitForExit(12000) -or !$uiProcess.WaitForExit(5000)) { throw 'Close-with-quit left a process alive.' }
+        UI @('scroll-into-view','CloseToTray') | Out-Null
+        UI @('wait-for','CloseToTray','-p','ToggleState','--value','On','-t','5000') | Out-Null
+        UI @('invoke','CloseToTray') | Out-Null
+        UI @('wait-for','CloseToTray','-p','ToggleState','--value','Off','-t','5000') | Out-Null
+        $deadline=[DateTime]::UtcNow.AddSeconds(5)
+        while((Send-HostRequest $pipe snapshot).appConfig.closeBehavior -ne 'quit'){
+            if([DateTime]::UtcNow -gt $deadline){throw 'Close preference did not reach the host'}
+            Start-Sleep -Milliseconds 100
+        }
+        if (![LifetimeWindow]::PostMessage($uiProcess.MainWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Cannot request window close' }
+        $hostExited=$hostProcess.WaitForExit(12000)
+        $uiExited=$uiProcess.WaitForExit(5000)
+        if (!$hostExited -or !$uiExited) {
+            $evidence=[ordered]@{ hostPid=$hostProcess.Id; uiPid=$uiProcess.Id; hostExited=$hostExited; uiExited=$uiExited; profile=$profile }
+            try { $evidence.snapshot=Send-HostRequest $pipe snapshot -TimeoutMs 1000 } catch { $evidence.snapshotError=$_.Exception.Message }
+            if (!$uiExited) {
+                try { $evidence.closeToggle=UI @('search','CloseToTray'); UI @('screenshot','-o',"$OutputDirectory/close-failure.png") | Out-Null } catch { $evidence.uiError=$_.Exception.Message }
+            }
+            $evidence | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'close-failure.json') -Encoding UTF8
+            throw "Close-with-quit left a process alive (hostExited=$hostExited, uiExited=$uiExited); see close-failure.json."
+        }
     }
 } catch { $results.Add(@{name='UI lifetime integration';status='failed';error=$_.Exception.Message}); throw }
 finally {
@@ -135,5 +165,9 @@ finally {
         if (!$hostProcess.WaitForExit(15000)) { Stop-Process -Id $hostProcess.Id -Force }
     }
     if ($uiProcess -and !$uiProcess.HasExited) { Stop-Process -Id $uiProcess.Id -Force }
+    # Startup can fail before Find-Ui assigns the new child to uiProcess.
+    Get-CimInstance Win32_Process -Filter "Name='LightHostModernWinUI.exe'" | Where-Object {
+        $_.CommandLine -and $_.CommandLine.Contains("--test-profile=$testProfileName")
+    } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     $results | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $OutputDirectory 'results.json') -Encoding UTF8
 }

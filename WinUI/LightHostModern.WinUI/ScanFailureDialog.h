@@ -1,5 +1,6 @@
 #pragma once
 #include "HostTransport.h"
+#include "DialogPresentation.h"
 #include "Localization.h"
 #include <set>
 #include <algorithm>
@@ -61,7 +62,7 @@ public:
                 current->dialog.IsPrimaryButtonEnabled(!current->stale && current->list.SelectedItems().Size() > 0);
         });
         co_await state->load();
-        const auto result = co_await state->dialog.ShowAsync(); state->closed = true;
+        const auto result = co_await lightHostModern::ui::showAppDialog(state->dialog); state->closed = true;
         if (result != ContentDialogResult::Primary || state->stale) co_return L"";
         ipc::JsonArray ids;
         for (const auto& item : state->list.SelectedItems()) {

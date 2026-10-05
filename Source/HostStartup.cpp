@@ -5,6 +5,9 @@
 #include "ProductIdentity.h"
 #include "PreferenceMigration.h"
 #include "VerboseLog.h"
+#include "PortablePaths.h"
+#include "BoundedProperties.h"
+#include "SettingsReset.h"
 
 #if JUCE_WINDOWS
  #ifndef NOMINMAX
@@ -27,16 +30,19 @@ public:
     {
         const auto& profile = lightHostModern::RuntimeProfile::current();
         profile.createDirectories();
-        try {
-            lightHostModern::verbose::startHost();
-            lightHostModern::verbose::log("startup", std::string("version=")+ProjectInfo::versionString+" architecture=x64 windows="+SystemStats::getOperatingSystemName().toStdString());
-        } catch(const std::exception& error) {
-            lightHostModern::verbose::reportFailure(lightHostModern::verbose::root(),error.what());
-        }
         const bool debugEnabled = hasParameter("--debug") || hasParameter("-debug");
         setLightHostModernDebugEnabled(debugEnabled);
         openLightHostModernDebugConsoleIfNeeded();
         installLightHostModernCrashDiagnostics();
+        lightHostModern::update::retainRunningPayload(std::filesystem::path(File::getSpecialLocation(File::currentExecutableFile).getFullPathName().toWideCharPointer()));
+        // Confirm executable startup before preferences, device opening or any
+        // third-party plugin. A plugin fault must not roll back a healthy update.
+        for (const auto& argument : getCommandLineParameterArray())
+            if (argument.startsWith("--launcher-ready=Local\\LightHostModernLauncher-")) {
+                const auto eventName=argument.fromFirstOccurrenceOf("=",false,false);
+                if(eventName.length()<120) { const auto ready=OpenEventW(EVENT_MODIFY_STATE,FALSE,eventName.toWideCharPointer());
+                    if(ready){SetEvent(ready);CloseHandle(ready);} }
+            }
 #if LIGHTHOST_REALTIME_AUDIT
         if (!installRealtimeAllocationAudit()) lightHostModernLog("Realtime allocation audit is unavailable: executable CRT imports could not be instrumented.");
 #endif
@@ -48,10 +54,28 @@ public:
         if (profile.test) options.folderName = String(profile.directory.wstring().c_str());
         options.filenameSuffix      = "settings";
         options.osxLibrarySubFolder = "Preferences";
+        lightHostModern::useBoundedPreferences(options);
 
         checkArguments(&options);
 
-        if (!profile.test)
+        const auto settingsFile = options.getDefaultFile();
+        const lightHostModern::settingsReset::Paths resetPaths{
+            std::filesystem::path(settingsFile.getFullPathName().toWideCharPointer()), profile.uiSettings(), lightHostModern::verbose::root()};
+        if (hasParameter("--reset-settings") || hasParameter("-reset-settings")) {
+            try { lightHostModern::settingsReset::request(resetPaths); }
+            catch (const std::exception&) { MessageBoxW(nullptr, L"Could not request a settings reset. Original files were preserved.", L"LightHostModern", MB_OK | MB_ICONERROR); quit(); return; }
+        }
+        bool factoryReset = false;
+        try { factoryReset = lightHostModern::settingsReset::pending(resetPaths); }
+        catch (const std::exception&) { MessageBoxW(nullptr, L"Could not inspect the pending settings reset. Original files were preserved.", L"LightHostModern", MB_OK | MB_ICONERROR); quit(); return; }
+        if (factoryReset) {
+            try { lightHostModern::settingsReset::perform(resetPaths); }
+            catch (const std::exception&) {
+                MessageBoxW(nullptr, L"Could not complete the settings reset. Close other instances and try again. The pending reset will be retried on restart.", L"LightHostModern", MB_OK | MB_ICONERROR); quit(); return;
+            }
+        }
+
+        if (!profile.test && !factoryReset)
         {
             auto legacy = options;
             legacy.applicationName = lightHostModern::identity::legacyName;
@@ -64,11 +88,23 @@ public:
             }
         }
 
-        if (hasParameter("--reset-settings") || hasParameter("-reset-settings"))
-            resetSettings(options);
+        try {
+            lightHostModern::verbose::startHost();
+            lightHostModern::verbose::log("startup", std::string("version=")+ProjectInfo::versionString+" architecture=x64 windows="+SystemStats::getOperatingSystemName().toStdString());
+        } catch(const std::exception& error) {
+            lightHostModern::verbose::reportFailure(lightHostModern::verbose::root(),error.what());
+        }
 
         appProperties = std::make_unique<ApplicationProperties>();
         appProperties->setStorageParameters (options);
+        // Preferences belong to this user/profile. In a test profile JUCE's
+        // common and user paths coincide; the second, stale PropertiesFile
+        // otherwise resurrects keys removed from the first (pending mode, etc.).
+        appProperties->getUserSettings()->setFallbackPropertySet(nullptr);
+        if (!appProperties->getUserSettings()->isValidFile()) {
+            MessageBoxW(nullptr, L"The settings file is invalid, too large, or unreadable. Original data was preserved. Restore a valid backup or explicitly reset settings.", L"LightHostModern", MB_OK | MB_ICONERROR);
+            quit(); return;
+        }
 
         if (hasParameter("--clear-failed-plugins") || hasParameter("-clear-failed-plugins"))
             clearFailedPluginSettings();
@@ -158,21 +194,6 @@ private:
         StringArray multiInstance = getParameter("-multi-instance");
         if (multiInstance.size() == 2)
             options->filenameSuffix = multiInstance[1] + "." + options->filenameSuffix;
-    }
-
-    void resetSettings(const PropertiesFile::Options& options) {
-        ApplicationProperties resetProperties;
-        resetProperties.setStorageParameters(options);
-
-        if (PropertiesFile* settings = resetProperties.getUserSettings())
-        {
-            File settingsFile(settings->getFile());
-            File crashedPluginsFile(settingsFile.getSiblingFile("RecentlyCrashedPluginsList"));
-            resetProperties.closeFiles();
-
-            crashedPluginsFile.deleteFile();
-            settingsFile.deleteFile();
-        }
     }
 
     void clearFailedPluginSettings() {

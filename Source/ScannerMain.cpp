@@ -17,7 +17,7 @@ int main()
     const juce::File requestFile { juce::String(arguments[1]) };
     const juce::File responseFile { juce::String(arguments[2]) };
     LocalFree(arguments);
-    auto request = juce::XmlDocument::parse(requestFile);
+    auto request = lightHostModern::scan::parseScannerXml(requestFile);
     if (!request || !request->hasTagName("SCAN") || request->getIntAttribute("version") != lightHostModern::scan::scannerProtocolVersion) return 3;
     if(request->hasAttribute("logRoot")) {
         const std::filesystem::path base(request->getStringAttribute("logRoot").toWideCharPointer());

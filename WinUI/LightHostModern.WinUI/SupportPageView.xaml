@@ -14,7 +14,7 @@
                         <ColumnDefinition x:Name="SupportDonateActionColumn" Width="294" />
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="SupportDonateDescriptionText" VerticalAlignment="Center" Text="If you enjoy the app and would like to support its continued development, you can make a donation through Ko-fi." TextWrapping="WrapWholeWords" />
-                    <Button x:Name="KoFiButton" Grid.Column="1" AutomationProperties.AutomationId="SupportKoFiButton" AutomationProperties.Name="Support me on Ko-fi" Width="294" Height="60" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="0" ToolTipService.ToolTip="Support me on Ko-fi">
+                    <Button x:Name="KoFiButton" Grid.Column="1" AutomationProperties.AutomationId="SupportKoFiButton" AutomationProperties.Name="Support me on Ko-fi" Width="294" Height="60" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="0">
                         <Image Width="286" Height="52" Margin="4" Source="Assets/support-me-on-kofi.png" Stretch="Uniform" />
                     </Button>
                 </Grid>

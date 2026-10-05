@@ -11,6 +11,8 @@
 #include <objbase.h>
 #include <shellapi.h>
 #include <shobjidl.h>
+#include <commctrl.h>
+#pragma comment(lib, "comctl32.lib")
 
 #pragma comment(lib, "ole32.lib")
 
@@ -27,7 +29,7 @@ namespace
 			{
 				int size = 0;
 				const auto* data = LightHostModernLocales::getNamedResource(LightHostModernLocales::namedResourceList[i], size);
-				return JSON::parse(String::fromUTF8(data, size));
+				return lightHostModern::parseBoundedJson(String::fromUTF8(data, size));
 			}
 		return {};
 	}
@@ -61,26 +63,79 @@ namespace
 }
 
 IconMenu::IconMenu(bool startInSafeMode, bool debugEnabled, bool restoreActivePluginsOnStartup)
-	: INDEX_OPEN_WINUI(900000),
-	  INDEX_QUIT(900001),
-	  engine(std::make_unique<AudioEngine>(startInSafeMode, restoreActivePluginsOnStartup)),
+	: engine(std::make_unique<AudioEngine>(startInSafeMode, restoreActivePluginsOnStartup)),
 	  debugMode(debugEnabled)
 {
-	ipcServer = std::make_unique<HostIpcServer>(*engine, [this] { setIcon(); });
+	ipcServer = std::make_unique<HostIpcServer>(*engine, [this] { setIcon(); }, [this](const String& version) { return notifyRelease(version); });
 	lightHostModernLog("IconMenu created. safeMode=" + String(startInSafeMode ? "true" : "false")
 		+ " restoreActivePluginsOnStartup=" + String(restoreActivePluginsOnStartup ? "true" : "false"));
 	setIcon();
 	setIconTooltip(String(lightHostModern::RuntimeProfile::current().windowTitle().c_str()));
+    SetWindowSubclass(static_cast<HWND>(getWindowHandle()),notificationCallback,1,reinterpret_cast<DWORD_PTR>(this));
+    const auto& profile = lightHostModern::RuntimeProfile::current();
+    releaseChecker = std::make_unique<lightHostModern::backgroundRelease::Checker>(
+        lightHostModern::backgroundRelease::Checker::Config {
+            String(ProjectInfo::versionString).toWideCharPointer(), profile.test,
+            profile.test ? profile.directory / L"Temp" / L"background-release-fixture.json" : std::filesystem::path{} });
+    startTimer(releaseTimerId, 1000);
+    checkBackgroundRelease();
 }
 
 IconMenu::~IconMenu()
 {
+    stopTimer(releaseTimerId);
+    // The worker owns no UI/audio callbacks. Cancel and drain it before the
+    // tray component, IPC handler or engine can be destroyed.
+    releaseChecker.reset();
+    RemoveWindowSubclass(static_cast<HWND>(getWindowHandle()),notificationCallback,1);
 	stopTimer(menuTimerId);
+	if (menuOpen) PopupMenu::dismissAllActiveMenus();
+	trayDialog.close();
 	uiLifetime.reset();
 	closeWinUIWindow();
 
 	if (engine != nullptr)
 		engine->flushPendingSaves();
+}
+
+bool IconMenu::notifyRelease(const String& version)
+{
+    const auto settings=lightHostModern::RuntimeProfile::current().uiSettings().wstring();
+    if(!lightHostModern::backgroundRelease::windowsNotificationsEnabled(settings))return false;
+    const std::wstring normalizedVersion(version.toWideCharPointer());
+    if(!lightHostModern::update::parseVersion(normalizedVersion))return false;
+    if(!releaseNotifications.shouldNotify(normalizedVersion))return true;
+    const auto* native=static_cast<const NOTIFYICONDATAW*>(getNativeHandle());if(!native)return false;
+    const auto locale=trayLocale();
+    const auto title=lightHostModern::trayText(locale,"update.windows.title","LightHostModern update available");
+    const auto message=lightHostModern::trayText(locale,"update.windows.body","Version {0} is available. Open Settings in LightHostModern to review the update.").replace("{0}",version);
+    NOTIFYICONDATAW notice=*native;notice.uFlags=NIF_INFO;notice.dwInfoFlags=NIIF_INFO|NIIF_NOSOUND;
+    title.copyToUTF16(notice.szInfoTitle,sizeof(notice.szInfoTitle));message.copyToUTF16(notice.szInfo,sizeof(notice.szInfo));
+    // Isolated profiles exercise the delivery path without posting fake releases
+    // to the user's Windows notification center.
+    const bool sent=lightHostModern::RuntimeProfile::current().test || Shell_NotifyIconW(NIM_MODIFY,&notice)!=FALSE;
+    if(sent){releaseNotifications.didNotify(normalizedVersion);WritePrivateProfileStringW(L"Updates",L"LastWindowsNotifiedRelease",version.toWideCharPointer(),settings.c_str());lightHostModernLog("Windows release notification submitted: "+version);}
+    return sent;
+}
+
+void IconMenu::checkBackgroundRelease()
+{
+    if (!releaseChecker) return;
+    const auto enabled = lightHostModern::backgroundRelease::windowsNotificationsEnabled(
+        lightHostModern::RuntimeProfile::current().uiSettings());
+    if (const auto version = releaseChecker->poll(enabled))
+        notifyRelease(String(version->c_str()));
+}
+
+LRESULT CALLBACK IconMenu::notificationCallback(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam,UINT_PTR,DWORD_PTR data)
+{
+    auto* owner=reinterpret_cast<IconMenu*>(data);
+    const auto* native=static_cast<const NOTIFYICONDATAW*>(owner->getNativeHandle());
+    if(native && message==native->uCallbackMessage && LOWORD(lParam)==NIN_BALLOONUSERCLICK){
+        Component::SafePointer<IconMenu> safe(owner);
+        MessageManager::callAsync([safe]{if(safe)safe->openWinUI();});return 0;
+    }
+    return DefSubclassProc(hwnd,message,wParam,lParam);
 }
 
 void IconMenu::setIcon()
@@ -104,98 +159,184 @@ void IconMenu::setIcon()
 
 void IconMenu::timerCallback(int timerId)
 {
+    if (timerId == releaseTimerId)
+    {
+        checkBackgroundRelease();
+        return;
+    }
 	if (timerId != menuTimerId)
 		return;
 
 	stopTimer(menuTimerId);
-	showNativeContextMenu();
+	showTrayContextMenu();
 }
 
 void IconMenu::mouseDown(const MouseEvent& e)
 {
-    Process::makeForegroundProcess();
-	if (e.mods.isLeftButtonDown())
-	{
-		openWinUI();
-		return;
-	}
-
-	showNativeContextMenu();
+	if (menuOpen || !(e.mods.isLeftButtonDown() || e.mods.isRightButtonDown())) return;
+	POINT location {};
+	GetCursorPos(&location);
+	x = location.x;
+	y = location.y;
+	// Leave the tray notification callback before showing the popup.
+	// Both mouse buttons expose Quick Access; Open app UI stays first.
+	startTimer(menuTimerId, 1);
 }
 
-void IconMenu::menuInvocationCallback(int id, IconMenu* im)
+void IconMenu::showTrayContextMenu()
 {
-	if (im == nullptr || im->engine == nullptr)
-		return;
-
-    if (id == im->INDEX_OPEN_WINUI)
+	if (menuOpen || engine == nullptr) return;
+	const auto owner = static_cast<HWND>(getWindowHandle());
+	if (!IsWindow(owner)) return;
+	Component::SafePointer<IconMenu> safeThis(this);
+	menuOpen = true;
+	try
 	{
-        im->openWinUI();
-		return;
+		lightHostModern::showPluginTrayMenu(*engine, trayLocale(), *this, x, y,
+			[safeThis] { return safeThis && safeThis->uiLifetime ? safeThis->uiLifetime->processId() : DWORD{0}; },
+			[safeThis](std::optional<lightHostModern::TrayAction> action)
+			{
+				if (!safeThis) return;
+				safeThis->menuOpen = false;
+				if (!action) return;
+				try { safeThis->performTrayAction(*action); }
+				catch (...)
+				{
+					if (safeThis) safeThis->showTrayError(lightHostModern::trayText(trayLocale(), "tray.operationFailed", "The action could not be completed. Open the app for details."));
+				}
+			});
 	}
-	if (id == im->INDEX_QUIT)
+	catch (const std::exception& error)
 	{
-		im->engine->savePluginStates();
-		im->engine->flushPendingSaves();
-		closeWinUIWindow();
-		JUCEApplication::getInstance()->quit();
-	}
-}
-
-void IconMenu::showNativeContextMenu()
-{
-	POINT iconLocation {};
-	GetCursorPos(&iconLocation);
-
-	HMENU nativeMenu = CreatePopupMenu();
-	if (nativeMenu == nullptr)
-		return;
-
-	const auto locale = trayLocale();
-	const auto label = [&locale](const char* key, const char* fallback) {
-		const auto value = locale[key].toString();
-		return value.isEmpty() ? String(fallback) : value;
-	};
-	AppendMenuW(nativeMenu, MF_STRING, INDEX_OPEN_WINUI, label("tray.openUi", "Open app UI").toWideCharPointer());
-	AppendMenuW(nativeMenu, MF_STRING | (engine->isGlobalMuted() ? MF_CHECKED : 0), INDEX_GLOBAL_MUTE,
-		label("audio.globalMute", "Mute output").toWideCharPointer());
-	AppendMenuW(nativeMenu, MF_STRING | (engine->isGlobalBypassed() ? MF_CHECKED : 0), INDEX_GLOBAL_BYPASS,
-		label("audio.globalBypass", "Bypass chain").toWideCharPointer());
-	AppendMenuW(nativeMenu, MF_SEPARATOR, 0, nullptr);
-	AppendMenuW(nativeMenu, MF_STRING, INDEX_QUIT, label("tray.quit", "Quit").toWideCharPointer());
-
-	HWND owner = GetForegroundWindow();
-	if (owner == nullptr)
-		owner = GetDesktopWindow();
-
-	SetForegroundWindow(owner);
-	const UINT command = TrackPopupMenu(nativeMenu,
-		TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
-		iconLocation.x,
-		iconLocation.y,
-		0,
-		owner,
-		nullptr);
-
-	DestroyMenu(nativeMenu);
-	if (command == INDEX_GLOBAL_MUTE) { engine->setGlobalMuted(!engine->isGlobalMuted()); return; }
-	if (command == INDEX_GLOBAL_BYPASS) { engine->setGlobalBypassed(!engine->isGlobalBypassed()); return; }
-
-	if (command == (UINT) INDEX_OPEN_WINUI)
-	{
-		openWinUI();
-		return;
-	}
-
-	if (command == (UINT) INDEX_QUIT)
-	{
-		if (engine != nullptr)
+		lightHostModernLog("Tray operation failed: " + String(error.what()));
+		if (safeThis)
 		{
-			engine->savePluginStates();
-			engine->flushPendingSaves();
+			menuOpen = false;
+			showTrayError(lightHostModern::trayText(trayLocale(), "tray.operationFailed", "The action could not be completed. Open the app for details."));
 		}
-		closeWinUIWindow();
-		JUCEApplication::getInstance()->quit();
+	}
+	catch (...)
+	{
+		lightHostModernLog("Tray operation threw an unknown exception.");
+		if (safeThis)
+		{
+			menuOpen = false;
+			showTrayError(lightHostModern::trayText(trayLocale(), "tray.operationFailed", "The action could not be completed. Open the app for details."));
+		}
+	}
+}
+
+void IconMenu::showTrayError(const String& message)
+{
+	lightHostModernLog("Tray: " + message);
+	trayDialog = NativeMessageBox::showScopedAsync(MessageBoxOptions()
+		.withIconType(MessageBoxIconType::WarningIcon).withTitle("LightHostModern")
+		.withMessage(message).withButton(lightHostModern::trayText(trayLocale(), "common.close", "Close")), nullptr);
+}
+
+void IconMenu::performTrayAction(const lightHostModern::TrayAction& action)
+{
+	using Kind = lightHostModern::TrayAction::Kind;
+	const auto locale = trayLocale();
+	const auto text = [&locale](const char* key, const char* fallback) { return lightHostModern::trayText(locale, key, fallback); };
+	lightHostModernLog("Tray action=" + String(static_cast<int>(action.kind)) + " identity=" + action.identity);
+	if (action.kind == Kind::openUi) { openWinUI(); return; }
+	if (action.kind == Kind::quit)
+	{
+        Component::SafePointer<IconMenu> safeThis(this);
+        ipcServer->requestLocal("quit-host", {}, [safeThis](const var& result) {
+            if (safeThis && result["status"].toString() != "ok") safeThis->showTrayError("The session could not be saved. The app remains open.");
+        });
+		return;
+	}
+	if (action.kind == Kind::mute) { engine->setGlobalMuted(action.enabled); return; }
+	if (action.kind == Kind::bypassChain) { engine->setGlobalBypassed(action.enabled); return; }
+	if (action.kind != Kind::openEditor && !engine->isSessionWritable())
+	{
+		showTrayError(text("tray.sessionReadOnly", "The session is protected. Open the app to review recovery information."));
+		return;
+	}
+	const auto openCreatedInstance = [&](const PluginInstanceId& id)
+	{
+		const auto index = engine->findPluginIndexById(id);
+		if (index >= 0 && engine->getPluginInstances()[static_cast<size_t>(index)].loading == "loaded")
+			engine->showPluginEditor(index);
+		else
+		{
+			auto message = text("tray.loadFailed", "The plugin could not be loaded. Open the app to review its status.");
+			if (index >= 0)
+			{
+				const auto error = engine->getPluginInstances()[static_cast<size_t>(index)].error;
+				if (error.isNotEmpty()) message += "\n\n" + error;
+			}
+			showTrayError(message);
+		}
+	};
+	if (action.kind == Kind::addPlugin)
+	{
+		const auto index = engine->findKnownPluginIndexById(action.identity);
+		if (index < 0) { showTrayError(text("tray.pluginChanged", "This plugin is no longer available. Reopen the tray menu.")); return; }
+		PluginInstanceId created;
+		engine->addKnownPluginByIndex(index, &created);
+		openCreatedInstance(created);
+		return;
+	}
+	const auto index = engine->findPluginIndexById(action.identity);
+	if (index < 0) { showTrayError(text("tray.pluginChanged", "This plugin is no longer available. Reopen the tray menu.")); return; }
+	const auto record = engine->getPluginInstances()[static_cast<size_t>(index)];
+	if ((action.kind == Kind::openEditor || action.kind == Kind::duplicatePlugin || action.kind == Kind::bypassPlugin)
+		&& record.loading != "loaded")
+	{
+		showTrayError(text("tray.pluginChanged", "This plugin is no longer available. Reopen the tray menu."));
+		return;
+	}
+	switch (action.kind)
+	{
+		case Kind::openEditor: engine->showPluginEditor(index); break;
+		case Kind::bypassPlugin: engine->setPluginBypassed(index, action.enabled); break;
+		case Kind::duplicatePlugin:
+		{
+            Component::SafePointer<IconMenu> safeThis(this);
+            ipcServer->requestLocal("duplicate-plugin", {record.id}, [safeThis](const var& result) {
+                if (!safeThis) return;
+                if (result["status"].toString() == "ok") {
+                    const auto created = safeThis->engine->findPluginIndexById(result["instanceId"].toString());
+                    if (created >= 0) safeThis->engine->showPluginEditor(created);
+                } else safeThis->showTrayError("The plugin could not be duplicated. Open the app for details.");
+            });
+			break;
+		}
+		case Kind::moveUp: engine->movePluginUp(index); break;
+		case Kind::moveDown: engine->movePluginDown(index); break;
+		case Kind::removePlugin:
+		{
+			Component::SafePointer<IconMenu> safeThis(this);
+			trayDialog = NativeMessageBox::showScopedAsync(MessageBoxOptions()
+				.withIconType(MessageBoxIconType::QuestionIcon).withTitle(text("tray.removeTitle", "Remove plugin from chain?"))
+				.withMessage(text("tray.removeMessage", "Remove {name} from the running chain? Its installed entry will be kept.").replace("{name}", record.displayName()))
+				.withButton(text("common.remove", "Remove")).withButton(text("common.cancel", "Cancel")),
+				[safeThis, id = record.id](int result)
+				{
+					if (result != 1 || !safeThis) return;
+					// Resolve again after confirmation; another UI may have reordered it.
+					try
+					{
+						if (!safeThis->engine->isSessionWritable())
+							safeThis->showTrayError(lightHostModern::trayText(trayLocale(), "tray.sessionReadOnly", "The session is protected. Open the app to review recovery information."));
+						else
+						{
+							const auto current = safeThis->engine->findPluginIndexById(id);
+							if (current >= 0) safeThis->engine->removePlugin(current);
+						}
+					}
+					catch (...)
+					{
+						if (safeThis) safeThis->showTrayError(lightHostModern::trayText(trayLocale(), "tray.operationFailed", "The action could not be completed. Open the app for details."));
+					}
+				});
+			break;
+		}
+		default: break;
 	}
 }
 
@@ -408,7 +549,7 @@ bool IconMenu::openPackagedWinUI(const String& parameters)
 	}
 
 	lightHostModernLog("Packaged WinUI activated. pid=" + String(static_cast<int>(processId)));
-	monitorWinUI(OpenProcess(SYNCHRONIZE, FALSE, processId));
+	monitorWinUI(OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId));
 	return true;
 }
 

@@ -7,7 +7,7 @@ static void runStateScenarios()
     using namespace lightHostModern::ipc;
     struct Peer
     {
-        int count = 100, manifests = 0, pages = 0;
+        int count = 100, manifests = 0, pages = 0, nameLength = 0;
         bool expireOnce = false, duplicate = false, malformed = false;
         std::string session = "session-one";
         std::string reply(const std::string& request)
@@ -40,6 +40,7 @@ static void runStateScenarios()
                 else
                 {
                     result.SetNamedValue(L"snapshotId", options.GetNamedValue(L"snapshotId"));
+                    result.SetNamedValue(L"collection", options.GetNamedValue(L"collection"));
                     result.SetNamedValue(L"offset", JsonValue::CreateNumberValue(offset + (malformed ? 1 : 0)));
                     result.SetNamedValue(L"total", JsonValue::CreateNumberValue(count));
                     JsonArray rows;
@@ -49,7 +50,7 @@ static void runStateScenarios()
                         auto id = winrt::to_hstring(duplicate ? 1 : i);
                         row.SetNamedValue(L"instanceId", JsonValue::CreateStringValue(id));
                         row.SetNamedValue(L"knownId", JsonValue::CreateStringValue(id));
-                        row.SetNamedValue(L"name", JsonValue::CreateStringValue(L"Réverbération 日本語"));
+                        row.SetNamedValue(L"name", JsonValue::CreateStringValue(nameLength ? std::wstring(nameLength, L'x') : L"Réverbération 日本語"));
                         rows.Append(row);
                     }
                     result.SetNamedValue(L"items", rows);
@@ -78,6 +79,14 @@ static void runStateScenarios()
             && extractArray(snapshot, "knownPluginList").Size() == count, "All 100/500/1000 rows are fetched");
         require(extractArray(snapshot, "activePlugins").GetObjectAt(count - 1).GetNamedString(L"instanceId") == winrt::to_hstring(count - 1), "Page order is preserved");
     }
+    peer.count = 3000; peer.nameLength = 768;
+    const auto large = winrt::to_string(connection->snapshotAsync().get());
+    require(large.size() > lightHostModern::maximumMessageJsonBytes && connection->connected,
+        "Paginated state larger than one transport frame must be adopted");
+    require(parseSnapshotObject(large).HasKey(L"snapshotId") && extractArray(large, "knownPluginList").Size() == 3000,
+        "Presenters must read the complete large catalog");
+    require(!parseObject(large).HasKey(L"snapshotId"), "Snapshot cache cannot relax the wire parser limit");
+    peer.count = 1000; peer.nameLength = 0;
     auto before = peer.manifests;
     peer.expireOnce = true;
     connection->snapshotAsync().get();

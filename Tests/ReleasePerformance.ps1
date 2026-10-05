@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet('current','baseline')][string]$Variant='current',
     [Parameter(Mandatory)][string]$OutputDevice,
     [ValidateSet('dashboard','minimized','closed')][string]$UiState='dashboard',
@@ -16,7 +16,7 @@ $ErrorActionPreference='Stop'
 . "$PSScriptRoot\HostProtocol.ps1"
 $repo=(Resolve-Path -LiteralPath "$PSScriptRoot\..").Path
 $root=Join-Path $repo 'out\test-profiles'
-$protocol=if ($Variant -eq 'baseline') { 3 } else { 4 }
+$protocol=if ($Variant -eq 'baseline') { 3 } else { 5 }
 $comparison=[IO.Path]::GetFullPath((Join-Path $repo $ComparisonDirectory))
 $hostExe=if ($Variant -eq 'baseline') { Join-Path $comparison 'bld\LightHostModern_artefacts\Release\LightHostModern.exe' } else { Join-Path (Get-TestBuildDirectory) 'LightHostModern_artefacts\Release\LightHostModern.exe' }
 $uiDirectory=Join-Path $repo 'WinUI\x64\Release\LightHostModern.WinUI'
@@ -59,7 +59,7 @@ function Request([string]$Command,[array]$Arguments=@()) {
 }
 function Mutate([string]$Command,[array]$Arguments=@()) {
     $result=Request $Command $Arguments
-    if ($protocol -eq 4) { $result=Wait-HostOperation $script:pipe $result -TimeoutMs 30000 }
+    if ($protocol -ge 4) { $result=Wait-HostOperation $script:pipe $result -TimeoutMs 30000 }
     if ($result.status -notin @('ok','snapshot')) { throw ('Host command failed: '+($result|ConvertTo-Json -Depth 12 -Compress)) }
     return $result
 }
@@ -68,7 +68,7 @@ function UI([string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "UI command failed: $result" }
     return $result|ConvertFrom-Json
 }
-function Measurement { Request $(if ($protocol -eq 4) {'callback-measurement'}else{'comparison-measurement'}) }
+function Measurement { Request $(if ($protocol -ge 4) {'callback-measurement'}else{'comparison-measurement'}) }
 function Cpu-Seconds($Process) { $Process.Refresh(); return $Process.TotalProcessorTime.TotalSeconds }
 function Persist-Report { $report | ConvertTo-Json -Depth 16 | Set-Content (Join-Path $OutputDirectory 'results.json') -Encoding UTF8 }
 for ($runIndex=1;$runIndex -le $Repetitions;$runIndex++) {
@@ -93,7 +93,7 @@ for ($runIndex=1;$runIndex -le $Repetitions;$runIndex++) {
         $deadline=[DateTime]::UtcNow.AddSeconds(180)
         do {
             try {
-                if ($protocol -eq 4) { $script:pipe=(Get-Content -LiteralPath (Join-Path $directory 'profile.json') -Raw | ConvertFrom-Json).pipe }
+                if ($protocol -ge 4) { $script:pipe=(Get-Content -LiteralPath (Join-Path $directory 'profile.json') -Raw | ConvertFrom-Json).pipe }
                 $initial=Request 'snapshot'
                 if ($initial.status -ne 'error' -and $null -ne $initial.diagnostics) { break }
                 $run.startupResponse=$initial
@@ -125,7 +125,7 @@ for ($runIndex=1;$runIndex -le $Repetitions;$runIndex++) {
             if ($UiState -eq 'minimized') { UI @('invoke','Minimize') | Out-Null }
         }
         foreach ($key in $originalEnvironment.Keys) { [Environment]::SetEnvironmentVariable($key,$originalEnvironment[$key],'Process') }
-        if ($protocol -eq 4) {
+        if ($protocol -ge 4) {
             Mutate 'set-global-mute' @($true) | Out-Null
             Mutate 'measure-callbacks' @($WarmupSeconds,$MeasurementSeconds) | Out-Null
             $selection=@{backend='Windows Audio';input='';output=$OutputDevice;inputMask='0';outputMask='11';defaultInputChannels=$false;defaultOutputChannels=$false;sampleRate=48000;bufferSize=$BufferSize;expectedGeneration=[string]$initial.audioSelection.generation}
@@ -136,7 +136,7 @@ for ($runIndex=1;$runIndex -le $Repetitions;$runIndex++) {
         }
         $opened=Request 'snapshot'; $run.openedDiagnostics=$opened.diagnostics
         if (!$opened.globalMuted -or $opened.diagnostics.inputChannels -ne 0 -or $opened.diagnostics.outputChannels -ne 2 -or $opened.diagnostics.sampleRate -ne 48000 -or $opened.diagnostics.bufferSize -ne $BufferSize) { throw 'The actual driver configuration differs from the requested comparison.' }
-        $run.transportBefore=if ($protocol -eq 4) { Request 'transport-diagnostics' } else { $null }
+        $run.transportBefore=if ($protocol -ge 4) { Request 'transport-diagnostics' } else { $null }
         $lastClock=[Diagnostics.Stopwatch]::GetTimestamp(); $lastHost=Cpu-Seconds $hostProcess; $lastUi=if ($uiProcess) { Cpu-Seconds $uiProcess }else{0}
         $deadline=[DateTime]::UtcNow.AddSeconds($WarmupSeconds+$MeasurementSeconds+30)
         $lastProgress=[DateTime]::UtcNow
@@ -170,11 +170,11 @@ for ($runIndex=1;$runIndex -le $Repetitions;$runIndex++) {
             Start-Sleep -Milliseconds 900
         } while ($true)
         $final=Request 'snapshot'; $run.measurement=$measurement; $run.finalDiagnostics=$final.diagnostics; $run.gpuError=$gpuError
-        $run.transportAfter=if ($protocol -eq 4) { Request 'transport-diagnostics' } else { $null }
+        $run.transportAfter=if ($protocol -ge 4) { Request 'transport-diagnostics' } else { $null }
         if ((Get-FileHash -LiteralPath $hostExe -Algorithm SHA256).Hash -ne $report.hostSha256 -or
             (Get-FileHash -LiteralPath (Join-Path $uiDirectory 'LightHostModernWinUI.exe') -Algorithm SHA256).Hash -ne $report.uiSha256) { throw 'A measured artifact changed during the run.' }
         if ($uiProcess -and (Get-FileHash -LiteralPath $run.uiActualPath -Algorithm SHA256).Hash -ne $run.uiActualSha256) { throw 'The launched UI changed during the run.' }
-        $run.processedWork=if ($protocol -eq 4) { @{blocks=$final.diagnostics.processedBlocks;samples=$final.diagnostics.processedSamples;midiInputEvents=$final.diagnostics.inputMidiEvents;midiOutputEvents=$final.diagnostics.outputMidiEvents} } else { @{blocks=$measurement.processedBlocks;samples=$measurement.processedSamples;midiInputEvents=$measurement.midiInputEvents;midiOutputEvents=$null} }
+        $run.processedWork=if ($protocol -ge 4) { @{blocks=$final.diagnostics.processedBlocks;samples=$final.diagnostics.processedSamples;midiInputEvents=$final.diagnostics.inputMidiEvents;midiOutputEvents=$final.diagnostics.outputMidiEvents} } else { @{blocks=$measurement.processedBlocks;samples=$measurement.processedSamples;midiInputEvents=$measurement.midiInputEvents;midiOutputEvents=$null} }
         if (!$measurement.hostAllocationAuditAvailable -or $measurement.thirdPartyAllocationAuditAvailable) { throw 'The callback audit coverage is unavailable or misreported.' }
         if ([uint64]$measurement.callbacks -eq 0 -or [uint64]$measurement.samples -ne [uint64]$measurement.callbacks*$BufferSize -or [uint64]$measurement.samples -gt [uint64]$run.processedWork.samples) { throw 'Delivered/processed work counters disagree.' }
         if ($final.diagnostics.loadedPlugins -ne $ExpectedPlugins -or $final.diagnostics.processFailures -ne 0) { throw 'Processing was lost or failed.' }

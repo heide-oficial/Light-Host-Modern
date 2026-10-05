@@ -12,6 +12,8 @@
 #include "BoundedMidi.h"
 #include "RealtimeAudit.h"
 #include "AudioMeters.h"
+#include "RoutingGraph.h"
+#include "PluginBusLayout.h"
 
 using namespace juce;
 
@@ -41,7 +43,10 @@ struct PluginSlot : private AudioProcessorListener
 	void mixDry(AudioBuffer<float>& buffer, bool useDry);
 	bool refreshLatency();
 	int getLatencySamples() const noexcept { return latencySamples; }
-	bool hasPendingLatency() const noexcept { return requestedLatency.load() != latencySamples; }
+    size_t dryBytes() const noexcept { return dryDelay.allocatedSamples() * sizeof(float); }
+	bool hasPendingLatency() const noexcept { return !processDisabled.load() && (latencyPlanDirty || requestedLatency.load() != latencySamples); }
+    void acknowledgeLatencyPlan() noexcept { latencyPlanDirty = false; }
+    int nextLatency() const noexcept { return requestedLatency.load(); }
 
 	PluginDescription description;
 	PluginInstanceId instanceId;
@@ -51,28 +56,44 @@ struct PluginSlot : private AudioProcessorListener
 	std::atomic<bool> processDisabled { false };
 	std::atomic<bool> processFailed { false };
 	std::atomic<bool> stateDirty { true };
+    // Notifications may be consumed by the autosave timer while a capture is
+    // still running. The revision survives that consumption.
+    std::atomic<uint64_t> stateRevision { 1 };
+    bool stateChangedSince(uint64_t revision) const noexcept { return stateRevision.load() != revision; }
 	int inputChannels = 0;
 	int outputChannels = 0;
 	int mainInputChannels = 0, mainOutputChannels = 0;
+    juce::AudioProcessor::BusesLayout busLayout;
+    std::atomic<bool> layoutPending{false};
+    bool layoutMatches() const { return processor && lightHostModern::pluginBuses::matches(*processor, busLayout); }
+    void refreshLayout() {
+        busLayout = processor->getBusesLayout();
+        inputChannels = processor->getTotalNumInputChannels(); outputChannels = processor->getTotalNumOutputChannels();
+        mainInputChannels = processor->getMainBusNumInputChannels(); mainOutputChannels = processor->getMainBusNumOutputChannels();
+        layoutPending.store(false);
+    }
 	bool prepared = false;
 	double preparedSampleRate = 0.0;
 	int preparedBlockSize = 0;
 	int preparedChannels = 0;
 
 private:
-	void audioProcessorParameterChanged(AudioProcessor*, int, float) override { stateDirty.store(true, std::memory_order_relaxed); }
+	void markStateDirty() noexcept { stateRevision.fetch_add(1); stateDirty.store(true, std::memory_order_relaxed); }
+	void audioProcessorParameterChanged(AudioProcessor*, int, float) override { markStateDirty(); }
 	void audioProcessorChanged(AudioProcessor* source, const ChangeDetails& details) override
 	{
-		stateDirty.store(true, std::memory_order_relaxed);
-		if (details.latencyChanged) requestedLatency.store(jmax(0, source->getLatencySamples()));
+		markStateDirty();
+		if (details.latencyChanged) requestedLatency.store(source->getLatencySamples());
 	}
 	std::atomic<int> requestedLatency { 0 };
 	int latencySamples = 0;
+    bool latencyPlanDirty = false; // control thread, under host suspension
 	DryDelay dryDelay;
 	float bypassMix = 0.0f;
 	float transitionStep = 1.0f;
 };
 
+struct RoutingRuntime;
 struct ChainSnapshot
 {
 	double sampleRate = 44100.0;
@@ -84,6 +105,11 @@ struct ChainSnapshot
 	uint64 reusedSlots = 0;
 	uint64 rebuiltSlots = 0;
 	std::vector<std::shared_ptr<PluginSlot>> slots;
+    bool graphMode = false;
+    lightHostModern::RoutingGraph graph;
+    std::vector<int> physicalInputs, physicalOutputs;
+    std::shared_ptr<RoutingRuntime> routing;
+    String routingError;
 };
 
 class RealtimeHostProcessor final : public AudioProcessor
@@ -107,8 +133,10 @@ public:
 	void publishSnapshot(std::shared_ptr<ChainSnapshot> snapshot);
 	std::shared_ptr<ChainSnapshot> getActiveSnapshot() const;
 	void collectRetiredSnapshots();
-	void refreshLatencies();
+	void refreshLatencies(bool force = false);
 	RealtimeHostStats getStats() const;
+    juce::var getRoutingMeters() const;
+    void updateRoutingControls(const lightHostModern::RoutingGraph& graph);
 	void setDiagnosticsEnabled(bool enabled);
 	bool setGlobalMuted(bool value) { return globalControls.setMuted(value); }
 	bool setGlobalBypassed(bool value) { return globalControls.setBypassed(value); }
@@ -184,6 +212,8 @@ private:
 	double currentSampleRate = 44100.0;
 	int currentBlockSize = 512;
 	AudioBuffer<float> scratchBuffer;
+    lightHostModern::audioLimits::Reservation scratchMemory;
+    std::atomic<bool> buffersReady{false};
 	std::array<AudioBuffer<float>, maxScratchChannels + 1> segmentViews;
 	std::array<AudioBuffer<float>, maxScratchChannels + 1> expandedViews;
 	MidiBuffer segmentMidi, filteredMidi, outputMidi;

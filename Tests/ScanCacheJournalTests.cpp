@@ -6,7 +6,7 @@ using lightHostModern::scan::CacheJournal;
 static void require(bool condition, const char* reason)
 { if (!condition) throw std::runtime_error(reason); }
 
-int main()
+int main(int argc, char** argv)
 {
     const auto folder = File::getSpecialLocation(File::tempDirectory).getChildFile("LightHostCacheTest-" + Uuid().toString());
     const auto file = folder.getChildFile("module.xml");
@@ -14,6 +14,31 @@ int main()
     struct Cleanup { File folder; ~Cleanup() { folder.deleteRecursively(); } } cleanup{folder};
     try {
         require(folder.createDirectory().wasOk(), "create private fixture directory");
+        if (argc == 2 && String(argv[1]) == "--hostile-xml") {
+            const auto deep=String::repeatedString("<a>",100000)+String::repeatedString("</a>",100000);
+            require(file.replaceWithText(deep),"Write hostile cache");
+            require(!CacheJournal::load(file),"Deep cache reached recursive parser");
+            require(file.loadFileAsString()==deep,"Rejected cache was changed");
+            XmlElement baseline("SCAN"); baseline.setAttribute("cacheVersion",lightHostModern::scan::metadataCacheVersion);
+            baseline.setAttribute("complete",false); baseline.setAttribute("checkpointId","test");
+            require(baseline.writeTo(file),"Write journal baseline");
+            {
+                FileOutputStream output(journal); const auto bytes=deep.getNumBytesAsUTF8();
+                require(output.writeInt(static_cast<int>(bytes)) && output.write(deep.toRawUTF8(),bytes),"Write hostile frame");
+                const auto hash=SHA256(deep.toRawUTF8(),bytes).toHexString();
+                require(output.write(hash.toRawUTF8(),64),"Write valid hostile frame checksum"); output.flush();
+            }
+            auto restored=CacheJournal::load(file);
+            require(restored && restored->getNumChildElements()==0,"Deep journal corrupted valid baseline");
+            require(file.replaceWithText(String::repeatedString(" ",lightHostModern::scan::maximumResponseBytes+1)),"Write oversized cache");
+            require(!CacheJournal::load(file),"Oversized cache accepted");
+            return 0;
+        }
+        ChildProcess hostile;
+        require(hostile.start(StringArray{File::getSpecialLocation(File::currentExecutableFile).getFullPathName(),"--hostile-xml"}),"Launch hostile XML child");
+        const auto finished=hostile.waitForProcessToFinish(10000);
+        if(!finished)hostile.kill();
+        require(finished && hostile.getExitCode()==0,"Hostile XML cache/journal child crashed or hung");
         for (const int length : {0, 63, 64, 65, 262143, 262144, 262145, 1048583}) {
             MemoryBlock bytes(static_cast<size_t>(length));
             for (int index = 0; index < length; ++index)

@@ -74,6 +74,33 @@ int main()
         StateSnapshots tiny([&] { return now; }, 32);
         require(tiny.capture(juce::JSON::toString(logical), "host", 0, juce::var())["error"]["code"].toString() == "snapshot_capacity",
             "oversized logical snapshot accepted");
+        // Larger than a frame, but still inside the retained-tree budget.
+        StateSnapshots large;
+        juce::Array<juce::var> catalog;
+        for (int i = 0; i < 6000; ++i) {
+            auto* entry = new juce::DynamicObject();
+            entry->setProperty("knownId", juce::String(i));
+            entry->setProperty("name", juce::String::repeatedString("x", 700));
+            catalog.add(juce::var(entry));
+        }
+        object->setProperty("activePlugins", juce::Array<juce::var>{});
+        object->setProperty("knownPluginList", catalog);
+        const auto largeJson = juce::JSON::toString(logical, true);
+        require(largeJson.getNumBytesAsUTF8() > lightHostModern::maximumMessageJsonBytes, "large fixture must cross transport limit");
+        const auto largeManifest = large.capture(largeJson, "large-host", 1, juce::var());
+        require(largeManifest["snapshotId"].toString().isNotEmpty(), "large logical snapshot was rejected by the wire cap");
+        int received = 0;
+        while (received < catalog.size()) {
+            const auto page = large.page(largeManifest["snapshotId"].toString(), "knownPluginList", received, 100);
+            require(juce::JSON::toString(page, true).getNumBytesAsUTF8() < lightHostModern::maximumMessageJsonBytes, "page exceeds frame budget");
+            auto* rows = page["items"].getArray();
+            require(rows && !rows->isEmpty(), "large catalog lost a page");
+            received += rows->size();
+        }
+        require(received == 6000 && large.retainedBytes() <= lightHostModern::maximumSnapshotJsonBytes, "large catalog capacity exceeded");
+        StateSnapshots insufficient([] { return StateSnapshots::Clock::now(); }, 8 * 1024 * 1024);
+        require(insufficient.capture(largeJson, "large-host", 1, juce::var())["error"]["code"].toString() == "snapshot_capacity",
+            "retained-tree budget must remain independent of text length");
         std::cout << "State events and immutable snapshot regressions passed\n";
     }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

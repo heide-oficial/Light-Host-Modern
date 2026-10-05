@@ -5,6 +5,7 @@
 #include <windows.h>
 #include "VerboseLog.h"
 #include "ScanTiming.h"
+#include "BoundedInput.h"
 
 namespace lightHostModern::scan
 {
@@ -12,6 +13,10 @@ inline constexpr int scannerProtocolVersion = 3;
 inline constexpr int metadataCacheVersion = 3;
 inline constexpr int batchItems = 64;
 inline constexpr int maximumResponseBytes = 4 * 1024 * 1024;
+template<class Input> inline std::unique_ptr<juce::XmlElement> parseScannerXml(const Input& input)
+{
+    return lightHostModern::parseBoundedXml(input, maximumResponseBytes, 32, 65536);
+}
 
 inline juce::String filesystemFailure(const std::error_code& error)
 {

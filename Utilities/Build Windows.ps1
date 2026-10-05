@@ -10,13 +10,15 @@ param(
 [ValidateSet("LEGACY", "XAYMAR")]
 [string] $Vst2Provider = "XAYMAR",
 
-    [string] $Vst2SdkDir = ""
+    [string] $Vst2SdkDir = "",
+
+    [switch] $ApplicationOnly
 )
 
 $ErrorActionPreference = "Stop"
 
-$cmake = Get-Command cmake -ErrorAction SilentlyContinue
-$cmakePath = if ($null -ne $cmake) { $cmake.Source } else { Join-Path $env:ProgramFiles "CMake\bin\cmake.exe" }
+. (Join-Path $PSScriptRoot 'Build Environment.ps1')
+$cmakePath = Get-ProjectCMake
 
 if (!(Test-Path $cmakePath)) {
     throw "CMake 3.22+ was not found. Install current CMake and Visual Studio Build Tools 2022."
@@ -27,6 +29,7 @@ $configureArgs = @(
     "-DLIGHTHOST_ENABLE_VST2=$EnableVst2",
     "-DLIGHTHOST_VST2_PROVIDER=$Vst2Provider"
 )
+$configureArgs += @(Get-LocalDependencyArguments)
 
 if (![string]::IsNullOrWhiteSpace($Vst2SdkDir)) {
     $configureArgs += "-DLIGHTHOST_VST2_SDK_DIR=$Vst2SdkDir"
@@ -41,13 +44,10 @@ if ($LASTEXITCODE -ne 0) {
 
 # Compile the UI before the host stages it. Both entry points resolve to the
 # same output through LightHostModern.Output.props and validate its source stamp.
-$vswherePath = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
-if (!(Test-Path -LiteralPath $vswherePath)) { throw "Visual Studio Installer (vswhere) was not found." }
-$uiMSBuild = & $vswherePath -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
-if (!$uiMSBuild) { throw "MSBuild with WinUI tooling was not found." }
-$uiSolution = Join-Path $PSScriptRoot "..\WinUI\LightHostModern.WinUI.sln"
-& $uiMSBuild $uiSolution /m "/p:Configuration=$Configuration" /p:Platform=x64 /verbosity:minimal /nologo
+& (Join-Path $PSScriptRoot 'Build UI.ps1') -Configuration $Configuration
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-& $cmakePath --build --preset "$Preset-$($Configuration.ToLowerInvariant())"
+$buildArgs = @('--build', '--preset', "$Preset-$($Configuration.ToLowerInvariant())")
+if ($ApplicationOnly) { $buildArgs += @('--target', 'LightHostModern') }
+& $cmakePath @buildArgs
 exit $LASTEXITCODE

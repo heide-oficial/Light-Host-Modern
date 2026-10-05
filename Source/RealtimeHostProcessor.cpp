@@ -1,4 +1,5 @@
 #include "RealtimeHostProcessor.h"
+#include "RoutingRuntime.h"
 
 #include <algorithm>
 #include <thread>
@@ -14,6 +15,7 @@ PluginSlot::PluginSlot(PluginDescription descriptionIn, std::unique_ptr<AudioPlu
 	if (processor != nullptr)
 	{
 		processor->addListener(this);
+        refreshLayout();
 		inputChannels = processor->getTotalNumInputChannels();
         mainInputChannels = processor->getMainBusNumInputChannels();
 		outputChannels = processor->getTotalNumOutputChannels();
@@ -52,9 +54,13 @@ void PluginSlot::prepare(double sampleRateIn, int blockSizeIn, int hostChannels)
 	}
 
 	// Preserve enabled, disabled and auxiliary buses exactly as negotiated by the plugin.
+    lightHostModern::audioLimits::format(hostChannels, blockSizeIn, sampleRateIn);
     processor->setRateAndBufferSizeDetails(sampleRateIn, blockSizeIn);
 	processor->prepareToPlay(sampleRateIn, blockSizeIn);
-	latencySamples = jmax(0, processor->getLatencySamples());
+    if (!layoutMatches()) { layoutPending.store(true); throw std::runtime_error("Plugin changed its channel layout during preparation"); }
+    const auto preparedLatency = lightHostModern::audioLimits::latency(processor->getLatencySamples(), sampleRateIn);
+    latencyPlanDirty = latencyPlanDirty || preparedLatency != latencySamples;
+	latencySamples = preparedLatency;
 	requestedLatency.store(latencySamples);
 	transitionStep = (float) (1.0 / jmax(1.0, sampleRateIn * 0.005));
 	dryDelay.prepare(hostChannels, blockSizeIn, latencySamples, sampleRateIn);
@@ -90,7 +96,8 @@ void PluginSlot::mixDry(AudioBuffer<float>& buffer, bool useDry)
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         {
             auto* wet = buffer.getWritePointer(ch);
-            wet[i] = wet[i] * (1.0f - bypassMix) + dryDelay.output().getSample(ch, i) * bypassMix;
+            wet[i] = bypassMix == 1.0f ? dryDelay.output().getSample(ch, i)
+                : wet[i] * (1.0f - bypassMix) + dryDelay.output().getSample(ch, i) * bypassMix;
         }
     }
 }
@@ -105,9 +112,10 @@ bool PluginSlot::refreshLatency()
 {
     if (!prepared || processor == nullptr) return true;
     const int next = requestedLatency.load();
-    if (next == latencySamples) return true;
+    if (next == latencySamples) { latencyPlanDirty = false; return true; }
     const bool compatible = dryDelay.prepare(dryDelay.channels(), preparedBlockSize, next, preparedSampleRate);
     latencySamples = next;
+    latencyPlanDirty = false;
     return compatible;
 }
 
@@ -129,11 +137,19 @@ RealtimeHostProcessor::ScopedSuspension::~ScopedSuspension()
 
 void RealtimeHostProcessor::prepareBuffers()
 {
+    buffersReady.store(false);
     preparedHostChannels = jlimit(1, maxScratchChannels, jmax(getTotalNumInputChannels(), getTotalNumOutputChannels()));
     preparedInputChannels = jlimit(0, maxScratchChannels, getTotalNumInputChannels());
     preparedOutputChannels = jlimit(0, maxScratchChannels, getTotalNumOutputChannels());
-    monoGains.resize(static_cast<size_t>(currentBlockSize));
-    scratchBuffer.setSize(maxScratchChannels, currentBlockSize, false, false, true);
+    lightHostModern::audioLimits::format(preparedHostChannels, currentBlockSize, currentSampleRate);
+    if (static_cast<size_t>(maxScratchChannels) * currentBlockSize * sizeof(float) > lightHostModern::audioLimits::maximumBufferBytes)
+        throw std::length_error("Scratch audio buffers exceed 64 MiB");
+    buffersReady.store(false);
+    lightHostModern::audioLimits::Reservation replacementMemory(static_cast<size_t>(maxScratchChannels+1)*currentBlockSize*sizeof(float)
+        +3u*midiCapacity+2u*maxScratchChannels*(maxScratchChannels+1)*sizeof(float*)/2);
+    std::vector<float> replacementGains(static_cast<size_t>(currentBlockSize));
+    AudioBuffer<float> replacement(maxScratchChannels,currentBlockSize);
+    monoGains=std::move(replacementGains);scratchBuffer=std::move(replacement);scratchMemory=std::move(replacementMemory);
     // JUCE reallocates channel-pointer storage when a view grows beyond its current
     // channel count. Keep one fixed-count view per layout, including 32+ channels.
     for (int channels = 1; channels <= maxScratchChannels; ++channels)
@@ -147,25 +163,56 @@ void RealtimeHostProcessor::prepareBuffers()
     globalControls.prepare(preparedHostChannels, currentBlockSize, getLatencySamples(), currentSampleRate);
     inputMeters.prepare(currentSampleRate, getTotalNumInputChannels());
     outputMeters.prepare(currentSampleRate, getTotalNumOutputChannels());
+    buffersReady.store(true);
 }
 
-void RealtimeHostProcessor::refreshLatencies()
+void RealtimeHostProcessor::refreshLatencies(bool force)
 {
     const std::lock_guard<std::recursive_mutex> lock(controlMutex);
     const auto snapshot = activeSnapshot;
     if (!snapshot) return;
-    bool changed = false;
+    bool changed = force;
     for (const auto& slot : snapshot->slots)
         if (slot && slot->processor && slot->prepared && slot->hasPendingLatency()) changed = true;
     if (!changed) return;
     ScopedSuspension suspension(*this, false);
+    buffersReady.store(false);
     bool compatible = true;
     snapshot->totalLatencySamples = 0;
     for (const auto& slot : snapshot->slots)
-        if (slot) { compatible = slot->refreshLatency() && compatible; snapshot->totalLatencySamples += slot->getLatencySamples(); }
+        if (slot && slot->prepared) {
+            try {
+                if (!snapshot->graphMode && slot->hasPendingLatency())
+                    lightHostModern::audioLimits::latency(snapshot->totalLatencySamples + lightHostModern::audioLimits::latency(slot->nextLatency(), currentSampleRate), currentSampleRate);
+                if (!slot->processDisabled.load()) compatible = slot->refreshLatency() && compatible;
+            } catch (const std::exception& error) {
+                slot->processDisabled.store(true); slot->processFailed.store(true);
+                processFailureCount.fetch_add(1, std::memory_order_relaxed);
+                lightHostModernLog("Invalid plugin latency; previous dry route retained: " + String(error.what()));
+            }
+            if (!snapshot->graphMode) {
+                const auto next = static_cast<int64>(snapshot->totalLatencySamples) + slot->getLatencySamples();
+                if (next > lightHostModern::audioLimits::maximumLatency(currentSampleRate)) {
+                    slot->processDisabled.store(true); slot->processFailed.store(true); slot->release();
+                } else snapshot->totalLatencySamples = static_cast<int>(next);
+            }
+        }
+    if (snapshot->graphMode)
+    {
+        try {
+            snapshot->routing = RoutingRuntime::compile(*snapshot);
+            snapshot->routingError.clear();
+            snapshot->totalLatencySamples = snapshot->routing->latency;
+        } catch (const std::exception& e) {
+            lightHostModernLog("Routing latency update failed; output silenced: " + String(e.what()));
+            snapshot->routing.reset(); snapshot->totalLatencySamples = 0;
+            snapshot->routingError = String(e.what());
+        }
+    }
     setLatencySamples(snapshot->totalLatencySamples);
     compatible = globalControls.prepare(preparedHostChannels, currentBlockSize, snapshot->totalLatencySamples, currentSampleRate) && compatible;
     if (!compatible) resumeFade.store(true);
+    buffersReady.store(true);
 }
 
 RealtimeHostProcessor::RealtimeHostProcessor()
@@ -209,6 +256,40 @@ std::shared_ptr<ChainSnapshot> RealtimeHostProcessor::getActiveSnapshot() const
     return activeSnapshot;
 }
 
+void RealtimeHostProcessor::updateRoutingControls(const lightHostModern::RoutingGraph& graph)
+{
+    const std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    if (!activeSnapshot || !activeSnapshot->graphMode) return;
+    activeSnapshot->graph = graph;
+    if (activeSnapshot->routing)
+        for (const auto& node : activeSnapshot->routing->nodes)
+            if (const auto* saved = graph.find(node->layout.id); saved && saved->kind == "mixer")
+                for (size_t lane = 0; lane < jmin(saved->gains.size(), node->layout.gains.size()); ++lane)
+                    node->targetGains[lane].store(saved->muted[lane] ? 0.0f : saved->gains[lane], std::memory_order_relaxed);
+}
+
+juce::var RealtimeHostProcessor::getRoutingMeters() const
+{
+    const std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    auto* result = new DynamicObject();
+    const auto snapshot = getActiveSnapshot();
+    if (snapshot && snapshot->routing)
+    {
+        snapshot->routing->telemetrySamples.store(static_cast<int>(currentSampleRate * .5), std::memory_order_relaxed);
+        for (const auto& node : snapshot->routing->nodes)
+            result->setProperty(Identifier(node->layout.id), node->peak.load(std::memory_order_relaxed));
+        for (const auto& edge : snapshot->routing->edges)
+        {
+            float peak = 0;
+            const auto& node = snapshot->routing->nodes[static_cast<size_t>(edge.from)];
+            for (int c = edge.layout.output; c < edge.layout.output + edge.layout.sourceWidth; ++c)
+                peak = jmax(peak, node->channelPeaks[static_cast<size_t>(c)].load(std::memory_order_relaxed));
+            result->setProperty(Identifier(edge.layout.id), peak);
+        }
+    }
+    return var(result);
+}
+
 RealtimeHostStats RealtimeHostProcessor::getStats() const
 {
 	RealtimeHostStats stats;
@@ -239,6 +320,12 @@ RealtimeHostStats RealtimeHostProcessor::getStats() const
 void RealtimeHostProcessor::collectRetiredSnapshots()
 {
 	const std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    if (activeSnapshot && activeSnapshot->routing)
+        for (auto& node : activeSnapshot->routing->nodes)
+            if (node->midiNeedsRepair.exchange(false)) {
+                ScopedSuspension suspension(*this, false);
+                node->midi.ensureSize(midiCapacity);
+            }
     if (midiStorageNeedsRepair.exchange(false))
     {
         ScopedSuspension suspension(*this, false);
@@ -257,6 +344,7 @@ void RealtimeHostProcessor::collectRetiredSnapshots()
 void RealtimeHostProcessor::prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock)
 {
 	ScopedSuspension suspension(*this);
+    buffersReady.store(false);
 	lastInputLevel.store(0.0f); lastOutputLevel.store(0.0f);
     inputPresentation.reset(); outputPresentation.reset();
 	currentSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0 ? sampleRate : 44100.0;
@@ -264,7 +352,15 @@ void RealtimeHostProcessor::prepareToPlay(double sampleRate, int maximumExpected
 	prepareBuffers();
 
 	if (auto snapshot = getActiveSnapshot())
-		prepareSnapshot(*snapshot);
+    {
+        try { prepareSnapshot(*snapshot); }
+        catch (const std::exception& error) {
+            if (!snapshot->graphMode) throw;
+            snapshot->routing.reset(); snapshot->totalLatencySamples = 0;
+            setLatencySamples(0);
+            lightHostModernLog("Routing could not be prepared; output silenced: " + String(error.what()));
+        }
+    }
 }
 
 void RealtimeHostProcessor::releaseResources()
@@ -284,12 +380,13 @@ void RealtimeHostProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer&
     ScopedNoDenormals noDenormals;
     // The second check closes the race with a controller suspending between the
     // first check and admission. Only the controller waits for in-flight work.
-    if (processingSuspended.load()) { buffer.clear(); return; }
+    if (processingSuspended.load()||!buffersReady.load()) { buffer.clear(); return; }
     callbacksInFlight.fetch_add(1);
     struct Exit { std::atomic<unsigned>& count; ~Exit() { count.fetch_sub(1); } } exit { callbacksInFlight };
     if (processingSuspended.load()) { buffer.clear(); return; }
     const int channels = buffer.getNumChannels();
     if (channels > preparedHostChannels || channels == 0) { buffer.clear(); return; }
+    lightHostModern::audioLimits::sanitize(buffer);
     const bool collect = lightHostModern::diagnosticsCollectionEnabled.load(std::memory_order_relaxed);
     lastInputLevel.store(collect ? inputMeters.process(buffer.getArrayOfReadPointers(), channels, buffer.getNumSamples())
                                 : buffer.getMagnitude(0, buffer.getNumSamples()), std::memory_order_relaxed);
@@ -326,7 +423,12 @@ void RealtimeHostProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer&
         globalControls.capture(segment);
         segmentMidi.clear();
         dropped += lightHostModern::copyBoundedMidi(segmentMidi, midiMessages, offset, count, -offset, midiCapacity);
-        if (snapshot) for (auto& slot : snapshot->slots)
+        if (snapshot && snapshot->graphMode)
+        {
+            if (snapshot->routing) snapshot->routing->process(segment, preparedInputChannels, preparedOutputChannels, processFailureCount);
+            else segment.clear();
+        }
+        else if (snapshot) for (auto& slot : snapshot->slots)
         {
             if (!slot || !slot->processor || !slot->prepared) continue;
             slot->captureDry(segment);
@@ -359,6 +461,7 @@ void RealtimeHostProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer&
             for (int ch = 0; ch < channels; ++ch) segment.getWritePointer(ch)[i] *= resumeGain;
         }
     }
+    if (lightHostModern::audioLimits::sanitize(buffer)) processFailureCount.fetch_add(1, std::memory_order_relaxed);
     midiMessages.clear();
     dropped += lightHostModern::copyBoundedMidi(midiMessages, outputMidi, 0, buffer.getNumSamples(), 0, destinationCapacity);
     float outputPeak = 0.0f;
@@ -404,6 +507,7 @@ void RealtimeHostProcessor::prepareMidiBuffer(MidiBuffer& buffer)
 
 void RealtimeHostProcessor::prepareSnapshot(ChainSnapshot& snapshot)
 {
+    buffersReady.store(false);
 	lightHostModernLog("RealtimeHostProcessor prepareSnapshot begin slots=" + String((int) snapshot.slots.size()));
 	snapshot.sampleRate = currentSampleRate;
 	snapshot.blockSize = currentBlockSize;
@@ -425,7 +529,7 @@ void RealtimeHostProcessor::prepareSnapshot(ChainSnapshot& snapshot)
 				+ " inputs=" + String(slot->inputChannels)
 				+ " outputs=" + String(slot->outputChannels));
 			lightHostModernLog("RealtimeHostProcessor prepare slot begin '" + slot->description.name + "'");
-			slot->prepare(currentSampleRate, currentBlockSize, preparedHostChannels);
+			slot->prepare(currentSampleRate, currentBlockSize, snapshot.graphMode ? jmax(1, jmax(slot->inputChannels, slot->outputChannels)) : preparedHostChannels);
 			lightHostModernLog("RealtimeHostProcessor prepare slot completed '" + slot->description.name + "'");
 		}
 		catch (const std::exception& e)
@@ -443,11 +547,31 @@ void RealtimeHostProcessor::prepareSnapshot(ChainSnapshot& snapshot)
 			if (lightHostModern::diagnosticsCollectionEnabled.load(std::memory_order_relaxed)) processFailureCount.fetch_add(1, std::memory_order_relaxed);
 		}
 
-		snapshot.totalLatencySamples += slot->getLatencySamples();
+        if (!snapshot.graphMode && slot->prepared) {
+            const auto total = static_cast<int64>(snapshot.totalLatencySamples) + slot->getLatencySamples();
+            if (total > lightHostModern::audioLimits::maximumLatency(currentSampleRate)) {
+                slot->processDisabled.store(true); slot->processFailed.store(true); slot->release();
+                processFailureCount.fetch_add(1, std::memory_order_relaxed);
+            } else snapshot.totalLatencySamples = static_cast<int>(total);
+        }
 	}
 
+    if (snapshot.graphMode)
+    {
+        try {
+            snapshot.routing = RoutingRuntime::compile(snapshot);
+            snapshot.totalLatencySamples = snapshot.routing->latency;
+            snapshot.routingError.clear();
+        } catch (const std::exception& error) {
+            snapshot.routing.reset(); snapshot.totalLatencySamples = 0;
+            snapshot.routingError = String(error.what());
+            lightHostModernLog("Routing unavailable; output silenced: " + snapshot.routingError);
+        }
+    }
 	setLatencySamples(snapshot.totalLatencySamples);
     globalControls.prepare(preparedHostChannels, currentBlockSize, snapshot.totalLatencySamples, currentSampleRate);
+    for (const auto& slot : snapshot.slots) if (slot) slot->acknowledgeLatencyPlan();
+    buffersReady.store(true);
 	lightHostModernLog("RealtimeHostProcessor prepareSnapshot completed latencySamples=" + String(snapshot.totalLatencySamples));
 }
 
@@ -455,6 +579,9 @@ void RealtimeHostProcessor::processSlot(PluginSlot& slot, AudioBuffer<float>& bu
 {
     const int samples = buffer.getNumSamples();
     if (samples <= 0) return;
+    const ScopedTryLock callbackLock(slot.processor->getCallbackLock());
+    if (!callbackLock.isLocked()) { buffer.clear(); return; }
+    if (!slot.layoutMatches()) { slot.layoutPending.store(true); buffer.clear(); return; }
     if (slot.processDisabled.load(std::memory_order_acquire)) { slot.processBypass(buffer); return; }
     const int pluginChannels = jmax(slot.inputChannels, slot.outputChannels);
     if (pluginChannels > maxScratchChannels)
@@ -480,6 +607,12 @@ void RealtimeHostProcessor::processSlot(PluginSlot& slot, AudioBuffer<float>& bu
         // Keep the JUCE format bridge in the host audit. Only executable imports
         // are intercepted; allocations inside third-party DLLs are not observed.
         slot.processor->processBlock(pluginBuffer, midiMessages);
+        if (!slot.layoutMatches()) { slot.layoutPending.store(true); buffer.clear(); return; }
+        if (lightHostModern::audioLimits::sanitize(pluginBuffer)) {
+            slot.processDisabled.store(true); slot.processFailed.store(true);
+            processFailureCount.fetch_add(1, std::memory_order_relaxed);
+            slot.processBypass(buffer); return;
+        }
     }
     catch (...)
     {

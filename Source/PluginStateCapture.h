@@ -15,7 +15,7 @@ void restorePluginState(PluginInstanceRecord& record, const juce::PluginDescript
         throw std::runtime_error("plugin_identity_mismatch");
     if (record.lastValidState.isEmpty()) return;
     juce::MemoryBlock binary;
-    if (!binary.fromBase64Encoding(record.lastValidState)) throw std::runtime_error("invalid_saved_state");
+    if (!decodePluginState(record.lastValidState, binary)) throw std::runtime_error("invalid_saved_state");
     try { restore(binary.getData(), static_cast<int>(binary.getSize())); }
     catch (...)
     {
@@ -29,13 +29,15 @@ void restorePluginState(PluginInstanceRecord& record, const juce::PluginDescript
 // Assignment is last, so an exception (including encoding/allocation failure)
 // cannot erase the previously captured, valid state.
 template<class Capture>
-bool capturePluginState(PluginInstanceRecord& record, Capture&& capture)
+bool capturePluginState(PluginInstanceRecord& record, Capture&& capture, size_t maximumEncodedBytes=maximumSessionStateBytes)
 {
     try
     {
         juce::MemoryBlock binary;
         capture(binary);
-        if (binary.getSize() > 192 * 1024 * 1024) return false;
+        if (binary.getSize() > maximumPluginStateBytes) return false;
+        // Include the decimal size and separator before allocating its encoding.
+        if ((binary.getSize()*8+5)/6+12>maximumEncodedBytes) return false;
         auto encoded = binary.toBase64Encoding();
         record.lastValidState = std::move(encoded);
         return true;

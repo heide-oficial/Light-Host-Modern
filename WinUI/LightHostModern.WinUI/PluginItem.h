@@ -16,6 +16,7 @@ struct PluginItem : PluginItemT<PluginItem>
     LIGHTHOST_OBSERVABLE(hstring, Id, {})
     LIGHTHOST_OBSERVABLE(hstring, KnownId, {})
     LIGHTHOST_OBSERVABLE(hstring, Name, {})
+    LIGHTHOST_OBSERVABLE(Microsoft::UI::Xaml::Media::Brush, CardTint, nullptr)
     LIGHTHOST_OBSERVABLE(hstring, Manufacturer, {})
     LIGHTHOST_OBSERVABLE(hstring, Format, {})
     LIGHTHOST_OBSERVABLE(hstring, Status, {})

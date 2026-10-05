@@ -1,3 +1,4 @@
+#include "BoundedInput.h"
 #pragma once
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_cryptography/juce_cryptography.h>
@@ -11,6 +12,7 @@ namespace lightHostModern
 inline juce::Result migratePreferences(const juce::File& legacy, const juce::File& current)
 {
     using namespace juce;
+    if (current.getSiblingFile(current.getFileName() + ".factory-reset-completed").existsAsFile()) return Result::ok();
     const auto stage = current.getSiblingFile(current.getFileName() + ".identity-migration");
     const auto manifest = stage.getChildFile("manifest.json");
     // An intentional later reset must not import the preserved legacy copy again.
@@ -62,7 +64,7 @@ inline juce::Result migratePreferences(const juce::File& legacy, const juce::Fil
         if (!MoveFileExW(pending.getFullPathName().toWideCharPointer(), manifest.getFullPathName().toWideCharPointer(), MOVEFILE_WRITE_THROUGH))
             return Result::fail("Cannot commit migration manifest");
     }
-    const auto entries = JSON::parse(manifest);
+    const auto entries = lightHostModern::parseBoundedJson(manifest);
     if (!entries.isArray()) return Result::fail("Invalid migration manifest; original files retained");
     for (const auto& entry : *entries.getArray())
     {

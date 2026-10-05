@@ -96,6 +96,7 @@ struct AudioBlocklistConfiguration
 
 struct AvailableAudioChoicesConfiguration
 {
+    String token;
 	std::vector<String> backendNames;
 	std::vector<bool> backendEnabled;
 	std::vector<BlockedAudioDeviceChoice> deviceChoices;

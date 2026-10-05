@@ -215,7 +215,9 @@ int main()
             require(root.getChildFile(bundle).createDirectory().wasOk(), "foreign format bundle");
             require(root.getChildFile(bundle).getChildFile("internal.dll").replaceWithText("not a VST2 module"), "foreign format DLL");
         }
-        PluginScanController controller(File::getSpecialLocation(File::currentExecutableFile), 1000, root.getChildFile("Cache"));
+        const auto cacheDirectory=root.getChildFile("Cache"); require(cacheDirectory.createDirectory().wasOk(),"Create scanner cache fixture");
+        require(cacheDirectory.getChildFile("invalid-restart.xml").replaceWithText(String::repeatedString("<a>",100000)+String::repeatedString("</a>",100000)),"Write deep cache before scanner restart");
+        PluginScanController controller(File::getSpecialLocation(File::currentExecutableFile), 1000, cacheDirectory);
         require(controller.begin(), "begin batch");
         controller.enqueue(FileSearchPath(root.getFullPathName()), "VST", {}, true);
         waitIdle(controller);

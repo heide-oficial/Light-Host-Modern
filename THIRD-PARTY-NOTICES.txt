@@ -1,0 +1,111 @@
+LightHostModern — third-party notices for the 2.0.0 open-source build
+Prepared 2026-10-02
+
+The original Light Host grant in LICENSE remains GPL version 2 or, at your
+option, any later version. This release uses the GPLv3 option for that code
+when combined with JUCE under AGPLv3 and ASIO under GPLv3. These choices do not
+replace the original grants or the separate terms of other components.
+
+The component license texts are in the Licenses directory of the distribution
+(ThirdParty/Licenses in the source tree). Standard/GPL-3.0.txt and
+Standard/AGPL-3.0.txt include the full GNU license terms relevant to this build;
+LICENSE also includes the full GPLv2 text. See docs/licensing.md in the source
+tree for the licensing path and corresponding-source requirements.
+
+Light Host / LightHostModern
+Original Light Host: Copyright (C) 2015 Rolando Islas.
+Modern fork: Matheus Heidemann / heide-oficial and the contributors credited in
+the repository. This attribution does not assign or transfer their rights.
+Source: https://github.com/heide-oficial/Light-Host-Modern
+Original project: https://github.com/opencma/LightHost
+
+JUCE 8.0.13
+Copyright (c) Raw Material Software Limited.
+Source revision: 7c9d3783b127263d72bb65fe0a7e2dc8a02a7ac2
+Source: https://github.com/juce-framework/JUCE
+This build uses the AGPLv3 option offered by JUCE, not its commercial option.
+Text: Licenses/JUCE-8.0.13/LICENSE.md and Licenses/Standard/AGPL-3.0.txt.
+LightHostModern applies build-time modifications to its build-owned JUCE copy;
+the modifications are recorded in Utilities/PatchJuce.cmake in the source tree.
+They are not represented as an unmodified upstream JUCE binary.
+
+JUCE's included libraries used by the Windows modules retain their own terms:
+- zlib: Licenses/JUCE-8.0.13/zlib-LICENSE.txt.
+- libpng: Licenses/JUCE-8.0.13/libpng-LICENSE.txt.
+- Independent JPEG Group software: Licenses/JUCE-8.0.13/IJG-JPEG-README.txt.
+  This software is based in part on the work of the Independent JPEG Group.
+- HarfBuzz: Licenses/JUCE-8.0.13/HarfBuzz-COPYING.txt.
+- SheenBidi: Copyright (C) 2014-2025 Muhammad Tayyab Akram;
+  Licenses/JUCE-8.0.13/SheenBidi-LICENSE.txt and SheenBidi-NOTICE.txt.
+- FLAC: Licenses/JUCE-8.0.13/FLAC-LICENSE.txt.
+- Ogg/Vorbis: Licenses/JUCE-8.0.13/Ogg-Vorbis-LICENSE.txt and
+  Licenses/JUCE-8.0.13/libvorbis-COPYING.txt.
+The upstream license file describes additional optional or platform-specific
+JUCE libraries; their presence in that document does not mean they are all
+compiled into this Windows application.
+
+Steinberg ASIO SDK
+Copyright (c) 2025 Steinberg Media Technologies GmbH.
+Source revision: 496a0765b8bb9c26f764f22f9a9712a937177db2
+Source: https://github.com/audiosdk/asio
+This build uses the GPLv3 option. The upstream alternative-license notice is
+retained unmodified in Licenses/ASIO/LICENSE.txt and common/LICENSE.txt;
+including that notice does not claim a proprietary ASIO license agreement.
+GNU text: Licenses/Standard/GPL-3.0.txt.
+
+Steinberg VST3 SDK 3.8.0 build 66
+Copyright (c) 2025 Steinberg Media Technologies GmbH.
+Source revision: 9fad9770f2ae8542ab1a548a68c1ad1ac690abe0
+Source: https://github.com/steinbergmedia/vst3sdk
+MIT license texts: Licenses/VST3-3.8.0/LICENSE.txt, base/LICENSE.txt,
+pluginterfaces/LICENSE.txt and public.sdk/LICENSE.txt.
+
+Xaymar VST2 SDK v0.4.0 (when VST2 support is enabled with the XAYMAR provider)
+Copyright 2020 Michael Fabian 'Xaymar' Dirks.
+Source: https://github.com/Xaymar/vst2sdk/tree/v0.4.0
+BSD-3-Clause text: Licenses/Xaymar-vst2sdk-0.4.0/LICENSE.txt.
+The JUCE compatibility shim is maintained in ThirdParty/XaymarVST2JuceShim.
+The discontinued proprietary VST2 SDK is not part of this provider.
+
+Microsoft platform components
+Copyright (C) Microsoft Corporation and the respective third-party owners.
+The Windows UI and app-local runtimes are distributed under their own terms;
+they are not relicensed under the project's GNU licenses. The preserved NuGet
+license/notice files are under Licenses/Microsoft/ for:
+- Microsoft.WindowsAppSDK 2.2.0;
+- Microsoft.WindowsAppSDK.Base 2.0.4;
+- Microsoft.WindowsAppSDK.Foundation 2.1.0;
+- Microsoft.WindowsAppSDK.InteractiveExperiences 2.0.15;
+- Microsoft.WindowsAppSDK.WinUI 2.2.1;
+- Microsoft.Web.WebView2 SDK/loader 1.0.3719.77;
+- Microsoft.Windows.CppWinRT 2.0.250303.1;
+- Microsoft.Windows.ImplementationLibrary 1.0.250325.1.
+These texts also contain the original notices for dependencies within those
+packages. Package presence does not imply that every component in each package
+is deployed or that the full WebView2 browser runtime is bundled.
+
+Microsoft Visual C++ app-local runtime
+This candidate includes runtime DLLs 14.44.35211.0 from Visual Studio 2022's
+VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT directory, not debug_nonredist.
+Its 2015-2022 runtime terms and vendor redistribution-list pointer are preserved
+under Licenses/Microsoft/VC-Runtime-2022/. The V14 terms and redistribution
+pointer associated with the separately installed 2026 build tools are also
+retained under Licenses/Microsoft/VC-Runtime-2026/; their presence does not
+identify the version of the shipped runtime. Actual DLL versions belong in
+the release inventory. Redistribution rights depend on the applicable terms;
+the open-source project license does not grant rights to Microsoft binaries.
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution
+https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
+
+Third-party audio plugins
+Plugins selected by users are separate products. This release does not include
+test plugins or third-party audio effect binaries and does not grant rights to
+redistribute them.
+
+Provenance
+Licenses/SOURCES.txt records the source locations and SHA-256 hashes of the
+copied license texts. Except for the documented text extraction of Microsoft's
+Word license document and the short SheenBidi attribution, upstream texts are
+preserved verbatim. References to other files inside upstream texts retain their
+original context; SOURCES.txt provides their upstream source locations.

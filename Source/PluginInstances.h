@@ -1,7 +1,10 @@
 #pragma once
+#include "PluginBusLayout.h"
 #include <juce_audio_processors_headless/juce_audio_processors_headless.h>
 #include <juce_cryptography/juce_cryptography.h>
 #include "PluginInstanceId.h"
+#include "BoundedInput.h"
+#include "RoutingGraph.h"
 #include <algorithm>
 #include <set>
 #include <vector>
@@ -34,14 +37,30 @@ struct PluginInstanceRecord
     juce::String originalIdentity;
     juce::PluginDescription description;
     juce::String legacyDescription; // exact imported description, including a possibly synthetic UID
-    juce::String customName;
+    juce::String customName, cardColor;
     juce::String lastValidState;
     juce::String recoveryState; // undecodable/failed state must remain recoverable
     juce::String loading = "unloaded";
     juce::String error;
     bool bypassed = false;
+    juce::var busLayout;
+    bool isolated = false; // Existing profiles retain direct execution.
     bool identityResolved = true;
     bool stateCaptureAllowed = true;
+
+    juce::String stateContentDigest(bool recovery = false) const
+    {
+        const auto& value = recovery ? recoveryState : lastValidState;
+        auto& previous = recovery ? hashedRecovery : hashedState;
+        auto& digest = recovery ? recoveryDigest : stateDigest;
+        // Shared String storage makes the unchanged fast path constant time.
+        if (digest.isEmpty() || previous.toRawUTF8() != value.toRawUTF8()) {
+            digest = juce::SHA256(value.toRawUTF8(), value.getNumBytesAsUTF8()).toHexString();
+            previous = value;
+        }
+        return digest;
+    }
+    mutable juce::String hashedState, hashedRecovery, stateDigest, recoveryDigest;
 
     juce::String displayName() const { return customName.isEmpty() ? description.name : customName; }
 };
@@ -52,6 +71,25 @@ public:
     std::vector<PluginInstanceRecord> records;
     juce::String recoveryError;
     bool writable = true;
+    juce::String mode = "list", profileId;
+    RoutingGraph graph;
+
+    // A flat presentation of the same dependency order used by RoutingRuntime.
+    // List mode retains its explicit instance order. Include unavailable or
+    // temporarily unrepresented instances so tray actions never lose an entry.
+    std::vector<size_t> processingOrder() const
+    {
+        std::vector<size_t> result;
+        std::set<size_t> included;
+        if (mode == "chain") for (const auto index : graph.order()) {
+            const auto& node = graph.nodes[static_cast<size_t>(index)];
+            if (node.kind != "plugin") continue;
+            for (size_t i = 0; i < records.size(); ++i)
+                if (records[i].id == node.id && included.insert(i).second) { result.push_back(i); break; }
+        }
+        for (size_t i = 0; i < records.size(); ++i) if (included.insert(i).second) result.push_back(i);
+        return result;
+    }
 
     static juce::String legacyBaseKey(const juce::String& type, const juce::PluginDescription& plugin)
     {
@@ -147,9 +185,14 @@ public:
     std::unique_ptr<juce::XmlElement> serialize(juce::uint64 revision = 0) const
     {
         auto root = std::make_unique<juce::XmlElement>("LIGHTHOSTSESSION");
-        root->setAttribute("version", 1);
+        // Older hosts must refuse isolated sessions instead of silently loading
+        // the same native plugin back into their own process after rollback.
+        root->setAttribute("version", std::any_of(records.begin(), records.end(), [](const auto& r) { return r.busLayout.isObject(); }) ? 3 : std::any_of(records.begin(), records.end(), [](const auto& r) { return r.isolated; }) ? 2 : 1);
         root->setAttribute("revision", juce::String(revision));
         root->setAttribute("recoveryError", recoveryError);
+        root->setAttribute("mode", mode);
+        root->setAttribute("profileId", profileId);
+        if (mode == "chain") root->createNewChildElement("ROUTING")->addTextElement(juce::JSON::toString(graph.json(), true));
         for (const auto& record : records)
         {
             auto* item = root->createNewChildElement("INSTANCE");
@@ -157,7 +200,10 @@ public:
             item->setAttribute("identity", record.originalIdentity);
             item->setAttribute("identityResolved", record.identityResolved);
             item->setAttribute("bypassed", record.bypassed);
+            item->setAttribute("isolated", record.isolated);
+            if (record.busLayout.isObject()) item->createNewChildElement("BUSES")->addTextElement(juce::JSON::toString(record.busLayout, true));
             item->setAttribute("customName", record.customName);
+            item->setAttribute("cardColor", record.cardColor);
             item->setAttribute("error", record.error);
             item->setAttribute("loading", record.loading);
             item->setAttribute("stateCaptureAllowed", record.stateCaptureAllowed);
@@ -172,11 +218,21 @@ public:
     bool deserialize(const juce::XmlElement& root)
     {
         // Transactional: malformed data cannot turn a previously loaded session into an empty one.
-        if (!root.hasTagName("LIGHTHOSTSESSION") || root.getIntAttribute("version") != 1) return false;
+        if (!root.hasTagName("LIGHTHOSTSESSION") || (root.getIntAttribute("version") < 1 || root.getIntAttribute("version") > 3)) return false;
         std::vector<PluginInstanceRecord> loaded;
         std::set<juce::String> ids;
+        size_t decodedTotal = 0;
+        const auto nextMode = root.getStringAttribute("mode", "list");
+        RoutingGraph nextGraph;
+        if (nextMode != "list" && nextMode != "chain") return false;
+        if (nextMode == "chain")
+        {
+            const auto* routing = root.getChildByName("ROUTING"); juce::String error;
+            if (!routing || !RoutingGraph::parse(parseBoundedJson(routing->getAllSubText()), nextGraph, error)) return false;
+        }
         for (const auto* item : root.getChildIterator())
         {
+            if (item->hasTagName("ROUTING")) continue;
             PluginInstanceRecord record;
             record.id = item->getStringAttribute("id");
             const auto* description = item->getChildByName("PLUGIN");
@@ -187,17 +243,33 @@ public:
             record.identityResolved = item->getBoolAttribute("identityResolved", false);
             if (record.originalIdentity != knownPluginId(record.description)) return false;
             record.bypassed = item->getBoolAttribute("bypassed");
+            record.isolated = item->getBoolAttribute("isolated", false);
+            if (const auto* buses = item->getChildByName("BUSES")) {
+                record.busLayout = parseBoundedJson(buses->getAllSubText()); juce::AudioProcessor::BusesLayout parsed;
+                if (!pluginBuses::decode(record.busLayout, parsed)) return false;
+            }
             record.customName = item->getStringAttribute("customName");
+            record.cardColor = item->getStringAttribute("cardColor");
+            if (!validVisualColor(record.cardColor)) record.cardColor.clear();
             record.error = item->getStringAttribute("error");
             record.stateCaptureAllowed = item->getBoolAttribute("stateCaptureAllowed", true);
             if (auto* state = item->getChildByName("STATE")) record.lastValidState = state->getAllSubText();
             if (auto* state = item->getChildByName("RECOVERYSTATE")) record.recoveryState = state->getAllSubText();
             if (auto* legacy = item->getChildByName("LEGACY")) record.legacyDescription = legacy->getAllSubText();
             validateState(record);
+            size_t stateBytes = 0;
+            if (!validPluginState(record.lastValidState, stateBytes) || stateBytes > maximumSessionStateBytes - decodedTotal) return false;
+            decodedTotal += stateBytes;
             if (record.error.isNotEmpty()) record.loading = item->getStringAttribute("loading") == "missing" ? "missing" : "failed";
             loaded.push_back(std::move(record));
         }
+        if (nextMode == "chain")
+        {
+            for (const auto& n : nextGraph.nodes) if (n.kind == "plugin" && ids.count(n.id) == 0) return false;
+            for (const auto& r : loaded) { const auto* n = nextGraph.find(r.id); if (!n || n->kind != "plugin") return false; }
+        }
         records = std::move(loaded);
+        mode = nextMode; graph = std::move(nextGraph); profileId = root.getStringAttribute("profileId");
         recoveryError = root.getStringAttribute("recoveryError");
         return true;
     }
@@ -211,8 +283,8 @@ public:
 private:
     static void validateState(PluginInstanceRecord& record)
     {
-        juce::MemoryBlock binary;
-        if (record.lastValidState.isNotEmpty() && !binary.fromBase64Encoding(record.lastValidState))
+        size_t bytes = 0;
+        if (!validPluginState(record.lastValidState, bytes))
         {
             record.recoveryState = record.lastValidState;
             record.lastValidState.clear();

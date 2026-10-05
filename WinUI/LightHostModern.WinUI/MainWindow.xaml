@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="LightHostModernWinUI.MainWindow" Title="LightHostModern" xmlns:local="using:LightHostModernWinUI">
-    <Grid x:Name="RootLayout" Background="Transparent" PointerPressed="RootLayout_PointerPressed">
+    <Grid x:Name="RootLayout" Style="{StaticResource AppWindowBackgroundStyle}" Background="Transparent" PointerPressed="RootLayout_PointerPressed">
         <NavigationView x:Name="SidebarRail" AutomationProperties.AutomationId="RootNavigation" Background="Transparent" CompactPaneLength="64" IsBackButtonVisible="Collapsed" IsPaneOpen="False" IsPaneToggleButtonVisible="False" IsSettingsVisible="False" OpenPaneLength="280" PaneDisplayMode="Left">
             <NavigationView.Resources>
                 <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
@@ -30,6 +30,7 @@
                         <FontIcon FontFamily="Segoe Fluent Icons" Glyph="" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem x:Name="ProfilesButton" AutomationProperties.AutomationId="NavProfiles" Content="Profiles" Icon="Library" Tag="Profiles" />
                 <NavigationViewItem x:Name="DiagnosticsButton" AutomationProperties.AutomationId="NavDiagnostics" Content="Diagnostics" Tag="Diagnostics">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE9D9;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
@@ -71,18 +72,19 @@
                     <StackPanel>
                         <TextBlock x:Name="PageTitleText" AutomationProperties.AutomationId="PageTitle" Style="{StaticResource TitleTextBlockStyle}" Text="Dashboard" />
                         <TextBlock x:Name="PageSubtitleText" AutomationProperties.AutomationId="PageSubtitle" Margin="0,4,0,0" Foreground="{ThemeResource AppTextSecondaryBrush}" TextWrapping="Wrap" />
-                        <TextBlock x:Name="SessionPendingText" AutomationProperties.AutomationId="SessionPending" Visibility="Collapsed" Margin="0,4,0,0" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
                         <InfoBar x:Name="DashboardAudioNotice" IsOpen="False" IsClosable="False" Severity="Warning" Margin="0,8,0,0" />
                         <InfoBar x:Name="SessionStatusBanner" AutomationProperties.AutomationId="SessionStatus" IsOpen="False" IsClosable="True" Margin="0,8,0,0">
                             <InfoBar.ActionButton><Button x:Name="RetrySessionSaveButton" AutomationProperties.AutomationId="RetrySessionSave" Content="Try saving again" /></InfoBar.ActionButton>
                         </InfoBar>
                     </StackPanel>
+                    <TextBlock x:Name="SessionPendingText" Grid.Column="1" AutomationProperties.AutomationId="SessionPending" FontFamily="Segoe Fluent Icons" FontSize="16" VerticalAlignment="Center" Margin="12,0,0,0" Visibility="Collapsed" />
                     <StackPanel x:Name="HeaderActions" Grid.Column="1" Orientation="Horizontal" Spacing="12" Visibility="Collapsed">
                         <TextBlock x:Name="HeaderStatusText" Text="Online" VerticalAlignment="Center" />
                         <Button x:Name="RefreshButton" Content="Refresh" />
                     </StackPanel>
                 </Grid>
-                <ScrollViewer x:Name="ContentScrollViewer" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto" Grid.Row="1">
+                <Grid x:Name="ContentFadeHost" Grid.Row="1">
+                <ScrollViewer x:Name="ContentScrollViewer" HorizontalContentAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="PageContentStack" HorizontalAlignment="Stretch" Spacing="24">
                         <Grid>
                             <StackPanel x:Name="DashboardPanel" Spacing="14">
@@ -133,26 +135,63 @@
                                         </Grid>
                                     </StackPanel>
                                 </Border>
-                                <Grid>
+                                <Grid ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Margin="0,0,8,0" Style="{StaticResource AppCardStyle}">
+                                    <Border Style="{StaticResource AppCardStyle}"><StackPanel>
+                                        <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Operating mode" />
+                                        <TextBlock x:Name="DashboardOperatingModeText" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" />
+                                    </StackPanel></Border>
+                                    <Border Grid.Column="1" Style="{StaticResource AppCardStyle}">
+                                        <StackPanel>
+                                            <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Active profile" />
+                                            <TextBlock x:Name="DashboardActiveProfileText" AutomationProperties.AutomationId="DashboardActiveProfile" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource AppCardStyle}">
                                         <StackPanel>
                                             <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Active plugins" />
                                             <TextBlock x:Name="ActivePluginsText" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" />
                                         </StackPanel>
                                     </Border>
-                                    <Border Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource AppCardStyle}">
+                                    <Border Grid.Column="1" Style="{StaticResource AppCardStyle}">
                                         <StackPanel>
                                             <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="Installed plugins" />
                                             <TextBlock x:Name="KnownPluginsText" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" />
                                         </StackPanel>
                                     </Border>
                                 </Grid>
+                                <Grid x:Name="DashboardResourcesGrid" ColumnSpacing="16" RowSpacing="14">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <Border x:Name="DashboardCpuCard" Style="{StaticResource AppCardStyle}"><StackPanel>
+                                        <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="CPU usage" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="DashboardCpuText" AutomationProperties.AutomationId="DashboardCpuUsage" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" TextWrapping="Wrap" />
+                                    </StackPanel></Border>
+                                    <Border x:Name="DashboardVramCard" Grid.Column="1" Style="{StaticResource AppCardStyle}"><StackPanel>
+                                        <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="VRAM usage" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="DashboardVramText" AutomationProperties.AutomationId="DashboardVramUsage" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" TextWrapping="Wrap" />
+                                    </StackPanel></Border>
+                                    <Border x:Name="DashboardRamCard" Grid.Column="2" Style="{StaticResource AppCardStyle}"><StackPanel>
+                                        <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="RAM usage" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="DashboardRamText" AutomationProperties.AutomationId="DashboardRamUsage" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" TextWrapping="Wrap" />
+                                    </StackPanel></Border>
+                                </Grid>
+                                <Border Style="{StaticResource AppCardStyle}"><StackPanel>
+                                    <TextBlock Foreground="{ThemeResource AppTextSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="App version" />
+                                    <TextBlock x:Name="DashboardVersionText" AutomationProperties.AutomationId="DashboardAppVersion" Margin="0,8,0,0" Style="{StaticResource TitleTextBlockStyle}" Text="--" />
+                                </StackPanel></Border>
                             </StackPanel>
                             <ContentControl x:Name="AudioPageHost" Visibility="Collapsed" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                            <ContentControl x:Name="ProfilesPageHost" Visibility="Collapsed" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                             <ContentControl x:Name="SupportPageHost" Visibility="Collapsed" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                             <ContentControl x:Name="DiagnosticsPageHost" Visibility="Collapsed" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                             <ContentControl x:Name="SettingsPageHost" Visibility="Collapsed" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
@@ -180,10 +219,16 @@
                         </Grid>
                     </StackPanel>
                 </ScrollViewer>
+                </Grid>
                 <ContentControl x:Name="PluginsPageHost" Visibility="Collapsed" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Grid.Row="1" />
             </Grid>
         </NavigationView>
         <Grid x:Name="AppTitleBar" Height="32" Margin="64,0,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Top" Canvas.ZIndex="1" Background="Transparent" />
+        <Border x:Name="ReleaseNotificationSurface" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="24" MaxWidth="520" CornerRadius="8" Visibility="Collapsed">
+        <InfoBar x:Name="ReleaseNotification" AutomationProperties.AutomationId="ReleaseNotification" IsOpen="False" IsClosable="True" Severity="Informational" Background="Transparent" Visibility="Collapsed">
+            <InfoBar.ActionButton><Button x:Name="ViewReleaseNotificationButton" AutomationProperties.AutomationId="ViewReleaseNotification" Content="View update" /></InfoBar.ActionButton>
+        </InfoBar>
+        </Border>
         <Border x:Name="NotificationToast" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,24" MinWidth="280" MaxWidth="420" Padding="16" CornerRadius="{ThemeResource OverlayCornerRadius}" BorderThickness="1" BorderBrush="{ThemeResource AppFlyoutStrokeBrush}" Background="{ThemeResource AppFlyoutBrush}" BackgroundSizing="InnerBorderEdge" Visibility="Collapsed">
             <TextBlock x:Name="NotificationText" Text="" TextWrapping="Wrap" Style="{StaticResource BodyStrongTextBlockStyle}" />
         </Border>

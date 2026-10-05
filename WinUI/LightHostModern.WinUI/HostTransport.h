@@ -10,6 +10,7 @@
 #include <atomic>
 #include <deque>
 #include <functional>
+#include <set>
 #include <winrt/Windows.Foundation.h>
 
 namespace lightHostModern::ipc
@@ -50,6 +51,13 @@ public:
     std::condition_variable changed;
     uint64_t next = 0;
     uint64_t serving = 0;
+    std::set<uint64_t> expiredTickets;
+    void advance() // mutex is held by the caller
+    {
+        ++serving;
+        while (expiredTickets.erase(serving)) ++serving;
+        changed.notify_all();
+    }
 };
 
 inline std::string encodeRequest(const std::string& request, const winrt::hstring& id)
@@ -112,21 +120,28 @@ inline std::string exchangeRequest(ClientState& state, const std::wstring& pipeN
                                    const std::string& request, DWORD timeoutMs)
 {
     if (state.transport) return state.transport(pipeName, request, timeoutMs);
-    const auto deadline = GetTickCount64() + (timeoutMs < 5000 ? timeoutMs : 5000);
+    const auto started = GetTickCount64();
+    const auto deadline = started + timeoutMs;
+    const auto openingDeadline = started + (timeoutMs < 5000 ? timeoutMs : 5000);
     HANDLE raw = INVALID_HANDLE_VALUE;
     while (WaitForSingleObject(state.stop.get(), 0) != WAIT_OBJECT_0)
     {
+        if (GetTickCount64() >= openingDeadline) return {};
         raw = CreateFileW(pipeName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
             OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
         if (raw != INVALID_HANDLE_VALUE) break;
-        if (GetLastError() != ERROR_PIPE_BUSY || GetTickCount64() >= deadline) return {};
-        WaitForSingleObject(state.stop.get(), 20);
+        if (GetLastError() != ERROR_PIPE_BUSY) return {};
+        const auto now = GetTickCount64();
+        if (now >= openingDeadline) return {};
+        WaitForSingleObject(state.stop.get(), static_cast<DWORD>((std::min)(openingDeadline - now, 20ull)));
     }
     Handle pipe(raw);
     if (!pipe) return {};
     DWORD mode = PIPE_READMODE_MESSAGE;
     if (!SetNamedPipeHandleState(pipe.get(), &mode, nullptr, nullptr)) return {};
-    PipeIo io(pipe.get(), state.stop.get(), timeoutMs);
+    const auto now = GetTickCount64();
+    if (now >= deadline) return {};
+    PipeIo io(pipe.get(), state.stop.get(), static_cast<DWORD>(deadline - now));
     if (io.write(request) != ERROR_SUCCESS) return {};
     std::string response;
     if (io.read(response) != ERROR_SUCCESS) return {};
@@ -146,12 +161,15 @@ inline std::string transportError(const char* code, const char* message)
 inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> requestAsync(
     std::shared_ptr<ClientState> state, std::wstring pipeName, std::string request, DWORD timeoutMs = 120000)
 {
+    // The budget starts before admission, not after the FIFO becomes available.
+    const auto deadline = GetTickCount64() + timeoutMs;
     uint64_t ticket;
     const auto requestBytes = request.size() + pipeName.size() * sizeof(wchar_t);
     {
         std::lock_guard<std::mutex> lock(state->mutex);
         if (WaitForSingleObject(state->stop.get(), 0) == WAIT_OBJECT_0) co_return L"";
         if (state->queuedRequests >= ClientState::maximumQueuedRequests
+            || state->next - state->serving >= ClientState::maximumQueuedRequests
             || requestBytes > ClientState::maximumQueuedBytes - state->queuedBytes)
             co_return winrt::to_hstring(transportError("transport_capacity", "The host request queue is full"));
         ++state->queuedRequests;
@@ -167,9 +185,16 @@ inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> requestAsync(
     } reservation{state, requestBytes};
     co_await winrt::resume_background();
     std::unique_lock<std::mutex> lock(state->mutex);
-    state->changed.wait(lock, [&] {
-        return state->serving == ticket || WaitForSingleObject(state->stop.get(), 0) == WAIT_OBJECT_0;
-    });
+    while (state->serving != ticket && WaitForSingleObject(state->stop.get(), 0) != WAIT_OBJECT_0)
+    {
+        const auto now = GetTickCount64();
+        if (now >= deadline)
+        {
+            state->expiredTickets.insert(ticket);
+            co_return winrt::to_hstring(transportError("queue_timeout", "The request expired before it was sent"));
+        }
+        state->changed.wait_for(lock, std::chrono::milliseconds(deadline - now));
+    }
     if (WaitForSingleObject(state->stop.get(), 0) == WAIT_OBJECT_0) co_return L"";
     lock.unlock();
     struct Finish
@@ -178,8 +203,7 @@ inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> requestAsync(
         ~Finish()
         {
             std::lock_guard<std::mutex> guard(state->mutex);
-            ++state->serving;
-            state->changed.notify_all();
+            state->advance();
         }
     } finish{state};
 
@@ -187,7 +211,8 @@ inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> requestAsync(
     const auto id = winrt::to_hstring(idText);
     const auto command = request.substr(0, request.find(':'));
     const bool mutation = !isReadOnly(command);
-    const auto deadline = GetTickCount64() + timeoutMs;
+    if (GetTickCount64() >= deadline)
+        co_return winrt::to_hstring(transportError("queue_timeout", "The request expired before it was sent"));
     try
     {
         auto exchange = [&](const std::string& action, const std::string& actionId) {
@@ -241,6 +266,8 @@ inline winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> requestAsync(
         }
         // Validate before recording an operation that may reach the host.
         encodeRequest(request, id);
+        if (GetTickCount64() >= deadline) co_return winrt::to_hstring(
+            transportError("queue_timeout", "The request expired before it was sent"));
         if (mutation) state->pending.push_back({idText, state->hostSession});
         auto response = exchange(request, idText);
         if (response.empty()) co_return L"";

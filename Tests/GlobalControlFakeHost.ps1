@@ -31,7 +31,7 @@ while (!(Test-Path -LiteralPath (Join-Path $testRoot 'stop'))) {
         if ($request.command -eq 'set-global-mute') { $muted = [bool]$request.args[0]; $version++ }
         if ($request.command -eq 'set-global-bypass') { $bypassed = [bool]$request.args[0]; $version++ }
         $response = @{
-            version = 4; hostSession = 'global-ui-fixture'; id = $request.id; status = 'online';
+            version = 5; hostSession = 'global-ui-fixture'; id = $request.id; status = 'online';
             globalMuted = $muted; globalBypassed = $bypassed; chainVersion = $version;
             pluginDbVersion = 1; audioConfigVersion = 1; knownPlugins = 0; activePluginCount = 0;
             activePlugins = @(); knownPluginList = @(); backend = 'None'; deviceName = 'None';

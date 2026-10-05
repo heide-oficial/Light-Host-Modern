@@ -53,7 +53,7 @@ $target = Assert-WorkspacePath $Destination
 if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
 foreach ($item in Get-ChildItem -LiteralPath $source) {
-    if ($item.Name -in 'obj', 'AppX', 'lighthost-build.json' -or $item.Extension -in '.pdb', '.ilk', '.exp', '.lib', '.appxsym', '.recipe', '.map', '.winmd', '.xml') { continue }
+    if ($item.Name -in 'obj', 'AppX', 'lighthost-build.json' -or $item.Extension -in '.pdb', '.ilk', '.exp', '.lib', '.appxsym', '.recipe', '.appxrecipe', '.map', '.winmd', '.xml') { continue }
     if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Reparse point in WinUI output: $($item.FullName)" }
     Copy-Item -LiteralPath $item.FullName -Destination $target -Recurse -Force
 }

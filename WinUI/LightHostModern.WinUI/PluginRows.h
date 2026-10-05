@@ -31,11 +31,13 @@ inline std::string foldPluginText(const std::string& value)
         std::string name;
         std::string originalName;
         std::string customName;
+        std::string cardColor;
         std::string manufacturer;
         std::string format;
         std::string path;
         std::string status;
         bool bypassed = false;
+        bool isolated = false;
         int originalIndex = -1;
     };
 
@@ -85,7 +87,7 @@ inline std::string foldPluginText(const std::string& value)
 
     inline std::string pluginRowKey(PluginRowData const& row)
     {
-        return row.instanceId + "|" + row.knownId + "|" + row.name + "|" + row.originalName + "|" + row.customName + "|" + row.manufacturer + "|" + row.format + "|" + row.path + "|" + row.status + "|" + (row.bypassed ? "1" : "0");
+        return row.instanceId + "|" + row.knownId + "|" + row.name + "|" + row.originalName + "|" + row.customName + "|" + row.cardColor + "|" + row.manufacturer + "|" + row.format + "|" + row.path + "|" + row.status + "|" + (row.bypassed ? "1" : "0");
     }
 
     inline std::string pluginIdentityKey(PluginRowData const& row)
@@ -150,10 +152,12 @@ inline std::string foldPluginText(const std::string& value)
             row.name = rowString(object, L"name", "Unknown");
             row.originalName = rowString(object, L"originalName", row.name.c_str());
             row.customName = rowString(object, L"customName");
+            row.cardColor = rowString(object, L"cardColor");
             row.manufacturer = rowString(object, L"manufacturer");
             row.format = rowString(object, L"format");
             row.path = rowString(object, L"path");
             row.bypassed = rowBoolean(object, L"bypassed");
+            row.isolated = rowBoolean(object, L"isolated");
             row.status = row.bypassed ? "Bypassed" : "Active";
             const auto loading = rowString(object, L"loading", "loaded");
             if (loading == "missing" || loading == "failed") row.status = "Error";
@@ -177,6 +181,7 @@ inline std::string foldPluginText(const std::string& value)
             row.name = rowString(object, L"name", "Unknown");
             row.originalName = rowString(object, L"originalName", row.name.c_str());
             row.customName = rowString(object, L"customName");
+            row.cardColor = rowString(object, L"cardColor");
             row.manufacturer = rowString(object, L"manufacturer");
             row.format = rowString(object, L"format");
             row.path = rowString(object, L"path");

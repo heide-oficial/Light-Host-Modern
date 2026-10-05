@@ -8,10 +8,14 @@
 #include "UpdateService.h"
 #include "PluginPageController.h"
 #include "AudioPageController.h"
+#include "AudioIntent.h"
 #include "MeterPresenter.h"
 #include "DiagnosticsPresenter.h"
+#include "GpuMemorySampler.h"
 #include "VerboseLogsPresenter.h"
+#include "OperatingPresenter.h"
 #include "WindowMaterial.h"
+#include "ScrollEdgeFade.h"
 #include <winrt/Windows.UI.ViewManagement.h>
 #include "AudioPageView.xaml.h"
 #include "PluginsPageView.xaml.h"
@@ -77,6 +81,7 @@ namespace winrt::LightHostModernWinUI::implementation
         winrt::fire_and_forget AudioBackendBox_SelectionChanged(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs);
         winrt::fire_and_forget InputBox_SelectionChanged(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs);
         winrt::fire_and_forget OutputBox_SelectionChanged(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs);
+        winrt::fire_and_forget renameAudioChannel(bool input, int channel, int width, winrt::hstring label);
         winrt::fire_and_forget ChannelCheckBox_Changed(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
         winrt::fire_and_forget InputChannelsToggleAll_Click(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
         winrt::fire_and_forget OutputChannelsToggleAll_Click(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
@@ -112,9 +117,10 @@ namespace winrt::LightHostModernWinUI::implementation
         winrt::fire_and_forget ManageEnabledAudioDevices_Click(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
         void PreferredDeviceButton_Click(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         winrt::fire_and_forget IconModeBox_SelectionChanged(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs);
-        winrt::fire_and_forget Window_Closed(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::WindowEventArgs);
+        void Window_Closed(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::WindowEventArgs);
 
     private:
+        std::shared_ptr<lightHostModern::ui::OperatingPresenter> operatingPresenter;
 #include "PageAccessors.h"
         winrt::LightHostModernWinUI::PageState pageState = winrt::make<winrt::LightHostModernWinUI::implementation::PageState>();
         winrt::LightHostModernWinUI::AudioPageView audioPageView{nullptr};
@@ -172,6 +178,8 @@ namespace winrt::LightHostModernWinUI::implementation
         Microsoft::UI::Xaml::ElementTheme selectedTheme = Microsoft::UI::Xaml::ElementTheme::Default;
         std::string currentIconMode;
         std::wstring hostPipeName;
+        std::wstring appNotifiedRelease;
+        bool lastNotificationImportant = true;
         bool syncingThemeControls = false;
         bool syncingHostControls = false;
         bool syncingConfigControls = false;
@@ -179,6 +187,12 @@ namespace winrt::LightHostModernWinUI::implementation
         bool vst2RestartRequired = false;
         bool comboDropDownOpen = false;
         bool commandInProgress = false;
+        bool enabledDevicesOpening = false;
+        lightHostModern::ui::IntentAdmission commandIntents;
+        uint64_t normalCloseDeadline=0;
+        std::string audioLastGeneration;
+        std::set<std::string> audioOwnedGenerations;
+        winrt::Windows::Foundation::IAsyncAction changeAudioChannels(bool input,int first,int last,bool enabled);
         bool telemetryInProgress = false;
         bool snapshotInProgress = false;
         bool windowClosing = false;
@@ -198,12 +212,9 @@ namespace winrt::LightHostModernWinUI::implementation
         bool globalMuted = false, globalBypassed = false, globalControlPending = false;
         void updateGlobalAudioControls();
         void updateAudioAvailability();
-        winrt::fire_and_forget MonoInputs_Toggled(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
-        bool monoCommandPending = false;
-        bool monoOutputCommandPending = false;
+        winrt::fire_and_forget AudioMode_Changed(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs);
         bool inputChannelPairs = false, outputChannelPairs = true;
         std::wstring channelPreferenceKey;
-        winrt::fire_and_forget MonoOutput_Toggled(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::RoutedEventArgs);
         winrt::fire_and_forget changeMono(bool input);
         winrt::fire_and_forget ChannelGrouping_Changed(winrt::Windows::Foundation::IInspectable, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs);
 
@@ -212,7 +223,9 @@ namespace winrt::LightHostModernWinUI::implementation
         bool syncingLanguageControls = false;
         bool languageChangeQueued = false;
         bool updateInstallInProgress = false;
-        bool updateCheckStarted = false;
+        bool updateCheckStarted = false, updateCheckInProgress = false;
+        Microsoft::UI::Xaml::DispatcherTimer updateCheckTimer{nullptr};
+        void notifyAvailableRelease();
         bool hideSupportTab = false;
         bool diagnosticsEnabled = true, syncingDiagnosticsControls = false, diagnosticsChangePending = false;
         void syncDiagnosticsSetting(bool enabled);
@@ -295,6 +308,12 @@ namespace winrt::LightHostModernWinUI::implementation
         void openFluentDropdown(FluentDropdown& dropdown);
         lightHostModern::ui::MeterPresenter inputMeter, outputMeter;
         lightHostModern::ui::DiagnosticsPresenter diagnosticsPresenter;
+        lightHostModern::CpuUsageSampler dashboardCpuSampler;
+        lightHostModern::ui::GpuMemorySampler dashboardGpuSampler;
+        bool dashboardGpuInProgress = false;
+        void updateDashboardSummary(const std::string& json);
+        void updateDashboardPerformance(const std::string& json);
+        winrt::fire_and_forget refreshDashboardGpu(const std::string& json);
         std::shared_ptr<lightHostModern::ui::VerboseLogsPresenter> verboseLogsPresenter;
         lightHostModern::ui::SessionStatusPresenter sessionStatusPresenter;
         winrt::LightHostModernWinUI::DiagnosticsPageView diagnosticsPageView{nullptr};
@@ -317,11 +336,14 @@ namespace winrt::LightHostModernWinUI::implementation
         winrt::fire_and_forget refreshMeterLevels();
         bool isControlVisible(Microsoft::UI::Xaml::FrameworkElement control);
         void updateMeters(const std::string& json);
-        void showNotification(std::wstring const& message);
+        void showNotification(std::wstring const& message, bool important = true);
         void showSection(std::wstring const& section);
+        bool pendingNormalClose=false, normalCloseReady=false;
+        winrt::fire_and_forget prepareNormalClose();
+        winrt::Windows::Foundation::IAsyncAction finishNormalCloseAsync();
         winrt::fire_and_forget refreshTelemetry();
-        winrt::Windows::Foundation::IAsyncAction refreshSnapshot(bool fromCache = false);
-        winrt::Windows::Foundation::IAsyncOperation<bool> sendCommand(std::string command);
+        winrt::Windows::Foundation::IAsyncAction refreshSnapshot(bool fromCache = false, uint64_t deadline = 0);
+        winrt::Windows::Foundation::IAsyncOperation<bool> sendCommand(std::string command, bool chainPrepared = false);
         int taggedIndexOrSelected(winrt::Windows::Foundation::IInspectable const& sender, int selectedIndex) const;
         int selectedRunningPluginIndex();
         void updateRunningPluginActions();
@@ -337,6 +359,13 @@ namespace winrt::LightHostModernWinUI::implementation
         winrt::Windows::UI::ViewManagement::AccessibilitySettings accessibilitySettings;
         winrt::Windows::UI::ViewManagement::AccessibilitySettings::HighContrastChanged_revoker contrastChanged;
         void applyBackdrop(int selectedIndex);
+        void applyVisualPreferences();
+        std::shared_ptr<lightHostModern::ui::ScrollEdgeFade> contentFade;
+        winrt::fire_and_forget notifyWindowsRelease(std::wstring version);
+        bool windowsNoticePending = false;
+        std::wstring windowsNotifiedRelease;
+        bool updateChoiceOpen = false;
+        fire_and_forget chooseUpdateMethodAsync();
         void applyLayoutMode();
         void updatePreferredDeviceSummary();
         fire_and_forget showPreferredDeviceDialogAsync();

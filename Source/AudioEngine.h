@@ -10,6 +10,8 @@
 #include "HostAudioPlayer.h"
 #include "ProcessMetrics.h"
 #include "SessionStore.h"
+#include "OperatingProfiles.h"
+#include "IsolatedPlugin.h"
 
 ApplicationProperties& getAppProperties();
 
@@ -42,11 +44,18 @@ public:
 
 	std::vector<PluginDescription> getActivePluginsSorted() const;
 	const std::vector<lightHostModern::PluginInstanceRecord>& getPluginInstances() const { return instances.records; }
+    juce::var getPluginBuses(const juce::String& id);
+    void refreshPluginLayouts();
+    std::vector<size_t> getPluginProcessingOrder() const { return instances.processingOrder(); }
 	String getSessionRecoveryError() const { return instances.recoveryError; }
 	lightHostModern::SessionSaveStatus getSessionSaveStatus() const { return sessionStore ? sessionStore->status() : lightHostModern::SessionSaveStatus{}; }
 	const StringArray& getStateCaptureFailures() const { return stateCaptureFailures; }
 	bool isSessionWritable() const { return instances.writable && !sessionLoadSuppressed; }
 	bool flushSession();
+    bool prepareIsolatedStateCapture(bool start);
+    void finishIsolatedStateCapture() { isolatedCaptureBarrier = false; }
+    juce::var isolatedPluginDiagnostics(const PluginInstanceId&) const;
+    juce::var isolatedPluginDiagnostics() const;
 	int findKnownPluginIndexById(const String& id) const;
 	int findPluginIndexById(const PluginInstanceId& id) const;
 	void setGlobalMuted(bool value) { if (hostProcessor.setGlobalMuted(value)) ++chainVersion; }
@@ -64,11 +73,17 @@ public:
 	AudioRecoveryConfiguration getAudioRecoveryConfiguration() const;
 	AudioBlocklistConfiguration getAudioBlocklistConfiguration() const;
 	AvailableAudioChoicesConfiguration getAvailableAudioChoicesConfiguration();
+    String updateEnabledChoices(const var& request) { const auto error = deviceController.updateEnabledChoices(request); if (error.isEmpty()) ++chainVersion; return error; }
 	bool isVst2FormatActive() const;
 	bool isPluginBypassed(int sortedIndex) const;
 	bool isKnownPluginMenuId(int menuId) const;
 	void addKnownPluginsToMenu(PopupMenu& menu) const;
 
+    var getAudioChannelAliases() const;
+    var getAudioDeviceAliases() const;
+    String renameAudioDevices(const var& request);
+    String restoreAllOriginalNames();
+    String renameAudioChannel(const var& request);
 	bool setAudioBackendByIndex(int backendIndex);
     bool selectAudioDevice(const AudioDeviceSelection& selection) { return deviceController.selectConfiguration(selection); }
     bool setPreferredAudioDevice(const String& backend, const String& input, const String& output, uint64 generation)
@@ -116,8 +131,8 @@ public:
 	void collectPluginScanResults();
 
 	void addPluginFromMenuId(int menuId);
-	bool addKnownPluginByIndex(int sortedIndex);
-	void duplicatePlugin(int sortedIndex);
+	bool addKnownPluginByIndex(int sortedIndex, PluginInstanceId* createdId = nullptr);
+	void duplicatePlugin(int sortedIndex, PluginInstanceId* createdId = nullptr);
 	int removeKnownPluginByIndex(int sortedIndex);
 	int clearKnownPlugins();
 	void openKnownPluginLocation(int sortedIndex) const;
@@ -133,7 +148,7 @@ public:
 	bool isDiagnosticsEnabled() const { return lightHostModern::diagnosticsCollectionEnabled.load(); }
 	void setDiagnosticsEnabled(bool enabled);
 	void deletePluginStates();
-	void savePluginStates();
+	void savePluginStates(bool captureAll = true);
 	void saveAudioDeviceState();
 	void flushPendingSaves();
 	void removePluginsLackingInputOutput();
@@ -148,8 +163,32 @@ public:
 	uint64 getChainVersion() const noexcept { return chainVersion; }
 	uint64 getPluginDatabaseVersion() const noexcept { return pluginDatabaseVersion; }
 	uint64 getAudioConfigVersion() const noexcept { return deviceController.getVersion(); }
+    var getOperatingState() const;
+    var getRoutingMeters() const { return hostProcessor.getRoutingMeters(); }
+    String handleOperatingCommand(const var& request);
+    bool isChainMode() const { return operatingMode == "chain"; }
 
 private:
+    void pollIsolatedPlugins();
+    size_t isolatedCaptureBudget(const PluginInstanceId&) const;
+    std::map<PluginInstanceId, std::shared_ptr<lightHostModern::IsolatedPluginSession>> isolatedPlugins;
+    struct IsolatedCapture {
+        uint64_t ticket = 0, revision = 0, generation = 0;
+        std::weak_ptr<lightHostModern::IsolatedPluginSession> session;
+        std::weak_ptr<PluginSlot> slot;
+    };
+    std::map<PluginInstanceId, IsolatedCapture> isolatedCaptures;
+    bool isolatedCaptureBarrier = false;
+    void initializeOperatingProfiles();
+    void synchronizeGraph(ChainSnapshot&);
+    void applyProfile(const lightHostModern::OperatingProfile&);
+    lightHostModern::OperatingProfile captureProfile(const String& name, bool includeAudio, const String& description);
+    String currentProfileDigest() const;
+    bool profileHasChanges() const;
+    std::unique_ptr<lightHostModern::OperatingProfiles> operatingProfiles;
+    String operatingMode = "list", profileError;
+    bool profilesReady = false;
+    std::vector<lightHostModern::PluginInstances> routingUndo, routingRedo;
 	enum TimerIds
 	{
 		audioWatchdogTimerId = 1,
@@ -202,8 +241,10 @@ private:
 	std::unique_ptr<lightHostModern::SessionStore> sessionStore;
 	String sessionMigrationId;
 	StringArray stateCaptureFailures;
-	uint64 lastSessionStatusSerial = 0;
 	double stateCaptureDue = 0;
+    std::set<PluginInstanceId> pendingStateCaptures;
+    uint64 operatingGeneration = 1;
+    const String operatingEpoch = Uuid().toString();
 	bool sessionLoadSuppressed = false;
 	KnownPluginList::SortMethod pluginSortMethod = KnownPluginList::sortByManufacturer;
 	RealtimeHostProcessor hostProcessor;

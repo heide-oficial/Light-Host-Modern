@@ -12,7 +12,11 @@
 *.bat text eol=crlf
 
 *.png binary
+*.mp4 binary
 *.ico binary
 *.exe binary
 *.dll binary
 *.pdb binary
+
+# Preserve upstream license bytes and their recorded hashes.
+ThirdParty/Licenses/** -text -whitespace

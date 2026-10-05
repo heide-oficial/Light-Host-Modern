@@ -4,6 +4,11 @@
 
 namespace lightHostModern::update
 {
+inline bool installationCompleted(const std::string& state, uint32_t code)
+{
+    return (state == "completed" && code == 0)
+        || (state == "restart_required" && (code == 3010 || code == 1641));
+}
 struct ApplyEnvironment
 {
     virtual ~ApplyEnvironment() = default;

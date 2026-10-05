@@ -60,17 +60,16 @@
                     <TextBlock x:Name="InputSettingsTitle" Text="Input settings" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <TextBlock x:Name="InputMonoLabel" Text="Mix inputs to mono" VerticalAlignment="Center" TextWrapping="Wrap" />
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="12">
-                            <TextBlock x:Name="InputMonoStateText" Text="Off" VerticalAlignment="Center" />
-                            <ToggleSwitch x:Name="MonoInputsSwitch" AutomationProperties.AutomationId="MonoInputsSwitch" Style="{StaticResource CompactToggleSwitchStyle}" />
-                        </StackPanel>
+                        <TextBlock x:Name="InputMonoLabel" Text="Input mode" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        <ComboBox x:Name="InputModeBox" Grid.Column="1" AutomationProperties.AutomationId="InputModeBox" MinWidth="160" MinHeight="36" Padding="12,5,32,5" VerticalContentAlignment="Center" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <ComboBoxItem Content="Stereo" /><ComboBoxItem Content="Mono" />
+                        </ComboBox>
                     </Grid>
                     <Grid ColumnSpacing="16" Visibility="{Binding Visibility, ElementName=InputGroupingBox}">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <TextBlock x:Name="InputSelectionLabel" Text="Channel selection" VerticalAlignment="Center" TextWrapping="Wrap" />
-                        <ComboBox x:Name="InputGroupingBox" Grid.Column="1" AutomationProperties.AutomationId="InputChannelGrouping" MinWidth="160" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center">
-                            <ComboBoxItem Content="Individual" /><ComboBoxItem Content="Pairs" />
+                        <ComboBox x:Name="InputGroupingBox" Grid.Column="1" AutomationProperties.AutomationId="InputChannelGrouping" MinWidth="160" MinHeight="36" Padding="12,5,32,5" VerticalContentAlignment="Center" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <ComboBoxItem Content="Pairs" /><ComboBoxItem Content="Individual" />
                         </ComboBox>
                     </Grid>
                 </StackPanel>
@@ -80,17 +79,16 @@
                     <TextBlock x:Name="OutputSettingsTitle" Text="Output settings" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <TextBlock x:Name="OutputMonoLabel" Text="Main output to mono" VerticalAlignment="Center" TextWrapping="Wrap" />
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="12">
-                            <TextBlock x:Name="OutputMonoStateText" Text="Off" VerticalAlignment="Center" />
-                            <ToggleSwitch x:Name="MonoOutputSwitch" AutomationProperties.AutomationId="MonoOutputSwitch" Style="{StaticResource CompactToggleSwitchStyle}" />
-                        </StackPanel>
+                        <TextBlock x:Name="OutputMonoLabel" Text="Output mode" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        <ComboBox x:Name="OutputModeBox" Grid.Column="1" AutomationProperties.AutomationId="OutputModeBox" MinWidth="160" MinHeight="36" Padding="12,5,32,5" VerticalContentAlignment="Center" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <ComboBoxItem Content="Stereo" /><ComboBoxItem Content="Mono" />
+                        </ComboBox>
                     </Grid>
                     <Grid ColumnSpacing="16" Visibility="{Binding Visibility, ElementName=OutputGroupingBox}">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <TextBlock x:Name="OutputSelectionLabel" Text="Channel selection" VerticalAlignment="Center" TextWrapping="Wrap" />
-                        <ComboBox x:Name="OutputGroupingBox" Grid.Column="1" AutomationProperties.AutomationId="OutputChannelGrouping" MinWidth="160" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center">
-                            <ComboBoxItem Content="Individual" /><ComboBoxItem Content="Pairs" />
+                        <ComboBox x:Name="OutputGroupingBox" Grid.Column="1" AutomationProperties.AutomationId="OutputChannelGrouping" MinWidth="160" MinHeight="36" Padding="12,5,32,5" VerticalContentAlignment="Center" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <ComboBoxItem Content="Pairs" /><ComboBoxItem Content="Individual" />
                         </ComboBox>
                     </Grid>
                 </StackPanel>

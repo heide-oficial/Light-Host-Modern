@@ -26,12 +26,12 @@ public:
         // event long-polls. Old readings are never queued behind operations.
         co_return co_await ipc::requestAsync(meters, pipeName + L"-meters", "meter-levels", 150);
     }
-    winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> requestAsync(std::string command)
+    winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> requestAsync(std::string command, DWORD timeoutMs = 120000)
     {
         auto lifetime = shared_from_this();
-        co_return co_await ipc::requestAsync(commands, pipeName, std::move(command));
+        co_return co_await ipc::requestAsync(commands, pipeName, std::move(command), timeoutMs);
     }
-    winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> snapshotAsync()
+    winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> snapshotAsync(uint64_t deadline = 0)
     {
         using namespace ipc;
         auto lifetime = shared_from_this();
@@ -43,8 +43,11 @@ public:
         // never replace the current displayed snapshot.
         for (int attempt = 0; attempt < 3 && !closed; ++attempt)
         {
-            auto wire = winrt::to_string(co_await requestAsync("snapshot-manifest"));
-            auto manifest = JsonObject::Parse(winrt::to_hstring(wire.empty() ? "{}" : wire));
+            const auto manifestNow = GetTickCount64();
+            if (deadline && manifestNow >= deadline) co_return L"";
+            auto wire = winrt::to_string(co_await requestAsync("snapshot-manifest", deadline
+                ? static_cast<DWORD>((std::min)(deadline - manifestNow, static_cast<uint64_t>(120000))) : 120000));
+            auto manifest = parseObject(wire);
             if (wire.empty() || extractString(wire, "status") == "error")
             { connected = false; snapshotNeeded = true; co_return winrt::to_hstring(wire); }
             const auto snapshotId = manifest.GetNamedString(L"snapshotId", L"");
@@ -59,7 +62,7 @@ public:
             for (const auto* collection : {L"activePlugins", L"knownPluginList"})
             {
                 const auto count = counts.GetNamedNumber(collection, -1);
-                if (count < 0 || count > 1000000 || std::floor(count) != count)
+                if (!std::isfinite(count) || count < 0 || count > 1000000 || std::floor(count) != count)
                     co_return winrt::to_hstring(transportError("invalid_snapshot", "Host returned an invalid collection count"));
                 JsonArray items;
                 std::set<std::wstring> ids;
@@ -70,9 +73,12 @@ public:
                     options.SetNamedValue(L"collection", JsonValue::CreateStringValue(collection));
                     options.SetNamedValue(L"offset", JsonValue::CreateNumberValue(items.Size()));
                     options.SetNamedValue(L"limit", JsonValue::CreateNumberValue(100));
-                    auto pageWire = winrt::to_string(co_await requestAsync("snapshot-page:" + winrt::to_string(options.Stringify())));
+                    const auto now = GetTickCount64();
+                    if (deadline && now >= deadline) co_return L"";
+                    auto pageWire = winrt::to_string(co_await requestAsync("snapshot-page:" + winrt::to_string(options.Stringify()), deadline
+                        ? static_cast<DWORD>((std::min)(deadline - now, static_cast<uint64_t>(120000))) : 120000));
                     receivedBytes += pageWire.size();
-                    if (receivedBytes > 32 * 1024 * 1024)
+                    if (receivedBytes > maximumSnapshotJsonBytes)
                         co_return winrt::to_hstring(transportError("message_too_large", "The complete snapshot exceeds the client capacity"));
                     if (extractString(pageWire, "code") == "stale_snapshot") { stale = true; break; }
                     if (pageWire.empty() || extractString(pageWire, "status") == "error")
@@ -80,6 +86,7 @@ public:
                     const auto page = parseObject(pageWire);
                     const auto rows = page.GetNamedArray(L"items", JsonArray{});
                     if (page.GetNamedString(L"snapshotId", L"") != snapshotId || page.GetNamedString(L"hostSession", L"") != hostSession
+                        || page.GetNamedString(L"collection", L"") != collection
                         || page.GetNamedNumber(L"total", -1) != count || page.GetNamedNumber(L"offset", -1) != items.Size()
                         || rows.Size() == 0 || rows.Size() > 100 || items.Size() + rows.Size() > count)
                         co_return winrt::to_hstring(transportError("invalid_snapshot", "Snapshot pages did not match their manifest"));
@@ -96,7 +103,12 @@ public:
             }
             if (stale) continue;
             if (closed) co_return L"";
-            snapshotJson = winrt::to_string(manifest.Stringify());
+            auto complete = winrt::to_string(manifest.Stringify());
+            // Validate the whole document before replacing the last good state.
+            if (!parseSnapshotObject(complete).HasKey(L"snapshotId"))
+                co_return winrt::to_hstring(transportError("snapshot_capacity", "The complete snapshot exceeds the client capacity"));
+            if (deadline && GetTickCount64() >= deadline) co_return L"";
+            snapshotJson = std::move(complete);
             session = winrt::to_string(hostSession); sequence = static_cast<uint64_t>(cursor);
             snapshotNeeded = false; connected = true;
             co_return winrt::to_hstring(snapshotJson);

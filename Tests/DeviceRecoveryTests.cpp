@@ -1,4 +1,5 @@
 #include "DeviceController.h"
+#include "AudioChannelAliases.h"
 #include "GuardedAudioDeviceManager.h"
 #include "ScenarioRunner.h"
 
@@ -110,6 +111,23 @@ int main()
 {
     using scenarios::require;
     scenarios::Runner tests;
+    tests.run("enabled devices reject stale inventories and apply batches atomically", [] {
+        Scenario scenario("disabled");
+        auto choices=scenario.controller.getAvailableAudioChoicesConfiguration();
+        auto request=juce::JSON::parse(R"({"backends":{},"devices":{"Simulated|input|A":false},"names":{"Simulated|input|A":"My input"}})");
+        request.getDynamicObject()->setProperty("token",choices.token);
+        scenario.manager.hardware.names={"B","A"};
+        require(scenario.controller.updateEnabledChoices(request).isNotEmpty(),"Reordered inventory accepted an old token");
+        require(!scenario.controller.isAudioDeviceBlocked("Simulated","input","A"),"Rejected transaction changed a device");
+        choices=scenario.controller.getAvailableAudioChoicesConfiguration();request.getDynamicObject()->setProperty("token",choices.token);
+        request["devices"].getDynamicObject()->setProperty("Simulated|input|Missing",false);
+        require(scenario.controller.updateEnabledChoices(request).isNotEmpty(),"Partially invalid batch was applied");
+        require(!scenario.controller.isAudioDeviceBlocked("Simulated","input","A"),"Validation was not atomic");
+        request["devices"].getDynamicObject()->removeProperty("Simulated|input|Missing");
+        require(scenario.controller.updateEnabledChoices(request).isEmpty(),"Valid batch was rejected");
+        require(scenario.controller.isAudioDeviceBlocked("Simulated","input","A")&&!scenario.controller.isAudioDeviceBlocked("Simulated","input","B"),"Wrong device changed");
+        require(scenario.settings.getValue("audioDeviceAliases").contains("My input"),"Rename not included in transaction");
+    });
     tests.run("disabled never substitutes an available device for the saved missing one", [] {
         Scenario scenario("disabled");
         XmlElement state("DEVICESETUP"); state.setAttribute("deviceType", "Simulated");
@@ -322,6 +340,20 @@ int main()
         require(scenario.controller.monoOutputKey() != outputKey && !scenario.settings.getBoolValue(scenario.controller.monoOutputKey(), false), "New device inherited mono");
         selected.setup.inputDeviceName = selected.setup.outputDeviceName = "A"; require(apply(), "Device A did not reopen");
         require(scenario.settings.getBoolValue(scenario.controller.monoOutputKey(), false), "Returning to device lost preference");
+    });
+    tests.run("restoring a pair removes inherited individual names only within that pair", [] {
+        DynamicObject names;
+        lightHostModern::editAudioChannelAlias(names, 0, 1, "Left renamed");
+        lightHostModern::editAudioChannelAlias(names, 1, 1, "Right renamed");
+        lightHostModern::editAudioChannelAlias(names, 2, 1, "Keep aux");
+        lightHostModern::editAudioChannelAlias(names, 0, 2, "");
+        require(!names.hasProperty("0:1") && !names.hasProperty("1:1") && !names.hasProperty("0:2"), "pair restore left inherited names");
+        require(names.getProperty("2:1").toString() == "Keep aux", "restore changed another pair");
+        lightHostModern::editAudioChannelAlias(names, 0, 2, "Pair renamed");
+        lightHostModern::editAudioChannelAlias(names, 1, 1, "Right renamed");
+        require(!names.hasProperty("0:2"), "individual edit retained an overriding pair name");
+        lightHostModern::editAudioChannelAlias(names, 1, 1, "");
+        require(!names.hasProperty("1:1") && names.getProperty("2:1").toString() == "Keep aux", "individual restore changed other channels");
     });
     return tests.result();
 }

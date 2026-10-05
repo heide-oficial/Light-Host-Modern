@@ -7,9 +7,11 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <ResourceDictionary Source="DialogStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ChainSolidCardBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="AppStatusLinkBrush" Color="#005A9E" />
                     <StaticResource x:Key="AppSidebarBrush" ResourceKey="LayerFillColorDefaultBrush" />
                     <StaticResource x:Key="AppCardBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
@@ -36,6 +38,7 @@
                     <StaticResource x:Key="AppStatusAvailableStrokeBrush" ResourceKey="TextFillColorSecondaryBrush" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="ChainSolidCardBrush" Color="#FF2D2D2D" />
                     <SolidColorBrush x:Key="AppStatusLinkBrush" Color="#60A5FA" />
                     <StaticResource x:Key="AppSidebarBrush" ResourceKey="LayerFillColorDefaultBrush" />
                     <StaticResource x:Key="AppCardBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
@@ -62,6 +65,7 @@
                     <StaticResource x:Key="AppStatusAvailableStrokeBrush" ResourceKey="TextFillColorSecondaryBrush" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
+                    <StaticResource x:Key="ChainSolidCardBrush" ResourceKey="SystemColorButtonFaceColorBrush" />
                     <StaticResource x:Key="AppStatusLinkBrush" ResourceKey="SystemColorHotlightColorBrush" />
                     <StaticResource x:Key="AppSidebarBrush" ResourceKey="SystemColorWindowColorBrush" />
                     <StaticResource x:Key="AppCardBrush" ResourceKey="SystemColorWindowColorBrush" />
@@ -88,6 +92,20 @@
                     <StaticResource x:Key="AppStatusAvailableStrokeBrush" ResourceKey="SystemColorButtonTextColorBrush" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+            <Style x:Key="AppWindowBackgroundStyle" TargetType="Grid">
+                <Setter Property="Background" Value="{ThemeResource AppSolidBackgroundBrush}" />
+            </Style>
+            <Style x:Key="ChainViewportStyle" TargetType="Grid">
+                <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource AppCardStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+            </Style>
+            <Style x:Key="ChainWireStyle" TargetType="Path">
+                <Setter Property="Stroke" Value="{ThemeResource AppAccentBrush}" />
+            </Style>
+            <Style x:Key="ChainSocketStyle" TargetType="Ellipse">
+                <Setter Property="Fill" Value="{ThemeResource AppAccentBrush}" />
+            </Style>
             <Style x:Key="AppStatusLinkStyle" TargetType="HyperlinkButton">
                 <Setter Property="Foreground" Value="{ThemeResource AppStatusLinkBrush}" />
             </Style>
@@ -98,6 +116,40 @@
                 <Setter Property="BorderBrush" Value="{ThemeResource AppCardStrokeBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+            </Style>
+            <Style x:Key="ChainCardStyle" TargetType="Border" BasedOn="{StaticResource AppCardStyle}"><Setter Property="Background" Value="{ThemeResource ChainSolidCardBrush}" /></Style>
+            <Style x:Key="ChainConnectedCardStyle" TargetType="Border" BasedOn="{StaticResource ChainCardStyle}"><Setter Property="BorderBrush" Value="{ThemeResource TextFillColorPrimaryBrush}" /></Style>
+            <Style x:Key="ChainDottedBorderStyle" TargetType="Rectangle">
+                <Setter Property="Stroke" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="StrokeThickness" Value="1" />
+                <Setter Property="StrokeDashCap" Value="Round" /><Setter Property="RadiusX" Value="7" /><Setter Property="RadiusY" Value="7" />
+            </Style>
+            <Style x:Key="ChainToolbarSeparatorStyle" TargetType="Border"><Setter Property="Background" Value="{ThemeResource AppTextSecondaryBrush}" /></Style>
+            <Style x:Key="ChainSelectedCardStyle" TargetType="Border" BasedOn="{StaticResource ChainCardStyle}">
+                <Setter Property="BorderBrush" Value="{ThemeResource AppAccentBrush}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style x:Key="ChainWarningCardStyle" TargetType="Border" BasedOn="{StaticResource ChainCardStyle}">
+                <Setter Property="BorderBrush" Value="{ThemeResource AppStatusCautionStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style x:Key="ChainSearchCardStyle" TargetType="Border" BasedOn="{StaticResource ChainCardStyle}">
+                <Setter Property="BorderBrush" Value="{ThemeResource AppAccentBrush}" />
+                <Setter Property="BorderThickness" Value="3" />
+            </Style>
+            <Style x:Key="ChainStripeStyle" TargetType="Path"><Setter Property="Stroke" Value="{ThemeResource AppTextSecondaryBrush}" /></Style>
+            <Style x:Key="ChainBypassedCardStyle" TargetType="Border" BasedOn="{StaticResource ChainCardStyle}">
+
+            </Style>
+            <Style x:Key="ChainDisconnectedCardStyle" TargetType="Border" BasedOn="{StaticResource ChainCardStyle}">
+                <Setter Property="BorderBrush" Value="Transparent" />
+
+            </Style>
+            <Style x:Key="ChainSelectionStyle" TargetType="Rectangle">
+                <Setter Property="Stroke" Value="{ThemeResource AppAccentBrush}" />
+                <Setter Property="Fill" Value="{ThemeResource AppAccentBrush}" />
+                <Setter Property="Opacity" Value="0.25" />
+                <Setter Property="StrokeThickness" Value="2" />
             </Style>
             <Style x:Key="ScanFailureItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />

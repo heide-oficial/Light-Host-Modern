@@ -17,7 +17,7 @@ public:
     static std::unique_ptr<juce::XmlElement> load(const juce::File& file)
     {
         StageTiming timing("cache_read", "path=" + file.getFullPathName().toStdString());
-        auto result = file.getSize() <= maximumResponseBytes ? juce::XmlDocument::parse(file) : nullptr;
+        auto result = parseScannerXml(file);
         if (!result || result->getBoolAttribute("complete", true)
             || result->getIntAttribute("cacheVersion") != metadataCacheVersion) return result;
         const auto id = result->getStringAttribute("checkpointId");
@@ -34,15 +34,15 @@ public:
             entries[entry->getStringAttribute("knownId")] = std::make_unique<juce::XmlElement>(*entry);
         }
         int records = 0;
-        while (input->getTotalLength() - input->getPosition() >= 4) {
+        while (input->getPosition() <= journalLimit - 4 && input->getTotalLength() - input->getPosition() >= 4) {
             const auto length = input->readInt();
-            if (length <= 0 || length > maximumResponseBytes
+            if (length <= 0 || length > maximumResponseBytes || input->getPosition() > journalLimit - length - 64
                 || input->getTotalLength() - input->getPosition() < length + 64LL) break;
             juce::MemoryBlock data(static_cast<size_t>(length));
             char checksum[64];
             if (input->read(data.getData(), length) != length || input->read(checksum, 64) != 64) break;
             if (juce::SHA256(data).toHexString() != juce::String::fromUTF8(checksum, 64)) break;
-            auto record = juce::XmlDocument::parse(juce::String::fromUTF8(static_cast<const char*>(data.getData()), length));
+            auto record = parseScannerXml(juce::String::fromUTF8(static_cast<const char*>(data.getData()), length));
             if (!record || !record->hasTagName("CHECKPOINT") || record->getStringAttribute("id") != id
                 || record->getNumChildElements() != 1) break;
             const auto* entry = record->getFirstChildElement();

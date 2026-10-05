@@ -21,6 +21,17 @@
             <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
 
         </Style>
+        <!-- Multi-selection is shown on the card, without a separate checkbox gutter. -->
+        <Style x:Key="PluginPickerContainerStyle" TargetType="ListViewItem" BasedOn="{StaticResource PluginCardContainerStyle}">
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" HorizontalContentAlignment="Stretch" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <DataTemplate x:Key="PluginItemTemplate" x:DataType="local:PluginItem">
             <Grid>
                 <Border Style="{StaticResource AppCardStyle}" Padding="16,12" MinHeight="48" Margin="0,8,0,0" Visibility="{x:Bind GroupVisibility, Mode=OneWay}" PointerEntered="PluginCard_PointerEntered" PointerExited="PluginCard_PointerExited">
@@ -38,6 +49,7 @@
             <Grid MinHeight="{x:Bind RowHeight, Mode=OneWay}" ColumnSpacing="16" AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}" AllowDrop="{x:Bind CanReorder, Mode=OneWay}" DragOver="RunningPluginItem_DragOver" Drop="RunningPluginItem_Drop">
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Border Grid.RowSpan="2" Grid.ColumnSpan="3" Margin="-16" CornerRadius="8" Background="{x:Bind CardTint, Mode=OneWay}" IsHitTestVisible="False"/>
                 <TextBlock Grid.Row="1" Text="{x:Bind Position, Mode=OneWay}" Visibility="{x:Bind PositionVisibility, Mode=OneWay}" MinWidth="24" VerticalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource AppTextSecondaryBrush}" />
                 <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                     <TextBlock Text="{x:Bind Name, Mode=OneWay}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
@@ -75,7 +87,7 @@
                     </CommandBar.Content>
                     <AppBarToggleButton x:Name="RunningGlobalMuteButton" Label="Mute output" Icon="Mute" Tag="mute" IsEnabled="False" AutomationProperties.AutomationId="RunningGlobalMute" Click="GlobalAudioControl_Click" />
                     <AppBarToggleButton x:Name="RunningGlobalBypassButton" Label="Bypass chain" Tag="bypass" IsEnabled="False" AutomationProperties.AutomationId="RunningGlobalBypass" Click="GlobalAudioControl_Click"><AppBarToggleButton.Icon><FontIcon Glyph="&#xE8AB;" /></AppBarToggleButton.Icon></AppBarToggleButton>
-                    <AppBarSeparator />
+                    <AppBarSeparator Margin="8,0,8,0" />
                     <AppBarButton x:Name="RunningPluginSortButton" Label="Sort" Icon="Sort" AutomationProperties.AutomationId="RunningPluginSort" />
                 </CommandBar>
             </Border>
@@ -92,7 +104,7 @@
                         <AutoSuggestBox x:Name="InstalledPluginSearchBox" AutomationProperties.AutomationId="InstalledPluginSearch" AutomationProperties.Name="Search installed plugins" PlaceholderText="Search installed plugins" QueryIcon="Find" Width="320" MinWidth="160" Margin="4,0,12,0" VerticalAlignment="Center" />
                     </CommandBar.Content>
                     <AppBarButton x:Name="ScanForPluginsButton" Label="Scan for plugins" Icon="Find" AutomationProperties.AutomationId="ScanForPlugins" />
-                    <AppBarSeparator />
+                    <AppBarSeparator Margin="8,0,8,0" />
                     <AppBarButton x:Name="InstalledPluginSortButton" Label="Sort" Icon="Sort" AutomationProperties.AutomationId="InstalledPluginSort" />
                 </CommandBar>
             </Border>

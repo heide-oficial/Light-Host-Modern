@@ -197,19 +197,29 @@ AudioEngine::AudioEngine(bool startInSafeMode, bool shouldRestoreActivePluginsOn
         }
         else if (settings->containsKey("pluginInstancesV1"))
         {
-            const auto saved = settings->getXmlValue("pluginInstancesV1");
+            const auto saved = lightHostModern::parseBoundedXml(settings->getValue("pluginInstancesV1"));
             if (!saved || !instances.deserialize(*saved))
             { instances.writable = false; instances.recoveryError = "Invalid instance data; original settings preserved"; }
         }
         else if (settings->containsKey("pluginListActive"))
         {
-            const auto legacy = settings->getXmlValue("pluginListActive");
+            const auto legacy = lightHostModern::parseBoundedXml(settings->getValue("pluginListActive"));
             if (legacy) instances.migrate(*legacy, *settings, knownPluginList.getTypes(), sessionMigrationId);
             else { instances.writable = false; instances.recoveryError = "Invalid legacy session; original settings preserved"; }
         }
     }
     sessionStore = std::make_unique<lightHostModern::SessionStore>(std::move(storage), recovered);
+    initializeOperatingProfiles();
     deviceController.start(safeMode, lightHostModern::RuntimeProfile::current().noAudio);
+    if (operatingProfiles && !sessionLoadSuppressed && !lightHostModern::RuntimeProfile::current().noAudio)
+        if (const auto* profile = operatingProfiles->find(instances.profileId); profile && profile->includeAudio)
+        {
+            auto audio = lightHostModern::parseBoundedJson(profile->audioXml);
+            if (auto* object = audio.getDynamicObject()) object->setProperty("expectedGeneration", String(deviceController.getGeneration()));
+            AudioDeviceSelection selection;
+            if (lightHostModern::audioSelection::parse(audio, selection)) deviceController.restoreProfileConfiguration(selection);
+            setMonoInputs(profile->monoInput); setMonoOutput(profile->monoOutput);
+        }
     player.setProcessor(&hostProcessor);
     deviceManager.addAudioCallback(&player);
     deviceManager.addChangeListener(this);
@@ -242,7 +252,7 @@ AudioEngine::~AudioEngine()
 std::unique_ptr<XmlElement> AudioEngine::getXmlValuePreserving(const String& key)
 {
 	PropertiesFile* settings = getAppProperties().getUserSettings();
-	auto xml = settings->getXmlValue(key);
+	auto xml = lightHostModern::parseBoundedXml(settings->getValue(key));
 	if (xml == nullptr && settings->getValue(key).isNotEmpty())
 	{
 		Logger::writeToLog("LightHostModern: preserved invalid XML setting '" + key + "'");
@@ -604,6 +614,11 @@ void AudioEngine::addKnownPluginsToMenu(PopupMenu& menu) const
 
 void AudioEngine::loadActivePlugins()
 {
+    for (auto it = isolatedPlugins.begin(); it != isolatedPlugins.end();) {
+        const auto index = instances.indexOf(it->first);
+        if (index < 0 || !instances.records[static_cast<size_t>(index)].isolated) { isolatedCaptures.erase(it->first); it = isolatedPlugins.erase(it); }
+        else ++it;
+    }
     const auto monoKey = deviceController.monoInputsKey();
     hostProcessor.setMonoInputs(monoKey.isNotEmpty() && getAppProperties().getUserSettings()->getBoolValue(monoKey, false));
     const auto outputKey = deviceController.monoOutputKey();
@@ -619,13 +634,15 @@ void AudioEngine::loadActivePlugins()
     for (auto& record : instances.records)
     {
         if (sessionLoadSuppressed) { record.loading = "suspended"; continue; }
-        if (record.error.isNotEmpty() && record.loading != "missing") { record.loading = "failed"; continue; }
+        if (!record.isolated && record.error.isNotEmpty() && record.loading != "missing") { record.loading = "failed"; continue; }
         const auto& description = record.description;
         setLightHostModernCrashContext("Loading instance " + record.id + " " + description.name);
         std::shared_ptr<PluginSlot> slot;
         if (previous)
             for (const auto& candidate : previous->slots)
-                if (candidate && candidate->instanceId == record.id && !candidate->processDisabled.load())
+                if (candidate && candidate->instanceId == record.id && !candidate->processDisabled.load()
+                    && lightHostModern::IsolatedPluginSession::isProxy(candidate->processor.get()) == record.isolated
+                    && (!record.isolated || (isolatedPlugins.count(record.id) && !isolatedPlugins.at(record.id)->layoutChanged())))
                 { slot = candidate; break; }
         if (slot) ++snapshot->reusedSlots;
         else
@@ -640,7 +657,19 @@ void AudioEngine::loadActivePlugins()
             record.error.clear();
             try
             {
-                auto processor = formatManager.createPluginInstance(description,
+                std::unique_ptr<AudioPluginInstance> processor;
+                if (record.isolated) {
+                    auto& remote = isolatedPlugins[record.id];
+                    if (!remote) {
+                        Logger::writeToLog("LightHostModern: starting isolated plugin instance=" + record.id + " name=" + record.displayName());
+                        remote = std::make_shared<lightHostModern::IsolatedPluginSession>(description, record.lastValidState,
+                            hostProcessor.getCurrentSampleRateForPlugins(), hostProcessor.getCurrentBlockSizeForPlugins(), File{}, false, record.busLayout);
+                    }
+                    if (!remote->initialized()) {
+                        record.error = remote->failure(); record.loading = record.error.isEmpty() ? "loading" : "failed"; continue;
+                    }
+                    processor = remote->createProxy();
+                } else processor = formatManager.createPluginInstance(description,
                     hostProcessor.getCurrentSampleRateForPlugins(), hostProcessor.getCurrentBlockSizeForPlugins(), record.error);
                 if (!processor)
                 {
@@ -654,7 +683,13 @@ void AudioEngine::loadActivePlugins()
                     throw std::runtime_error("Plugin exposes no audio channels");
                 PluginDescription actual;
                 processor->fillInPluginDescription(actual);
-                lightHostModern::restorePluginState(record, actual, [&](const void* data, int size) { processor->setStateInformation(data, size); });
+                if (!record.isolated) lightHostModern::restorePluginState(record, actual, [&](const void* data, int size) { processor->setStateInformation(data, size); });
+                if (record.busLayout.isObject() && !record.isolated) {
+                    AudioProcessor::BusesLayout layout;
+                    if (!lightHostModern::pluginBuses::decode(record.busLayout, layout) || !processor->setBusesLayout(layout))
+                        throw std::runtime_error("Saved plugin channel configuration is no longer supported");
+                }
+                record.busLayout = lightHostModern::pluginBuses::encode(processor->getBusesLayout());
                 slot = std::make_shared<PluginSlot>(description, std::move(processor));
                 slot->instanceId = record.id;
                 ++snapshot->rebuiltSlots;
@@ -665,10 +700,14 @@ void AudioEngine::loadActivePlugins()
         }
         record.loading = "loaded";
         record.error.clear();
+        if (record.isolated) if (const auto remote = isolatedPlugins.find(record.id); remote != isolatedPlugins.end()) {
+            record.error = remote->second->failure(); if (record.error.isNotEmpty()) record.loading = "failed";
+        }
         slot->bypassed.store(record.bypassed, std::memory_order_release);
         snapshot->maxPluginChannels = jmax(snapshot->maxPluginChannels, jmax(slot->inputChannels, slot->outputChannels));
         snapshot->slots.push_back(std::move(slot));
     }
+    synchronizeGraph(*snapshot);
     {
         RealtimeHostProcessor::ScopedSuspension suspension(hostProcessor);
         if (previous)
@@ -700,25 +739,33 @@ void AudioEngine::addPluginFromMenuId(int menuId)
 	}
 }
 
-bool AudioEngine::addKnownPluginByIndex(int sortedIndex)
+bool AudioEngine::addKnownPluginByIndex(int sortedIndex, PluginInstanceId* createdId)
 {
+    if (isChainMode() && instances.graph.nodes.size() >= lightHostModern::RoutingGraph::maxNodes) return false;
+    if (createdId) createdId->clear();
     const auto known = getKnownPluginsSorted();
     if (!instances.writable || sessionLoadSuppressed || !isPositiveAndBelow(sortedIndex, static_cast<int>(known.size()))) return false;
     auto record = lightHostModern::newKnownPluginInstance(*getAppProperties().getUserSettings(), known[static_cast<size_t>(sortedIndex)]);
     const auto id = record.id;
+    if (createdId) *createdId = id;
     instances.records.push_back(std::move(record));
+    routingUndo.clear(); routingRedo.clear();
     loadActivePlugins();
     saveActivePluginChain(false);
     return findActiveSlotFor(id) != nullptr;
 }
 
-void AudioEngine::duplicatePlugin(int sortedIndex)
+void AudioEngine::duplicatePlugin(int sortedIndex, PluginInstanceId* createdId)
 {
+    if (isChainMode() && instances.graph.nodes.size() >= lightHostModern::RoutingGraph::maxNodes) return;
+    if (createdId) createdId->clear();
     if (!instances.writable || sessionLoadSuppressed || !isPositiveAndBelow(sortedIndex, static_cast<int>(instances.records.size()))) return;
     savePluginStates();
     auto record = instances.records[static_cast<size_t>(sortedIndex)];
     record.id = Uuid().toString();
+    if (createdId) *createdId = record.id;
     instances.records.insert(instances.records.begin() + sortedIndex + 1, std::move(record));
+    routingUndo.clear(); routingRedo.clear();
     loadActivePlugins();
     saveActivePluginChain(false);
 }
@@ -734,6 +781,7 @@ int AudioEngine::removeKnownPluginByIndex(int sortedIndex)
         return record.identityResolved && record.originalIdentity == identity;
     }), instances.records.end());
     knownPluginList.removeType(description);
+    routingUndo.clear(); routingRedo.clear();
     const int removed = static_cast<int>(before - instances.records.size());
     if (removed > 0) loadActivePlugins();
     saveActivePluginChain(false);
@@ -746,6 +794,7 @@ int AudioEngine::clearKnownPlugins()
     cancelPluginScan();
     const int removed = static_cast<int>(instances.records.size());
     instances.records.clear();
+    routingUndo.clear(); routingRedo.clear();
     knownPluginList.clear();
     loadActivePlugins();
     saveActivePluginChain(false);
@@ -769,6 +818,7 @@ void AudioEngine::removePlugin(int sortedIndex)
 {
     if (!isSessionWritable() || !isPositiveAndBelow(sortedIndex, static_cast<int>(instances.records.size()))) return;
     instances.records.erase(instances.records.begin() + sortedIndex);
+    routingUndo.clear(); routingRedo.clear();
     loadActivePlugins();
     saveActivePluginChain(false);
 }
@@ -785,6 +835,7 @@ void AudioEngine::movePluginDown(int sortedIndex)
 
 void AudioEngine::movePluginToIndex(int fromSortedIndex, int toSortedIndex)
 {
+    if (isChainMode()) return; // Signal order is defined by connections.
     const int count = static_cast<int>(instances.records.size());
     if (!isSessionWritable() || !isPositiveAndBelow(fromSortedIndex, count) || count == 0) return;
     toSortedIndex = jlimit(0, count - 1, toSortedIndex);
@@ -811,10 +862,14 @@ void AudioEngine::setPluginBypassed(int sortedIndex, bool shouldBypass)
 void AudioEngine::deletePluginStates()
 {
     if (!instances.writable || sessionLoadSuppressed) return;
+    routingUndo.clear(); routingRedo.clear();
     RealtimeHostProcessor::ScopedSuspension suspension(hostProcessor);
     if (auto snapshot = hostProcessor.getActiveSnapshot())
         for (const auto& slot : snapshot->slots) if (slot) PluginWindow::closeCurrentlyOpenWindowsFor(*slot->processor);
     hostProcessor.publishSnapshot(nullptr);
+    // Reset must also discard the remote processor, not recreate a proxy for
+    // the worker that still holds the state the user asked to clear.
+    isolatedPlugins.clear(); isolatedCaptures.clear();
     for (auto& record : instances.records)
     {
         record.lastValidState.clear();
@@ -827,35 +882,102 @@ void AudioEngine::deletePluginStates()
     saveActivePluginChain(false);
 }
 
-void AudioEngine::savePluginStates()
+void AudioEngine::savePluginStates(bool captureAll)
 {
     if (!instances.writable || sessionLoadSuppressed) return;
+    if (!captureAll && isolatedCaptureBarrier) return;
     jassert(MessageManager::getInstance()->isThisTheMessageThread());
-    RealtimeHostProcessor::ScopedSuspension suspension(hostProcessor);
     const auto snapshot = hostProcessor.getActiveSnapshot();
     if (!snapshot) return;
+    const auto generation = operatingGeneration;
     bool captured = false;
+    bool newerStatePending = false;
     stateCaptureFailures.clear();
     for (const auto& slot : snapshot->slots)
     {
         if (!slot || !slot->processor) continue;
-        const int index = instances.indexOf(slot->instanceId);
-        if (index < 0) continue;
-        auto& record = instances.records[static_cast<size_t>(index)];
-        if (!record.stateCaptureAllowed || slot->processDisabled.load()) continue;
-        slot->stateDirty.store(false, std::memory_order_relaxed);
-        if (lightHostModern::capturePluginState(record, [&](MemoryBlock& binary) { slot->processor->getStateInformation(binary); }))
-        {
+        const auto id = slot->instanceId;
+        const int index = instances.indexOf(id);
+        if (index < 0 || (!captureAll && pendingStateCaptures.count(id) == 0)) continue;
+        const auto& record = instances.records[static_cast<size_t>(index)];
+        if (record.isolated) {
+            const auto found = isolatedPlugins.find(id);
+            if (found == isolatedPlugins.end()) { stateCaptureFailures.add(id); continue; }
+            auto& ticket = isolatedCaptures[id];
+            if (ticket.ticket && (ticket.generation != operatingGeneration || ticket.session.lock() != found->second
+                || ticket.slot.lock() != slot)) ticket = {};
+            if (!ticket.ticket) {
+                slot->stateDirty.exchange(false);
+                const auto revision = slot->stateRevision.load();
+                ticket = {found->second->requestCapture(isolatedCaptureBudget(id)), revision,
+                    operatingGeneration, found->second, slot};
+            }
+            if (!found->second->captureFinished(ticket.ticket)) { pendingStateCaptures.insert(id); continue; }
+            const auto result = found->second->captureResult();
+            if (found->second->failure().isNotEmpty() || result.error.isNotEmpty() || result.ticket != ticket.ticket) {
+                stateCaptureFailures.add(id); pendingStateCaptures.insert(id); isolatedCaptures.erase(id); continue;
+            }
+            const auto state = result.state;
+            const bool changed = slot->stateChangedSince(ticket.revision) || found->second->stateRevision() != result.revision;
+            // Other captures may have used some headroom while this worker was
+            // busy. Revalidate against the current session before committing.
+            size_t available = lightHostModern::maximumSessionStateBytes - 4u * 1024 * 1024;
+            for (const auto& other : instances.records) {
+                const size_t bytes = (other.id == id ? 0 : other.lastValidState.getNumBytesAsUTF8()) + other.recoveryState.getNumBytesAsUTF8();
+                available = bytes >= available ? 0 : available - bytes;
+            }
+            isolatedCaptures.erase(id);
+            if (state.getNumBytesAsUTF8() > available) { stateCaptureFailures.add(id); pendingStateCaptures.insert(id); continue; }
+            instances.records[static_cast<size_t>(index)].lastValidState = state;
+            if (changed) { pendingStateCaptures.insert(id); newerStatePending = true; }
+            else pendingStateCaptures.erase(id);
             captured = true;
+            continue;
         }
-        else
-        {
-            stateCaptureFailures.add(record.id);
-            Logger::writeToLog("LightHostModern: state capture failed; previous state retained for " + record.id);
+        if (!record.stateCaptureAllowed || slot->processDisabled.load()) {
+            if(pendingStateCaptures.count(id))stateCaptureFailures.add(id);
+            continue;
         }
+        // Stage the capture independently: a nested message cannot invalidate a
+        // reference to the session record. Encoding happens after audio resumes.
+        auto staged = record;
+        slot->stateDirty.exchange(false, std::memory_order_relaxed);
+        double captureMs = 0;
+        size_t remaining=lightHostModern::maximumSessionStateBytes-4u*1024*1024;
+        for(const auto& other:instances.records) {
+            const size_t bytes=(other.id==id?0:other.lastValidState.getNumBytesAsUTF8())+other.recoveryState.getNumBytesAsUTF8();
+            remaining=bytes>=remaining?0:remaining-bytes;
+        }
+        const bool ok = lightHostModern::capturePluginState(staged, [&](MemoryBlock& binary) {
+            RealtimeHostProcessor::ScopedSuspension suspension(hostProcessor);
+            const auto start = Time::getMillisecondCounterHiRes();
+            slot->processor->getStateInformation(binary);
+            captureMs = Time::getMillisecondCounterHiRes() - start;
+        },remaining);
+        if (operatingGeneration != generation) return;
+        const auto current = instances.indexOf(id);
+        if (current < 0) continue;
+        if (captureMs >= 20.0)
+            Logger::writeToLog("LightHostModern: slow plugin state capture instance=" + id + " suspendedMs=" + String(captureMs, 2));
+        if (ok) {
+            instances.records[static_cast<size_t>(current)].lastValidState = std::move(staged.lastValidState);
+            pendingStateCaptures.erase(id);
+            captured = true;
+        } else {
+            pendingStateCaptures.insert(id);
+            stateCaptureFailures.add(id);
+            Logger::writeToLog("LightHostModern: state capture failed; previous state retained for " + id);
+        }
+        // A notification raised during capture must survive this pass.
+        if (slot->stateDirty.load(std::memory_order_relaxed)) { pendingStateCaptures.insert(id); newerStatePending = true; }
     }
-    stateCaptureDue = 0;
-    ++chainVersion; // Includes capture diagnostics, even when the last state is retained.
+    // A completed capture may have covered A while the timer already consumed
+    // the notification for B. Keep that revision scheduled after removing A's ticket.
+    // Failed/oversized captures remain pending for an edit or explicit retry;
+    // repeating those every second would unnecessarily suspend their audio.
+    stateCaptureDue = isolatedCaptures.empty() && !newerStatePending ? 0
+        : Time::getMillisecondCounterHiRes() + (isolatedCaptures.empty() ? 1000 : 250);
+    ++chainVersion;
     if (captured) { if (isDiagnosticsEnabled()) ++pluginStateSaveCount; saveActivePluginList(); }
 }
 
@@ -874,6 +996,7 @@ bool AudioEngine::renamePlugin(int sortedIndex, const String& name)
     if (normalized == record.description.name) normalized.clear();
     if (record.customName == normalized) return true;
     record.customName = normalized;
+    if (auto* node = instances.graph.find(record.id)) node->name = record.displayName();
     ++chainVersion;
     saveActivePluginChain(false);
     return true;
@@ -939,6 +1062,96 @@ bool AudioEngine::flushSession()
     return !sessionStore || sessionStore->flush();
 }
 
+bool AudioEngine::prepareIsolatedStateCapture(bool start)
+{
+    if (start) isolatedCaptureBarrier = true;
+    bool ready = true;
+    for (const auto& item : isolatedPlugins) {
+        if (item.second->failure().isNotEmpty()) continue; // Preserve the last valid state of a failed worker.
+        auto& ticket = isolatedCaptures[item.first];
+        const auto snapshot = hostProcessor.getActiveSnapshot();
+        std::shared_ptr<PluginSlot> slot;
+        if (snapshot) for (const auto& candidate : snapshot->slots)
+            if (candidate && candidate->instanceId == item.first) { slot = candidate; break; }
+        if (!slot) continue;
+        bool needsCapture = start || !ticket.ticket || ticket.generation != operatingGeneration
+            || ticket.session.lock() != item.second || ticket.slot.lock() != slot;
+        if (!needsCapture && item.second->captureFinished(ticket.ticket)) {
+            const auto result = item.second->captureResult();
+            // Mutations wait for the newer revision too. The host barrier's
+            // absolute deadline prevents continuously changing plugins starving the queue.
+            needsCapture = result.error.isEmpty() && (result.ticket != ticket.ticket
+                || slot->stateChangedSince(ticket.revision) || item.second->stateRevision() != result.revision);
+        }
+        if (needsCapture) {
+            slot->stateDirty.exchange(false);
+            const auto revision = slot->stateRevision.load();
+            ticket = {item.second->requestCapture(isolatedCaptureBudget(item.first)), revision,
+                operatingGeneration, item.second, slot};
+            // Autosave must still harvest this ticket once the barrier releases.
+            pendingStateCaptures.insert(item.first);
+            stateCaptureDue = Time::getMillisecondCounterHiRes() + 250;
+        }
+        if (!item.second->captureFinished(ticket.ticket)) ready = false;
+    }
+    return ready;
+}
+
+size_t AudioEngine::isolatedCaptureBudget(const PluginInstanceId& id) const
+{
+    size_t remaining = lightHostModern::maximumSessionStateBytes - 4u * 1024 * 1024, current = 0;
+    for (const auto& record : instances.records) {
+        const size_t state = record.lastValidState.getNumBytesAsUTF8();
+        const size_t used = state + record.recoveryState.getNumBytesAsUTF8();
+        remaining = used >= remaining ? 0 : remaining - used;
+        if (record.id == id) current = state;
+    }
+    // Concurrent captures share headroom, rather than each spending the whole
+    // session budget independently. Previous valid states remain reserved.
+    return current + remaining / juce::jmax(size_t(1), isolatedPlugins.size());
+}
+
+var AudioEngine::isolatedPluginDiagnostics(const PluginInstanceId& id) const
+{
+    const auto found = isolatedPlugins.find(id);
+    return found == isolatedPlugins.end() ? var(new DynamicObject()) : found->second->diagnostics();
+}
+
+var AudioEngine::isolatedPluginDiagnostics() const
+{
+    Array<var> result;
+    for (const auto& record : instances.records) if (record.isolated) {
+        auto value = isolatedPluginDiagnostics(record.id);
+        value.getDynamicObject()->setProperty("name", record.displayName()); value.getDynamicObject()->setProperty("instanceId", record.id); result.add(value);
+    }
+    return result;
+}
+
+void AudioEngine::pollIsolatedPlugins()
+{
+    bool reload = false, changed = false;
+    for (auto& item : isolatedPlugins) {
+        const int index = instances.indexOf(item.first); if (index < 0) continue;
+        auto& record = instances.records[static_cast<size_t>(index)];
+        const auto error = item.second->failure();
+        if (error.isNotEmpty()) {
+            if (record.error != error) {
+                record.error = error; record.loading = "failed"; changed = true;
+                Logger::writeToLog("LightHostModern: isolated plugin failure instance=" + record.id + " detail=" + error);
+            }
+            continue;
+        }
+        if (item.second->initialized() && (!findActiveSlotFor(item.first) || item.second->layoutChanged())) {
+            if (auto* slot = findActiveSlotFor(item.first)) slot->processDisabled.store(true);
+            const auto inventory = item.second->busInventory(); record.busLayout = inventory["layout"];
+            profileError = inventory["layoutError"].toString(); reload = true;
+        }
+        if (item.second->needsPoll()) { RealtimeHostProcessor::ScopedSuspension suspension(hostProcessor, false); changed |= item.second->poll(); }
+    }
+    if (reload) { ++operatingGeneration; routingUndo.clear(); routingRedo.clear(); loadActivePlugins(); saveActivePluginList(); }
+    if (changed) { ++chainVersion; saveActivePluginList(); }
+}
+
 void AudioEngine::flushPendingSaves()
 {
 	stopTimer(persistenceTimerId);
@@ -995,11 +1208,18 @@ void AudioEngine::showPluginEditor(int sortedIndex)
 	const auto timeSorted = getActivePluginsSorted();
 	if (sortedIndex < 0 || sortedIndex >= (int) timeSorted.size())
 		return;
+    if (const auto remote = isolatedPlugins.find(instances.records[static_cast<size_t>(sortedIndex)].id); remote != isolatedPlugins.end()) {
+        remote->second->showEditor(); return;
+    }
 
 	if (auto* const slot = findActiveSlotFor(instances.records[(size_t) sortedIndex].id))
 		if (slot->processor != nullptr)
 			if (PluginWindow* const window = PluginWindow::getWindowFor(*slot->processor, slot->windowProperties, PluginWindow::Normal))
+			{
+				window->setMinimised(false);
+				window->setVisible(true);
 				window->toFront(true);
+			}
 }
 
 DiagnosticsSnapshot AudioEngine::getDiagnosticsSnapshot() const
@@ -1021,6 +1241,12 @@ DiagnosticsSnapshot AudioEngine::getDiagnosticsSnapshot() const
     }
     snapshot.hostCpuPercent = hostCpuSampler.sample(lightHostModern::processCpuTicks(), GetTickCount64(), lightHostModern::processorCount());
     snapshot.workerCpuPercent = workerCpuSampler.sample(lightHostModern::workerCpuTicks.load(), GetTickCount64(), lightHostModern::processorCount());
+    for (const auto& item : isolatedPlugins) {
+        const auto metrics = item.second->diagnostics();
+        if (snapshot.workerResidentMiB) *snapshot.workerResidentMiB += static_cast<double>(metrics["residentBytes"]) / 1048576.0;
+        if (snapshot.workerCommittedMiB) *snapshot.workerCommittedMiB += static_cast<double>(metrics["committedBytes"]) / 1048576.0;
+        if (snapshot.workerCpuPercent && !metrics["cpuPercent"].isVoid()) *snapshot.workerCpuPercent += static_cast<double>(metrics["cpuPercent"]);
+    }
 #endif
 	snapshot.activePlugins = static_cast<int>(instances.records.size());
 	snapshot.loadedPlugins = realtimeStats.loadedSlots;
@@ -1057,6 +1283,8 @@ bool AudioEngine::configureCallbackMeasurement(unsigned warmupSeconds, unsigned 
 
 void AudioEngine::timerCallback(int timerId)
 {
+	pollIsolatedPlugins();
+    if (timerId == audioWatchdogTimerId) refreshPluginLayouts();
 	collectPluginScanResults();
 	hostProcessor.collectRetiredSnapshots();
 	hostProcessor.refreshLatencies();
@@ -1065,12 +1293,14 @@ void AudioEngine::timerCallback(int timerId)
     if (timerId == audioWatchdogTimerId)
     {
         const auto now = Time::getMillisecondCounterHiRes();
+        for (auto it=pendingStateCaptures.begin();it!=pendingStateCaptures.end();)
+            if (instances.indexOf(*it)<0) it=pendingStateCaptures.erase(it); else ++it;
         if (const auto snapshot = hostProcessor.getActiveSnapshot(); snapshot && isSessionWritable())
             for (const auto& slot : snapshot->slots)
-                if (slot && slot->stateDirty.exchange(false, std::memory_order_relaxed)) stateCaptureDue = now + 1000.0;
-        if (stateCaptureDue > 0 && now >= stateCaptureDue) savePluginStates();
-        if (const auto status = getSessionSaveStatus(); status.changeSerial != lastSessionStatusSerial)
-        { lastSessionStatusSerial = status.changeSerial; ++chainVersion; }
+                if (slot && slot->stateDirty.exchange(false, std::memory_order_relaxed)) {
+                    pendingStateCaptures.insert(slot->instanceId); stateCaptureDue = now + 1000.0;
+                }
+        if (stateCaptureDue > 0 && now >= stateCaptureDue) savePluginStates(false);
         deviceController.tick();
         startTimer(audioWatchdogTimerId, 250);
         return;

@@ -1,5 +1,5 @@
-param(
-    [string] $PayloadDirectory = "$PSScriptRoot\..\out\release\1.4.1-local\LightHostModern-Portable",
+﻿param(
+    [string] $PayloadDirectory = '',
     [switch] $SimulatedAudio,
     [switch] $MeasureResources,
     [string[]] $Languages = @('en-us', 'pt-br'),
@@ -12,12 +12,21 @@ Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class SmokeWindow {
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int command);
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hwnd, IntPtr dc, uint flags);
     [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hwnd);
     [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] public static extern bool WritePrivateProfileString(string section, string key, string value, string file);
 }
 '@
 $repo = (Resolve-Path "$PSScriptRoot\..").Path
+if (!$PayloadDirectory) {
+    $latest = Get-ChildItem -LiteralPath (Join-Path $repo 'dev-test') -Directory |
+        Where-Object { $_.Name -match '^LightHostModern-build-\d+$' } |
+        Sort-Object { [long]($_.Name -replace '^LightHostModern-build-', '') } -Descending |
+        Select-Object -First 1
+    if (!$latest) { throw 'Create a portable with Utilities/Build Dev.ps1 or pass PayloadDirectory.' }
+    $PayloadDirectory = $latest.FullName
+}
 $payload = (Resolve-Path -LiteralPath $PayloadDirectory).Path
 $root = Join-Path $repo 'out\test-profiles'
 $name = 'modern-ui-' + [guid]::NewGuid().ToString('N')
@@ -58,7 +67,21 @@ function Navigate([string] $Id) {
     Start-Sleep -Milliseconds 700
 }
 function Capture([string] $Name) {
-    $bounds = $script:window.Current.BoundingRectangle
+    $uiProcess.Refresh()
+    [SmokeWindow]::ShowWindow($uiProcess.MainWindowHandle, 9) | Out-Null
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    do {
+        $uiProcess.Refresh()
+        if ($uiProcess.HasExited) { throw "UI exited before capture: $Name" }
+        $bounds = $script:window.Current.BoundingRectangle
+        $ready = ![double]::IsInfinity($bounds.Width) -and ![double]::IsNaN($bounds.Width) -and
+            ![double]::IsInfinity($bounds.Height) -and ![double]::IsNaN($bounds.Height) -and
+            $bounds.Width -ge 100 -and $bounds.Height -ge 100 -and $bounds.Width -le 16384 -and $bounds.Height -le 16384
+        if (!$ready) {
+            if ([DateTime]::UtcNow -gt $deadline) { throw "UI has no visible capture surface: $Name ($bounds)" }
+            Start-Sleep -Milliseconds 100
+        }
+    } while (!$ready)
     $bitmap = [Drawing.Bitmap]::new([int]$bounds.Width, [int]$bounds.Height)
     $graphics = [Drawing.Graphics]::FromImage($bitmap)
     $dc = $graphics.GetHdc()
@@ -71,16 +94,36 @@ function Capture([string] $Name) {
 }
 function Choose-Grouping([string] $Id, [string] $Name) {
     $box = Element $Id
+    $scrollItem = $null
+    if ($box.TryGetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern, [ref]$scrollItem)) { $scrollItem.ScrollIntoView() }
     $box.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
     Start-Sleep -Milliseconds 150
     $condition = [Windows.Automation.AndCondition]::new(
         [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::ListItem),
         [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty, $Name))
-    $item = $window.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
-    if (!$item) { throw "Missing grouping option: $Name" }
+    $item = $box.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
+    if (!$item) { throw "Missing option in ${Id}: $Name (offscreen: $($box.Current.IsOffscreen))" }
     $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
     $box.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()
     Start-Sleep -Milliseconds 600
+}
+function Wait-ChannelMask([string] $Direction, [bool[]] $Expected, [string] $Action) {
+    $deadline=[DateTime]::UtcNow.AddSeconds(5)
+    do {
+        $state=Send-HostRequest $info.pipe 'snapshot'
+        $actual=@($state.audioConfig.('active'+$Direction+'Channels'))
+        $matches=$actual.Count -eq $Expected.Count
+        if ($matches) {
+            for ($channel=0; $channel -lt $Expected.Count; $channel++) {
+                if ([bool]$actual[$channel] -ne $Expected[$channel]) { $matches=$false; break }
+            }
+        }
+        if ($matches) { return $state }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+    $details=[ordered]@{action=$Action;direction=$Direction;expected=$Expected;actual=$actual;generation=$state.audioSelection.generation}
+    $details | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $directory 'channel-selection-failure.json') -Encoding UTF8
+    throw "$Action ($Direction): expected [$($Expected -join ',')], received [$($actual -join ',')], generation $($state.audioSelection.generation). See channel-selection-failure.json and fixture requests.jsonl."
 }
 try {
     $hostProcess = Start-Process -FilePath (Join-Path $payload 'LightHostModern.exe') -ArgumentList $arguments -WindowStyle Hidden -PassThru
@@ -128,6 +171,7 @@ try {
                 $uiProcess.Refresh()
                 if ($uiProcess.HasExited -or [DateTime]::UtcNow -gt $deadline) { throw "UI did not open for $language/$layout. See ui-debug.log." }
             } while ($uiProcess.MainWindowHandle.ToInt64() -eq 0)
+            [SmokeWindow]::ShowWindow($uiProcess.MainWindowHandle, 9) | Out-Null
             $script:window = [Windows.Automation.AutomationElement]::FromHandle($uiProcess.MainWindowHandle)
             if (!$window.Current.Name.StartsWith('LightHostModern [Test:')) { throw 'UI profile isolation failed.' }
             Start-Sleep -Seconds 2
@@ -141,8 +185,8 @@ try {
             Element 'AudioBackend' | Out-Null
             # The channel card is collapsed when this no-audio profile has no channels.
             if ($SimulatedAudio) {
-                $mono = Element 'MonoInputsSwitch'
-                if (!$mono.Current.IsEnabled -or $mono.Current.HelpText -ne $catalog.'audio.monoInputs.tooltip') { throw 'Mono control is disabled or lacks the localized explanation.' }
+                $mono = Element 'InputModeBox'
+                if (!$mono.Current.IsEnabled -or $mono.Current.HelpText -ne $catalog.'audio.inputMode.tooltip') { throw 'Mono control is disabled or lacks the localized explanation.' }
                 if ($groupingSaved) {
                     Element 'set-input-channel-0-1' | Out-Null
                     Element 'set-output-channel-0-0' | Out-Null
@@ -153,19 +197,19 @@ try {
                 Element 'set-output-channel-0-1' | Out-Null
                 foreach ($attempt in 1..4) {
                     $before = Send-HostRequest $info.pipe 'snapshot'
-                    $mono.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+                    Choose-Grouping 'InputModeBox' $(if ($before.monoInputs) { $catalog.'operating.stereo' } else { $catalog.'chain.review2.033' })
                     Start-Sleep -Seconds 1
                     $after = Send-HostRequest $info.pipe 'snapshot'
-                    if ($after.monoInputs -eq $before.monoInputs) { throw 'Mono toggle did not reach the fixture or was reverted.' }
+                    if ($after.monoInputs -eq $before.monoInputs) { throw 'Input mode selection did not reach the fixture or was reverted.' }
                 }
-                $outputMono = Element 'MonoOutputSwitch'
-                if (!$outputMono.Current.IsEnabled -or $outputMono.Current.HelpText -ne $catalog.'audio.monoOutput.tooltip') { throw 'Output mono lacks the localized explanation.' }
+                $outputMono = Element 'OutputModeBox'
+                if (!$outputMono.Current.IsEnabled -or $outputMono.Current.HelpText -ne $catalog.'audio.mainOutputMode.tooltip') { throw 'Output mono lacks the localized explanation.' }
                 foreach ($attempt in 1..4) {
                     $before = Send-HostRequest $info.pipe 'snapshot'
-                    $outputMono.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+                    Choose-Grouping 'OutputModeBox' $(if ($before.monoOutput) { $catalog.'operating.stereo' } else { $catalog.'chain.review2.033' })
                     Start-Sleep -Milliseconds 700
                     $after = Send-HostRequest $info.pipe 'snapshot'
-                    if ($after.monoOutput -eq $before.monoOutput -or $after.monoInputs -ne $before.monoInputs) { throw 'Output mono was reverted or changed input mono.' }
+                    if ($after.monoOutput -eq $before.monoOutput -or $after.monoInputs -ne $before.monoInputs) { throw 'Output mode selection was reverted or changed input mono.' }
                 }
                 foreach ($direction in 'input','output') {
                     $groupId = if ($direction -eq 'input') { 'InputChannelGrouping' } else { 'OutputChannelGrouping' }
@@ -180,9 +224,9 @@ try {
                     $pair = Element "set-$direction-channel-0-1"
                     if ($pair.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -ne [Windows.Automation.ToggleState]::Indeterminate) { throw 'Partially active pair is not shown as partial.' }
                     $pair.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
-                    Start-Sleep -Milliseconds 700
-                    $after = Send-HostRequest $info.pipe 'snapshot'
-                    if (!$after.audioConfig.('active'+$direction+'Channels')[0] -or !$after.audioConfig.('active'+$direction+'Channels')[1]) { throw 'Clicking a partial pair did not enable both channels.' }
+                    $expectedChannels=[bool[]]@($before.audioConfig.('active'+$direction+'Channels'))
+                    $expectedChannels[0]=$true; $expectedChannels[1]=$true
+                    $after = Wait-ChannelMask $direction $expectedChannels 'Clicking a partial pair did not enable both channels'
                     Choose-Grouping $groupId $catalog.'audio.channelsIndividual'
                     foreach ($index in 0..1) {
                         if ((Element "set-$direction-channel-$index-$index").GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -ne [Windows.Automation.ToggleState]::On) { throw 'Grouping lost channel selections.' }
@@ -192,7 +236,7 @@ try {
                 if (!$groupingSaved) {
                     '{"monoDelayMs":2500}' | Set-Content (Join-Path $fixtureDirectory 'control.json') -Encoding UTF8
                     $before = Send-HostRequest $info.pipe 'snapshot'
-                    $outputMono.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+                    Choose-Grouping 'OutputModeBox' $(if ($before.monoOutput) { $catalog.'operating.stereo' } else { $catalog.'chain.review2.033' })
                     Start-Sleep -Milliseconds 150
                     Choose-Grouping 'InputChannelGrouping' $catalog.'audio.channelsPairs'
                     Choose-Grouping 'InputChannelGrouping' $catalog.'audio.channelsIndividual'
@@ -202,7 +246,7 @@ try {
                     if ($after.audioSelection.generation -ne $before.audioSelection.generation -or $after.monoOutput -eq $before.monoOutput) { throw 'Pending mono operation lost a presentation choice or reconfigured audio.' }
                     '{}' | Set-Content (Join-Path $fixtureDirectory 'control.json') -Encoding UTF8
                     Send-HostRequest $info.pipe 'snapshot' | Out-Null
-                    $outputMono.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+                    Choose-Grouping 'OutputModeBox' $(if ($before.monoOutput) { $catalog.'operating.stereo' } else { $catalog.'chain.review2.033' })
                     Start-Sleep -Seconds 1
                     Choose-Grouping 'InputChannelGrouping' $catalog.'audio.channelsPairs'
                     foreach ($count in 0,1,2,3,8) {
@@ -276,6 +320,16 @@ try {
     if ($resourceResults.Count) { $resourceResults | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $directory 'resource-comparison.json') -Encoding UTF8 }
     $results | Format-Table -AutoSize
     Write-Output "Evidence: $directory"
+} catch {
+    if ($uiProcess -and !$uiProcess.HasExited) {
+        try {
+            Capture 'failure'
+            $window.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition) |
+                ForEach-Object { $v=$_.Current; "$($v.ControlType.ProgrammaticName) | $($v.AutomationId) | $($v.Name) | offscreen=$($v.IsOffscreen)" } |
+                Set-Content (Join-Path $directory 'failure-elements.txt') -Encoding UTF8
+        } catch {}
+    }
+    throw
 } finally {
     if ($uiProcess -and !$uiProcess.HasExited) { Stop-Process -Id $uiProcess.Id }
     if ($hostProcess -and !$hostProcess.HasExited) {

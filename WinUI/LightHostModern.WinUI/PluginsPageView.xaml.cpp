@@ -7,6 +7,18 @@ namespace winrt::LightHostModernWinUI::implementation
 {
 namespace
 {
+    void alignToolbarLabels(Microsoft::UI::Xaml::DependencyObject const& element)
+    {
+        using namespace Microsoft::UI::Xaml;
+        if (auto text = element.try_as<Controls::TextBlock>(); text && text.Name()==L"TextLabel") {
+            text.VerticalAlignment(VerticalAlignment::Center);
+            text.TextLineBounds(TextLineBounds::Tight);
+            text.FontSize(14);
+            text.Margin({8,4,8,0});
+        }
+        for (int i=0;i<Media::VisualTreeHelper::GetChildrenCount(element);++i)
+            alignToolbarLabels(Media::VisualTreeHelper::GetChild(element,i));
+    }
     Microsoft::UI::Xaml::Controls::TextBox findSearchInput(Microsoft::UI::Xaml::DependencyObject const& root)
     {
         using namespace Microsoft::UI::Xaml;
@@ -26,9 +38,16 @@ namespace
         }
     }
 }
+void PluginsPageView::configureEffects(bool contrast)
+{
+    const auto& preferences=lightHostModern::ui::VisualPreferences::current();
+    runningFade->configure(preferences.fade,contrast);installedFade->configure(preferences.fade,contrast);
+}
 PluginsPageView::PluginsPageView()
 {
     InitializeComponent();
+    runningFade=lightHostModern::ui::ScrollEdgeFade::attach(RunningPluginsListCard(),RunningPluginsListView());
+    installedFade=lightHostModern::ui::ScrollEdgeFade::attach(InstalledPluginsListCard(),InstalledPluginsListView());
     for (auto list : {RunningPluginsListView(), InstalledPluginsListView()})
         list.ContainerContentChanging([this](Microsoft::UI::Xaml::Controls::ListViewBase const&,
             Microsoft::UI::Xaml::Controls::ContainerContentChangingEventArgs const& args) {
@@ -37,6 +56,7 @@ PluginsPageView::PluginsPageView()
                 if (const auto item = args.Item().try_as<winrt::LightHostModernWinUI::PluginItem>())
                 {
                     args.ItemContainer().Margin({contentInset, 0, contentInset, 0});
+                    args.ItemContainer().Opacity(item.Running()&&item.Bypassed()?.65:1);
                     Automation::AutomationProperties::SetAutomationId(args.ItemContainer(), (item.IsGroupHeader() ? L"" : item.Running() ? L"running-" : L"installed-") + item.Id());
                     Automation::AutomationProperties::SetName(args.ItemContainer(), item.AccessibleName());
                     args.ItemContainer().IsTabStop(!item.IsGroupHeader());
@@ -74,6 +94,12 @@ void PluginsPageView::Toolbar_SizeChanged(Windows::Foundation::IInspectable cons
     const auto toolbar = sender.as<Microsoft::UI::Xaml::Controls::CommandBar>();
     const bool running = toolbar == RunningToolbar();
     const auto available = args.NewSize().Width;
+    toolbar.DispatcherQueue().TryEnqueue([weak=make_weak(toolbar)] {
+        if (auto bar=weak.get()) for (auto const& command:bar.PrimaryCommands())
+            if (auto control=command.try_as<Microsoft::UI::Xaml::Controls::Control>()) {
+                control.ApplyTemplate();alignToolbarLabels(control);
+            }
+    });
     // Both tabs reserve the same search width, independent of their commands.
     (running ? RunningPluginSearchBox() : InstalledPluginSearchBox()).Width(
         (std::max)(160.0, (std::min)(420.0, available * 0.4)));
@@ -107,6 +133,7 @@ void PluginsPageView::GlobalAudioControl_Click(winrt::Windows::Foundation::IInsp
 
 void PluginsPageView::PluginActions_Click(winrt::Windows::Foundation::IInspectable const& arg0, Microsoft::UI::Xaml::RoutedEventArgs const& arg1)
 {
+    if (catalogActions) { catalogActions(arg0.as<Microsoft::UI::Xaml::Controls::Button>()); return; }
     if (auto target = owner.get())
         winrt::get_self<MainWindow>(target.as<winrt::LightHostModernWinUI::MainWindow>())->PluginActions_Click(arg0, arg1);
 }

@@ -1,3 +1,6 @@
+# Prefer the locally provisioned UI CLI without changing the machine's PATH.
+$testWinAppBin=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../out/tools/winapp-0.6.0/bin'))
+if(!(Get-Command winapp -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath (Join-Path $testWinAppBin 'winapp.exe'))){$env:PATH=$testWinAppBin+';'+$env:PATH}
 # Optional override ensures integration suites exercise the selected build.
 function Get-TestBuildDirectory {
     if ($env:LIGHTHOST_TEST_BUILD_DIR) { return [IO.Path]::GetFullPath($env:LIGHTHOST_TEST_BUILD_DIR) }
@@ -18,7 +21,7 @@ function Start-TestUi {
 function Send-HostRequest {
     param([string] $PipeName, [string] $Command, [array] $Arguments = @(),
           [string] $Session = '', [string] $RequestId = [guid]::NewGuid().ToString('N'), [int] $TimeoutMs = 5000,
-          [ValidateSet(3,4)][int] $ProtocolVersion = 4)
+          [ValidateSet(3,4,5)][int] $ProtocolVersion = 5)
     Write-Verbose "IPC $Command ($RequestId)"
     $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', $PipeName.Replace('\\.\pipe\', ''), [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
     try {

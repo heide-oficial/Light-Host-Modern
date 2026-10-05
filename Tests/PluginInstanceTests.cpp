@@ -1,5 +1,7 @@
 #include "PluginInstances.h"
+#include "PluginStateCapture.h"
 #include "KnownPluginNames.h"
+#include "OperatingProfiles.h"
 #include "ScenarioRunner.h"
 
 using namespace juce;
@@ -118,6 +120,26 @@ int main(int argc, char** argv)
         return properties.writeTo(File(String::fromUTF8(argv[2]))) ? 0 : 1;
     }
     scenarios::Runner runner;
+    runner.run("profile catalogue recovers readable entries without overwriting the original", [] {
+        const auto directory=File::getSpecialLocation(File::tempDirectory).getChildFile("lhm-profile-recovery-"+Uuid().toString());
+        require(directory.createDirectory().wasOk(),"Create isolated profile directory");
+        struct Cleanup { File directory; ~Cleanup(){directory.deleteRecursively();} } cleanup{directory};
+        const auto preferences=directory.getChildFile("settings.xml"), file=directory.getChildFile("settings.xml.profiles.xml");
+        OperatingProfiles profiles(preferences);require(profiles.ensureDefaults(),"Create defaults");
+        auto next=profiles.profiles;auto custom=OperatingProfiles::makeDefault("list");custom.id=Uuid().toString();custom.session.profileId=custom.id;custom.name="My setup";next.push_back(custom);
+        require(profiles.commit(next),"Commit profiles with backup");
+        require(file.getSiblingFile(file.getFileName()+".bak").existsAsFile(),"No profile backup created");
+        auto xml=juce::parseXML(file);xml->createNewChildElement("PROFILE")->setAttribute("id","invalid");
+        require(file.replaceWithText(xml->toString()),"Write corrupt fixture");const auto original=file.loadFileAsString();
+        OperatingProfiles partial(preferences);require(!partial.writable&&partial.find(custom.id),"One invalid entry erased valid profiles");
+        require(file.loadFileAsString()==original,"Loading partial catalogue overwrote original");
+        require(partial.recover(),"Explicit recovery failed");OperatingProfiles recovered(preferences);
+        require(recovered.writable&&recovered.find(custom.id),"Recovered profiles were not readable");
+        require(!directory.findChildFiles(File::findFiles,false,"*.recovery-*").isEmpty(),"Corrupt original not retained");
+        require(file.replaceWithText("truncated"),"Corrupt primary fixture");OperatingProfiles backup(preferences);
+        require(!backup.profiles.empty()&&!backup.writable,"No backup recovery offered");
+    });
+
     runner.run("exact legacy keys precede normalization and preserve distinct duplicate states", [] {
         const auto original = plugin();
         auto duplicate = original;
@@ -225,6 +247,80 @@ int main(int argc, char** argv)
                 "original name was retained as a custom alias");
         require(first.displayName() == alias.trim() && newKnownPluginInstance(reopened, original).displayName() == original.name,
                 "catalogue restore changed a running instance or affected new additions");
+    });
+    runner.run("Visual colors survive list and graph persistence without changing routing", [] {
+        PluginInstances session;PluginInstanceRecord record;record.id=Uuid().toString();record.description=plugin();record.originalIdentity=knownPluginId(record.description);
+        record.cardColor="#FF10B981";session.records.push_back(record);
+        PluginInstances restored;require(restored.deserialize(*session.serialize()),"Session reload failed");
+        require(restored.records[0].cardColor==record.cardColor,"List color lost");
+        auto graph=RoutingGraph::empty(2,2);graph.nodes[0].cardColor="#803C83F6";
+        graph.nodes[0].outputColors.getDynamicObject()->setProperty("0","#FFFF0000");
+        graph.nodes[1].inputColors.getDynamicObject()->setProperty("0","#FF0000FF");
+        RoutingGraph roundtrip;String error;require(RoutingGraph::parse(graph.json(),roundtrip,error),"Graph color reload failed");
+        require(roundtrip.nodes[0].cardColor==graph.nodes[0].cardColor && roundtrip.nodes[0].outputColors["0"].toString()=="#FFFF0000","Graph color lost");
+        auto bad=graph.json();bad["nodes"].getArray()->getReference(0).getDynamicObject()->setProperty("cardColor","not a color");
+        require(!RoutingGraph::parse(bad,roundtrip,error),"Invalid color accepted");
+        bad=graph.json();bad["nodes"].getArray()->getReference(0)["outputColors"].getDynamicObject()->setProperty("999","#FFFFFFFF");
+        require(!RoutingGraph::parse(bad,roundtrip,error),"Invalid channel color index accepted");
+    });
+    runner.run("Mixer pair edits preserve surviving wires and metadata", [] {
+        auto graph=RoutingGraph::empty(2,2);RouteNode mixer;mixer.id="mix";mixer.kind="mixer";mixer.inputs=8;mixer.outputs=2;
+        mixer.inputColors.getDynamicObject()->setProperty("6","#FF123456");mixer.inputAliases.getDynamicObject()->setProperty("6:2","Keep this pair");
+        mixer.gains[3]=.25f;graph.nodes.push_back(mixer);
+        graph.edges.push_back({"keep-in","audio-in","mix",0,6,2,2});
+        graph.edges.push_back({"remove-in","audio-in","mix",0,2,2,2});
+        graph.edges.push_back({"keep-out","mix","audio-out",0,0,2,2});
+        require(graph.editMixerPair("mix",false,1).isEmpty(),"Remove failed");
+        const auto* updated=graph.find("mix");require(updated->inputs==6&&updated->gains.size()==3&&updated->gains[2]==.25f,"Mixer controls shifted incorrectly");
+        require(updated->inputColors["4"].toString()=="#FF123456"&&updated->inputAliases["4:2"].toString()=="Keep this pair","Surviving metadata lost");
+        require(graph.edges.size()==2&&graph.edges[0].input==4&&graph.validate().isEmpty(),"Surviving wires changed");
+        require(graph.editMixerPair("mix",true).isEmpty()&&graph.find("mix")->outputs==4,"Output add failed");
+        require(graph.editMixerPair("mix",true,0).isEmpty()&&graph.edges.size()==1,"Deleted output wires retained");
+        require(graph.editMixerPair("mix",true,0).isNotEmpty(),"Last output pair removed");
+        require(graph.editMixerPair("audio-in",true).isNotEmpty(),"Hardware topology was editable");
+        RoutingGraph restored;String error;require(RoutingGraph::parse(graph.json(),restored,error),"Dynamic mixer roundtrip failed");
+        while(graph.find("mix")->inputs<256)require(graph.editMixerPair("mix",false).isEmpty(),"Valid input add failed");
+        require(graph.editMixerPair("mix",false).isNotEmpty(),"Mixer exceeded channel bound");
+        require(graph.editMixerPair("mix",false,2147483647).isNotEmpty(),"Invalid pair index accepted");
+    });
+    runner.run("Aggregate capture limit keeps previous state before encoding", [] {
+        PluginInstanceRecord record;record.lastValidState="previous state";
+        const bool captured=capturePluginState(record,[](juce::MemoryBlock& block){block.setSize(2048,true);},1024);
+        require(!captured&&record.lastValidState=="previous state","Aggregate capture limit erased previous state");
+    });
+    runner.run("Isolation persists by instance and is not silently accepted by older session schemas", [] {
+        PropertySet settings; PluginInstances session;
+        session.records.push_back(newKnownPluginInstance(settings, plugin()));
+        const auto original = session.serialize(); require(original->getIntAttribute("version") == 1, "Direct sessions lost compatibility");
+        PluginInstances migrated; require(migrated.deserialize(*original) && !migrated.records[0].isolated, "Old session enabled isolation implicitly");
+        session.records[0].isolated = true;
+        const auto isolated = session.serialize(); require(isolated->getIntAttribute("version") == 2, "Older host would silently run isolated plugin directly");
+        require(migrated.deserialize(*isolated) && migrated.records[0].isolated && migrated.records[0].id == session.records[0].id,
+            "Isolated reload lost mode or instance identity");
+    });
+    runner.run("Tray flattens chain dependencies without changing list order", [] {
+        PluginInstances session;session.mode="chain";session.graph=RoutingGraph::empty(2,2);session.graph.edges.clear();
+        for(const auto* id:{"c","b","a","unavailable"}){PluginInstanceRecord r;r.id=id;session.records.push_back(r);}
+        for(const auto* id:{"c","b","a"}){RouteNode n;n.id=id;session.graph.nodes.push_back(n);}
+        RouteNode mixer;mixer.id="mix";mixer.kind="mixer";mixer.inputs=8;session.graph.nodes.push_back(mixer);
+        session.graph.edges={{"in","audio-in","a",0,0,2,2},{"ab","a","b",0,0,2,2},{"ac","a","c",0,0,2,2},
+            {"bm","b","mix",0,0,2,2},{"cm","c","mix",0,2,2,2},{"out","mix","audio-out",0,0,2,2}};
+        require(session.graph.validate().isEmpty(),"Tray test graph is invalid");
+        require(session.processingOrder()==std::vector<size_t>{2,1,0,3},"Tray ignored chain dependencies or lost an unavailable instance");
+        session.graph.find("a")->x=1400;session.graph.find("b")->x=-800;
+        require(session.processingOrder()==std::vector<size_t>{2,1,0,3},"Moving cards changed the tray order");
+        session.mode="list";
+        require(session.processingOrder()==std::vector<size_t>{0,1,2,3},"List-mode instance order changed");
+    });
+    runner.run("Channel configurations require a compatible host and survive persistence", [] {
+        PropertySet settings; PluginInstances session;session.records.push_back(newKnownPluginInstance(settings,plugin()));
+        AudioProcessor::BusesLayout layout;layout.inputBuses.add(AudioChannelSet::stereo());layout.inputBuses.add(AudioChannelSet::disabled());layout.outputBuses.add(AudioChannelSet::mono());
+        session.records[0].busLayout=pluginBuses::encode(layout);const auto xml=session.serialize();
+        require(xml->getIntAttribute("version")==3,"Old host would reinterpret bus connections");
+        PluginInstances read;require(read.deserialize(*xml),"Cannot restore configured buses");AudioProcessor::BusesLayout decoded;
+        require(pluginBuses::decode(read.records[0].busLayout,decoded)&&decoded==layout,"Configured buses changed after restart");
+        xml->getChildByName("INSTANCE")->getChildByName("BUSES")->deleteAllTextElements();
+        require(!read.deserialize(*xml)&&read.records.size()==1,"Invalid layout damaged the previous session");
     });
     return runner.result();
 }

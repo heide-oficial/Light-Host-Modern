@@ -1,4 +1,8 @@
 #include "pch.h"
+#include "DialogPresentation.h"
+#include "HoverHelp.h"
+#include "VisualPreferences.h"
+#include "DisplayNameDialog.h"
 #include <winrt/Microsoft.UI.Xaml.Automation.Peers.h>
 #include "MainWindow.xaml.h"
 #if __has_include("MainWindow.g.cpp")
@@ -10,6 +14,8 @@
 #include "ScanFailureDialog.h"
 #include "PluginDialogs.h"
 #include "UiPreferences.h"
+#include "SurfaceMaterials.h"
+#include "ActionFeedback.h"
 #include "PluginPageController.h"
 #include "../../Source/RuntimeProfile.h"
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -45,7 +51,7 @@ namespace
     constexpr wchar_t GITHUB_REPOSITORY_URL[] = L"https://github.com/heide-oficial/Light-Host-Modern";
     constexpr wchar_t GITHUB_SHOWCASE_URL[] = L"https://github.com/heide-oficial/Light-Host-Modern/issues/new?title=%5BSHOWCASE%20VIDEO%5D%20Video%20title%20here&labels=showcase%20video&body=Here%27s%20my%20video%20showcasing%20or%20featuring%20the%20app%3A%20%5BINSERT%20LINK%20HERE%5D";
     constexpr wchar_t KOFI_URL[] = L"https://ko-fi.com/heide_oficial";
-    constexpr wchar_t APP_VERSION[] = L"1.4.1";
+    constexpr wchar_t APP_VERSION[] = L"2.0.0";
     constexpr double COMPACT_CONTENT_MAX_WIDTH = 1000.0;
     std::string toLower(std::string value)
     {
@@ -65,6 +71,7 @@ namespace
     hstring ipcErrorText(std::string const& json, ::LightHostModernWinUI::LocalizationCatalog& localization)
     {
         const auto code = extractString(json, "code");
+        if (code == "operating_error") return localization.translatedSource(hs(extractString(json, "message", "Command failed")));
         if (code == "session_save_failed" || code == "session_read_only")
             return localization.text("ipc.error." + code, hs(extractString(json, "message", "Session operation failed")).c_str());
         if (code == "configuration_superseded" || code == "audio_configuration_failed")
@@ -539,7 +546,7 @@ namespace
         button.BorderThickness(ThicknessHelper::FromUniformLength(0));
         button.Background(resourceBrush(L"SubtleFillColorTransparentBrush", makeColorA(0, 0, 0, 0)));
         Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(button, hstring(tooltip.c_str()));
-        ToolTipService::SetToolTip(button, box_value(hstring(tooltip.c_str())));
+        lightHostModern::ui::HoverHelp::SetToolTip(button, box_value(hstring(tooltip.c_str())));
         return button;
     }
 
@@ -664,20 +671,20 @@ namespace
             const auto background = highContrastActive ? systemColor(COLOR_WINDOW) : dark ? makeColor(32, 32, 32) : makeColor(243, 243, 243);
             const auto foreground = highContrastActive ? systemColor(COLOR_WINDOWTEXT) : dark ? makeColor(245, 247, 251) : makeColor(32, 32, 32);
             const auto inactiveForeground = highContrastActive ? systemColor(COLOR_GRAYTEXT) : dark ? makeColor(150, 160, 174) : makeColor(110, 110, 110);
-            const auto hoverBackground = highContrastActive ? systemColor(COLOR_HIGHLIGHT) : dark ? makeColor(48, 48, 48) : makeColor(230, 230, 230);
-            const auto pressedBackground = highContrastActive ? systemColor(COLOR_HIGHLIGHT) : dark ? makeColor(60, 60, 60) : makeColor(218, 218, 218);
+            const auto hoverBackground = highContrastActive ? systemColor(COLOR_HIGHLIGHT) : dark ? makeColorA(24,255,255,255) : makeColorA(20,0,0,0);
+            const auto pressedBackground = highContrastActive ? systemColor(COLOR_HIGHLIGHT) : dark ? makeColorA(38,255,255,255) : makeColorA(32,0,0,0);
             const auto hoverForeground = highContrastActive ? systemColor(COLOR_HIGHLIGHTTEXT) : foreground;
             titleBar.BackgroundColor(background);
             titleBar.ForegroundColor(foreground);
             titleBar.InactiveBackgroundColor(background);
             titleBar.InactiveForegroundColor(inactiveForeground);
-            titleBar.ButtonBackgroundColor(background);
+            titleBar.ButtonBackgroundColor(highContrastActive ? background : makeColorA(0,0,0,0));
             titleBar.ButtonForegroundColor(foreground);
             titleBar.ButtonHoverBackgroundColor(hoverBackground);
             titleBar.ButtonHoverForegroundColor(hoverForeground);
             titleBar.ButtonPressedBackgroundColor(pressedBackground);
             titleBar.ButtonPressedForegroundColor(hoverForeground);
-            titleBar.ButtonInactiveBackgroundColor(background);
+            titleBar.ButtonInactiveBackgroundColor(highContrastActive ? background : makeColorA(0,0,0,0));
             titleBar.ButtonInactiveForegroundColor(inactiveForeground);
         }
         catch (...)
@@ -734,6 +741,7 @@ namespace
 
     void styleCombo(ComboBox const& combo)
     {
+        lightHostModern::ui::SurfaceMaterials::current().watch(combo);
         combo.HorizontalAlignment(HorizontalAlignment::Stretch);
         combo.MinHeight(36);
         combo.MinWidth(200);
@@ -817,10 +825,12 @@ namespace
 
     void enableDialogBackgroundDefocus(ContentDialog const& dialog)
     {
-        dialog.PointerPressed([dialog](Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
+        dialog.PointerPressed([](Windows::Foundation::IInspectable const& sender, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
         {
-            if (!pointerStartedInsideInteractiveControl(args, dialog))
-                dialog.Focus(FocusState::Programmatic);
+            // The dialog owns this delegate. Capturing it strongly creates a
+            // reference cycle that retains the entire closed visual tree.
+            if (const auto owner = sender.try_as<ContentDialog>(); owner && !pointerStartedInsideInteractiveControl(args, owner))
+                owner.Focus(FocusState::Programmatic);
         });
     }
 
@@ -912,6 +922,7 @@ namespace winrt::LightHostModernWinUI::implementation
         dropdown.popupCard.Padding(ThicknessHelper::FromUniformLength(8));
         dropdown.popupCard.Margin(ThicknessHelper::FromUniformLength(0));
         dropdown.popupCard.Child(dropdown.flyoutPanel);
+        SurfaceMaterials::current().attach(dropdown.popupCard);
 
         dropdown.button.Content(content);
         dropdown.popup.Child(dropdown.popupCard);
@@ -1033,9 +1044,10 @@ namespace winrt::LightHostModernWinUI::implementation
         comboDropDownOpen = true;
     }
 
-    void MainWindow::showNotification(std::wstring const& message)
+    void MainWindow::showNotification(std::wstring const& message, bool important)
     {
-        if (windowClosing) return;
+        if (windowClosing || !(important ? VisualPreferences::current().warningNotifications : VisualPreferences::current().actionNotifications)) return;
+        lastNotificationImportant = important;
         NotificationText().Text(localization.translatedSource(hstring(message.c_str())));
         NotificationToast().Visibility(Visibility::Visible);
         Automation::AutomationProperties::SetLiveSetting(NotificationText(), Automation::Peers::AutomationLiveSetting::Polite);
@@ -1067,6 +1079,8 @@ namespace winrt::LightHostModernWinUI::implementation
         }
         if (section == L"Audio")
         {
+            SurfaceMaterials::current().watch(InputGroupingBox());
+            SurfaceMaterials::current().watch(OutputGroupingBox());
             audioBackendBox = ComboBox();
             styleCombo(audioBackendBox);
             audioBackendBox.PlaceholderText(localization.text("common.none", L"None"));
@@ -1249,6 +1263,14 @@ namespace winrt::LightHostModernWinUI::implementation
         }
 
         localization.load(loadUiSetting(L"Localization", L"Language", L"en-us"));
+        SurfaceMaterials::current().attach(NotificationToast());
+        SurfaceMaterials::current().attach(ReleaseNotificationSurface());
+        for(auto bar:{DashboardAudioNotice(),SessionStatusBanner(),ReleaseNotification()}){
+            bar.Visibility(bar.IsOpen()?Visibility::Visible:Visibility::Collapsed);
+            bar.RegisterPropertyChangedCallback(InfoBar::IsOpenProperty(),[weak=get_weak()](DependencyObject const& sender,DependencyProperty const&){if(auto owner=weak.get()){auto notice=sender.as<InfoBar>();const bool pageVisible=notice!=owner->DashboardAudioNotice()||owner->currentSection==L"Dashboard";notice.Visibility(notice.IsOpen()&&pageVisible?Visibility::Visible:Visibility::Collapsed);if(notice==owner->ReleaseNotification())owner->ReleaseNotificationSurface().Visibility(notice.IsOpen()?Visibility::Visible:Visibility::Collapsed);}});
+        }
+        ViewReleaseNotificationButton().Click([weak=get_weak()](const auto&,const auto&){if(auto owner=weak.get()){owner->ReleaseNotification().IsOpen(false);owner->showSection(L"Settings");}});
+        updateCheckTimer=DispatcherTimer();updateCheckTimer.Interval(std::chrono::hours(6));updateCheckTimer.Tick([weak=get_weak()](const auto&,const auto&){if(auto owner=weak.get();owner&&!owner->windowClosing&&owner->hasFullSnapshot)owner->checkForUpdatesAsync();});updateCheckTimer.Start();
         compactLayout = _wcsicmp(loadUiSetting(L"Appearance", L"LayoutMode", L"Expanded").c_str(), L"Compact") == 0;
         sidebarCollapsed = sidebarStartsCollapsed();
         createDynamicControls(L"Dashboard");
@@ -1276,9 +1298,12 @@ namespace winrt::LightHostModernWinUI::implementation
         styleTitleBar(AppWindow(), true);
         applyLayoutMode();
         resetDefaultPluginScanPaths();
+        AppWindow().Closing([weak=get_weak()](const auto&,const Microsoft::UI::Windowing::AppWindowClosingEventArgs& args){
+            if(auto owner=weak.get();owner&&!owner->normalCloseReady){args.Cancel(true);owner->prepareNormalClose();}
+        });
         Closed({ this, &MainWindow::Window_Closed });
         Activated([weak = get_weak()](const auto&, const WindowActivatedEventArgs& args) {
-            if (auto owner = weak.get()) owner->windowMaterial.activated(args.WindowActivationState() != WindowActivationState::Deactivated);
+            if (auto owner = weak.get()){owner->windowMaterial.activated(args.WindowActivationState() != WindowActivationState::Deactivated);if(args.WindowActivationState()!=WindowActivationState::Deactivated)owner->notifyAvailableRelease();}
         });
 
         winUILog("Sizing window within the monitor work area.");
@@ -1316,6 +1341,8 @@ namespace winrt::LightHostModernWinUI::implementation
         winUILog("Attaching UI events.");
         RootLayout().Loaded([this](IInspectable const&, RoutedEventArgs const&)
         {
+            contentFade=ScrollEdgeFade::attach(ContentFadeHost(),ContentScrollViewer());
+            applyVisualPreferences();
             updateSidebarLayout();
             applyResponsiveLayout(RootLayout().ActualWidth());
             try
@@ -1349,11 +1376,12 @@ namespace winrt::LightHostModernWinUI::implementation
 
         winUILog("Creating refresh timer.");
         refreshTimer = DispatcherTimer();
-        refreshTimer.Interval(std::chrono::milliseconds(50));
+        refreshTimer.Interval(std::chrono::milliseconds(VisualPreferences::current().performance?100:50));
         refreshTimer.Tick([this](IInspectable const&, IInspectable const&)
         {
             try
             {
+                SurfaceMaterials::current().poll(RootLayout());
                 refreshMeterLevels();
                 if (!comboDropDownOpen && !commandInProgress && !pluginDragInProgress)
                     refreshTelemetry();
@@ -1390,6 +1418,22 @@ namespace winrt::LightHostModernWinUI::implementation
         showSection(L"Dashboard");
         updateSidebarLayout();
         winUILog("Initial snapshot deferred until first timer tick.");
+        operatingPresenter = std::make_shared<lightHostModern::ui::OperatingPresenter>();
+        operatingPresenter->layoutChanged=[weak=get_weak()]{if(auto owner=weak.get())owner->applyLayoutMode();};
+        HWND operatingWindow = nullptr; this->try_as<::IWindowNative>()->get_WindowHandle(&operatingWindow);
+        operatingPresenter->create(RootLayout(), localization, hostConnection, operatingWindow,
+            [weak=get_weak()](std::string command,bool chainPrepared)->winrt::Windows::Foundation::IAsyncOperation<bool> {
+                auto owner=weak.get();if(!owner||owner->windowClosing)co_return false;
+                if (command == "constrain-chain-spacing") { owner->ensurePage(L"Plugins");owner->operatingPresenter->applyDistancePreference();co_return true; }
+                if (command == "refresh-audio-view") { co_await owner->refreshSnapshot(true); co_return true; }
+                if (command == "show-plugin-scan") { owner->ScanForPlugins_Click(nullptr, nullptr); co_return true; }
+                if(command.rfind("restart-host:",0)==0||command.rfind("factory-reset:",0)==0) {
+                    auto reply=winrt::to_string(co_await owner->hostConnection->requestAsync(std::move(command)));
+                    if(lightHostModern::ui::extractString(reply,"status")!="ok")co_return false;
+                    owner->closeQuitsHost=false;co_await owner->finishNormalCloseAsync();co_return true;
+                }
+                co_return co_await owner->sendCommand(std::move(command),chainPrepared);
+            });
         winUILog("MainWindow ready.");
         receiveHostEvents();
     }
@@ -1404,10 +1448,16 @@ namespace winrt::LightHostModernWinUI::implementation
             Pages().AudioLoaded(true);
         }
         else if (section == L"Plugins" && !Pages().PluginsLoaded()) {
+            winUILog("PluginsPageView construct begin");
             pluginsPageView = winrt::make<PluginsPageView>();
+            winUILog("PluginsPageView construct end");
             winrt::get_self<PluginsPageView>(pluginsPageView)->owner = winrt::make_weak(get_strong().as<winrt::Windows::Foundation::IInspectable>());
             PluginsPageHost().Content(pluginsPageView);
+            if (operatingPresenter) operatingPresenter->attachPlugins(pluginsPageView.as<Microsoft::UI::Xaml::Controls::UserControl>());
             Pages().PluginsLoaded(true);
+        }
+        else if (section == L"Profiles" && !ProfilesPageHost().Content()) {
+            if (operatingPresenter) operatingPresenter->attachProfiles(ProfilesPageHost());
         }
         else if (section == L"Support me" && !Pages().SupportLoaded()) {
             supportPageView = winrt::make<SupportPageView>();
@@ -1424,10 +1474,10 @@ namespace winrt::LightHostModernWinUI::implementation
             verboseLogsPresenter->create(winrt::get_self<DiagnosticsPageView>(diagnosticsPageView)->DiagnosticsPanel(),localization,hostConnection,logsOwner,
                 [weak=get_weak()](std::string command)->winrt::Windows::Foundation::IAsyncOperation<bool> {
                     auto owner=weak.get();if(!owner||owner->windowClosing)co_return false;
-                    if(command.rfind("restart-host:",0)==0) {
+                    if(command.rfind("restart-host:",0)==0||command.rfind("factory-reset:",0)==0) {
                         auto reply=winrt::to_string(co_await owner->hostConnection->requestAsync(std::move(command)));
                         if(lightHostModern::ui::extractString(reply,"status")!="ok")co_return false;
-                        owner->closeQuitsHost=false;owner->Close();co_return true;
+                        owner->closeQuitsHost=false;co_await owner->finishNormalCloseAsync();co_return true;
                     }
                     co_return co_await owner->sendCommand(std::move(command));
                 });
@@ -1436,6 +1486,11 @@ namespace winrt::LightHostModernWinUI::implementation
             settingsPageView = winrt::make<SettingsPageView>();
             winrt::get_self<SettingsPageView>(settingsPageView)->owner = winrt::make_weak(get_strong().as<winrt::Windows::Foundation::IInspectable>());
             SettingsPageHost().Content(settingsPageView);
+            if (operatingPresenter) {
+                const auto page = winrt::get_self<SettingsPageView>(settingsPageView);
+                operatingPresenter->attachSettings(page->OperatingSettingsHost(), page->AppearanceSection());
+                operatingPresenter->attachDanger(page->DangerZone());
+            }
             Pages().SettingsLoaded(true);
         }
         else return false;
@@ -1450,8 +1505,10 @@ namespace winrt::LightHostModernWinUI::implementation
         createDynamicControls(section);
         if (section == L"Audio")
         {
-            MonoInputsSwitch().Toggled({ this, &MainWindow::MonoInputs_Toggled });
-            MonoOutputSwitch().Toggled({ this, &MainWindow::MonoOutput_Toggled });
+            InputModeBox().SelectionChanged({ this, &MainWindow::AudioMode_Changed });
+            OutputModeBox().SelectionChanged({ this, &MainWindow::AudioMode_Changed });
+            lightHostModern::ui::SurfaceMaterials::current().watch(InputModeBox());
+            lightHostModern::ui::SurfaceMaterials::current().watch(OutputModeBox());
             InputGroupingBox().SelectionChanged({ this, &MainWindow::ChannelGrouping_Changed });
             OutputGroupingBox().SelectionChanged({ this, &MainWindow::ChannelGrouping_Changed });
             styleButton(InputChannelsToggleAllButton());
@@ -1483,6 +1540,18 @@ namespace winrt::LightHostModernWinUI::implementation
             installedGrouped = loadUiSetting(L"Plugins", L"GroupByManufacturer", L"0") == L"1";
             RunningPluginSearchBox().TextChanged({ this, &MainWindow::PluginSearchBox_TextChanged });
             InstalledPluginSearchBox().TextChanged({ this, &MainWindow::PluginSearchBox_TextChanged });
+            for(auto search:{RunningPluginSearchBox(),InstalledPluginSearchBox()}){
+                search.TextMemberPath(L"Text");lightHostModern::ui::dismissSuggestionsOutside(search);
+                search.SuggestionChosen([weak=get_weak()](AutoSuggestBox const& box,AutoSuggestBoxSuggestionChosenEventArgs const& args){if(auto self=weak.get()){
+                    const auto suggestion=args.SelectedItem().as<TextBlock>();const auto id=unbox_value<hstring>(suggestion.Tag());
+                    box.Text(suggestion.Text());
+                    const bool running=box==self->RunningPluginSearchBox();
+                    (running?self->runningPluginSearch:self->installedPluginSearch)=std::wstring(box.Text());self->refreshPluginViews();
+                    auto view=running?self->RunningPluginsListView():self->InstalledPluginsListView();
+                    for(const auto& value:view.Items()){auto item=value.try_as<winrt::LightHostModernWinUI::PluginItem>();if(item&&!item.IsGroupHeader()&&item.Id()==id){view.SelectedItem(item);view.ScrollIntoView(item,ScrollIntoViewAlignment::Leading);break;}}
+                    box.IsSuggestionListOpen(false);
+                }});
+            }
             configurePluginSortMenus();
             winrt::get_self<PluginsPageView>(pluginsPageView)->ScanForPluginsButton().Click({ this, &MainWindow::ScanForPlugins_Click });
             RunningPluginsListView().ItemsSource(runningPage.items);
@@ -1502,6 +1571,40 @@ namespace winrt::LightHostModernWinUI::implementation
         }
         if (section == L"Settings")
         {
+            auto settingsView=winrt::get_self<SettingsPageView>(settingsPageView);
+            const auto preference=[this](ToggleSwitch toggle,TextBlock state,bool value,const wchar_t* section,const wchar_t* key,bool VisualPreferences::* field){
+                toggle.OnContent(box_value(L""));toggle.OffContent(box_value(L""));toggle.IsOn(value);
+                state.Text(localization.translatedSource(value?L"On":L"Off"));
+                toggle.Toggled([weak=get_weak(),state,section,key,field](const IInspectable& sender,const auto&){if(auto owner=weak.get()){
+                    const bool on=sender.as<ToggleSwitch>().IsOn();VisualPreferences::current().*field=on;saveUiSetting(section,key,on?L"1":L"0");
+                    state.Text(owner->localization.translatedSource(on?L"On":L"Off"));owner->applyVisualPreferences();
+                }});
+            };
+            preference(settingsView->ActionNotificationsSwitch(),settingsView->ActionNotificationsState(),VisualPreferences::current().actionNotifications,L"General",L"ActionNotifications",&VisualPreferences::actionNotifications);
+            preference(settingsView->WarningNotificationsSwitch(),settingsView->WarningNotificationsState(),VisualPreferences::current().warningNotifications,L"General",L"WarningNotifications",&VisualPreferences::warningNotifications);
+            preference(settingsView->HoverTooltipsSwitch(),settingsView->HoverTooltipsState(),VisualPreferences::current().hoverTooltips,L"General",L"HoverTooltips",&VisualPreferences::hoverTooltips);
+            preference(settingsView->PerformanceModeSwitch(),settingsView->PerformanceModeState(),VisualPreferences::current().performance,L"General",L"PerformanceMode",&VisualPreferences::performance);
+            preference(settingsView->EdgeFadeSwitch(),settingsView->EdgeFadeState(),VisualPreferences::current().fade,L"Appearance",L"EdgeFade",&VisualPreferences::fade);
+            settingsView->EdgeFadeSwitch().IsEnabled(!VisualPreferences::current().performance);
+            BackdropModeBox().IsEnabled(!VisualPreferences::current().performance);
+            settingsPageView.Loaded([weak=get_weak()](const auto&,const auto&){if(auto owner=weak.get())owner->applyLocalization();});
+            auto hideSidebar=settingsView->HideSidebarToggleSwitch();hideSidebar.OnContent(box_value(L""));hideSidebar.OffContent(box_value(L""));hideSidebar.IsOn(loadUiSetting(L"Appearance",L"HideSidebarToggle",L"0")==L"1");settingsView->HideSidebarToggleState().Text(localization.translatedSource(hideSidebar.IsOn()?L"On":L"Off"));
+            hideSidebar.Toggled([weak=get_weak()](const IInspectable& sender,const auto&){if(auto owner=weak.get()){const bool hidden=sender.as<ToggleSwitch>().IsOn();saveUiSetting(L"Appearance",L"HideSidebarToggle",hidden?L"1":L"0");winrt::get_self<SettingsPageView>(owner->settingsPageView)->HideSidebarToggleState().Text(owner->localization.translatedSource(hidden?L"On":L"Off"));owner->updateSidebarLayout();owner->showNotification(hidden?L"Sidebar button hidden.":L"Sidebar button shown.",false);}});
+            settingsView->ShowDangerOptions().OnContent(box_value(L""));settingsView->ShowDangerOptions().OffContent(box_value(L""));
+            settingsView->ShowDangerOptions().Toggled([weak=get_weak()](const IInspectable& sender,const auto&){if(auto owner=weak.get()){const auto page=winrt::get_self<SettingsPageView>(owner->settingsPageView);const bool enabled=sender.as<ToggleSwitch>().IsOn();page->DangerZone().Visibility(enabled?Visibility::Visible:Visibility::Collapsed);page->DangerOptionsState().Text(owner->localization.translatedSource(enabled?L"On":L"Off"));}});
+            const auto releasePreference=[this](ToggleSwitch toggle,TextBlock label,const wchar_t* key,bool inApp){
+                toggle.OnContent(box_value(L""));toggle.OffContent(box_value(L""));
+                toggle.IsOn(loadUiSetting(L"Updates",key,loadUiSetting(L"Updates",L"NotifyNewReleases",L"1").c_str())!=L"0");
+                label.Text(localization.translatedSource(toggle.IsOn()?L"On":L"Off"));
+                toggle.Toggled([weak=get_weak(),label,key,inApp](const IInspectable& sender,const auto&){if(auto owner=weak.get()){
+                    const bool on=sender.as<ToggleSwitch>().IsOn();saveUiSetting(L"Updates",key,on?L"1":L"0");
+                    label.Text(owner->localization.translatedSource(on?L"On":L"Off"));
+                    if(inApp){owner->appNotifiedRelease.clear();if(!on)owner->ReleaseNotification().IsOpen(false);}
+                    if(on){owner->notifyAvailableRelease();owner->checkForUpdatesAsync();}
+                }});
+            };
+            releasePreference(settingsView->AppReleaseNotificationsSwitch(),settingsView->AppReleaseNotificationsState(),L"NotifyReleasesInApp",true);
+            releasePreference(settingsView->WindowsReleaseNotificationsSwitch(),settingsView->WindowsReleaseNotificationsState(),L"NotifyReleasesOnWindows",false);
             styleButton(RemoveMissingPluginsButton());
             styleButton(ClearPluginDatabaseButton());
             RemoveMissingPluginsButton().Click({ this, &MainWindow::RemoveMissingPlugins_Click });
@@ -1532,6 +1635,7 @@ namespace winrt::LightHostModernWinUI::implementation
             diagnosticsSwitch.Toggled({this, &MainWindow::DiagnosticsEnabled_Toggled});
             HideSupportTabSwitch().Toggled({ this, &MainWindow::HideSupportTabSwitch_Toggled });
             LanguageBox().SelectionChanged({ this, &MainWindow::LanguageBox_SelectionChanged });
+            SurfaceMaterials::current().watch(LanguageBox());
             StartWithWindowsCheckBox().Toggled({ this, &MainWindow::StartWithWindowsCheckBox_Changed });
             CloseToTraySwitch().Toggled({ this, &MainWindow::CloseToTraySwitch_Toggled });
             EnableVst2CheckBox().Toggled({ this, &MainWindow::EnableVst2CheckBox_Changed });
@@ -1552,6 +1656,7 @@ namespace winrt::LightHostModernWinUI::implementation
                 {
                     saveBackdropModeIndex(BackdropModeBox().SelectedIndex());
                     applyBackdrop(BackdropModeBox().SelectedIndex());
+                    showNotification(L"Window material updated.",false);
                 }
             });
             LayoutModeBox().SelectionChanged([this](IInspectable const&, SelectionChangedEventArgs const&)
@@ -1621,16 +1726,40 @@ namespace winrt::LightHostModernWinUI::implementation
 
     void MainWindow::DownloadUpdate_Click(IInspectable const&, RoutedEventArgs const&)
     {
-        if (!updateService->latest.artifactUrl.empty())
-            downloadAndInstallUpdateAsync();
-        else if (!updateService->latest.releaseUrl.empty())
-            ShellExecuteW(nullptr, L"open", updateService->latest.releaseUrl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        chooseUpdateMethodAsync();
+    }
+
+    fire_and_forget MainWindow::chooseUpdateMethodAsync()
+    {
+        if(updateChoiceOpen || updateInstallInProgress || windowClosing)co_return;
+        auto lifetime=get_strong();updateChoiceOpen=true;
+        try {
+            ContentDialog dialog;
+            dialog.XamlRoot(RootLayout().XamlRoot());
+            dialog.Title(box_value(localization.text("update.choice.title",L"Update LightHostModern")));
+            dialog.Content(box_value(localization.text("update.choice.body",L"Update here, or download the package from GitHub. Updating here briefly stops audio and reopens the app. Your settings are kept.")));
+            dialog.PrimaryButtonText(localization.text("update.choice.direct",L"Update in app"));
+            dialog.SecondaryButtonText(localization.text("update.choice.browser",L"GitHub download"));
+            dialog.CloseButtonText(localization.text("common.cancel",L"Cancel"));
+            dialog.IsPrimaryButtonEnabled(!updateService->latest.artifactUrl.empty());
+            dialog.DefaultButton(ContentDialogButton::Close);
+            enableDialogBackgroundDefocus(dialog);sizeDialogToViewport(dialog,RootLayout(),0.65);
+            const auto choice=co_await lightHostModern::ui::showAppDialog(dialog);
+            updateChoiceOpen=false;
+            if(windowClosing)co_return;
+            if(choice==ContentDialogResult::Primary)downloadAndInstallUpdateAsync();
+            else if(choice==ContentDialogResult::Secondary) {
+                const auto& url=updateService->latest.artifactUrl.empty()?updateService->latest.releaseUrl:updateService->latest.artifactUrl;
+                if(!url.empty())ShellExecuteW(nullptr,L"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
+            }
+        }catch(...){updateChoiceOpen=false;winUILog("Could not open update options.");}
     }
 
     void MainWindow::syncDiagnosticsSetting(bool enabled)
     {
-        if (diagnosticsEnabled != enabled) diagnosticsPresenter.resetCpuSampler();
+        if (diagnosticsEnabled != enabled) { diagnosticsPresenter.resetCpuSampler(); dashboardCpuSampler.reset(); }
         diagnosticsEnabled = enabled;
+        if (!enabled) updateDashboardPerformance("{}");
         const auto captureState=lightHostModern::verbose::status();
         const bool capturePending=captureState.phase!="off";
         DiagnosticsButton().Visibility(enabled||capturePending ? Visibility::Visible : Visibility::Collapsed);
@@ -1666,7 +1795,7 @@ namespace winrt::LightHostModernWinUI::implementation
                 dialog.PrimaryButtonText(localization.text("settings.diagnostics.disable", L"Disable diagnostics"));
                 dialog.CloseButtonText(localization.text("common.cancel", L"Cancel"));
                 Automation::AutomationProperties::SetAutomationId(dialog, L"DisableDiagnosticsDialog");
-                confirmed = co_await dialog.ShowAsync() == ContentDialogResult::Primary;
+                confirmed = co_await lightHostModern::ui::showAppDialog(dialog) == ContentDialogResult::Primary;
             }
             if (confirmed && !windowClosing) co_await sendCommand(std::string("set-diagnostics-enabled:") + (enabled ? "1" : "0"));
         } catch (const hresult_error& error) { winUILog("Diagnostics setting: " + to_string(error.message())); }
@@ -1736,12 +1865,18 @@ namespace winrt::LightHostModernWinUI::implementation
 
     void MainWindow::PluginSearchBox_TextChanged(AutoSuggestBox const& sender, AutoSuggestBoxTextChangedEventArgs const& args)
     {
-        (void) args;
+        if(args.Reason()==AutoSuggestionBoxTextChangeReason::SuggestionChosen)return;
         if (sender == RunningPluginSearchBox())
             runningPluginSearch = sender.Text().c_str();
         else
             installedPluginSearch = sender.Text().c_str();
         refreshPluginViews();
+        auto suggestions=single_threaded_observable_vector<IInspectable>();
+        const bool running=sender==RunningPluginSearchBox();
+        const auto& page=running?runningPage:installedPage;
+        const auto rows=lightHostModern::ui::filterAndSortPluginRows(page.source,std::wstring(sender.Text()),running?runningPluginSortMode:installedPluginSortMode,running);
+        for(const auto& row:rows){if(suggestions.Size()>=30)break;TextBlock item;item.Text(hs(row.name));item.IsHitTestVisible(false);item.Tag(box_value(hs(running?row.instanceId:row.knownId)));suggestions.Append(item);}
+        sender.ItemsSource(suggestions);sender.IsSuggestionListOpen(!sender.Text().empty()&&suggestions.Size()>0);
     }
     void MainWindow::SidebarToggle_Click(IInspectable const&, RoutedEventArgs const&)
     {
@@ -1946,13 +2081,30 @@ namespace winrt::LightHostModernWinUI::implementation
 
     Windows::Foundation::IAsyncAction MainWindow::changeAudioSelection(std::string field, std::string value)
     {
-        auto lifetime = get_strong();
-        try
-        {
-            const auto command = co_await lightHostModern::ui::AudioPageController::selectionCommand(hostConnection, std::move(field), std::move(value));
-            if (!windowClosing) co_await sendCommand(to_string(command));
-        }
-        catch (...) { if (!windowClosing) showNotification(localization.text("audio.selectionFailed", L"Could not apply this audio selection. Refresh the device list and try again.").c_str()); }
+        auto lifetime=get_strong();
+        try {
+            auto snapshot=lightHostModern::ipc::parseSnapshotObject(hostConnection->snapshotJson);
+            lightHostModern::ipc::JsonObject intent;
+            intent.SetNamedValue(L"field",lightHostModern::ipc::JsonValue::CreateStringValue(to_hstring(field)));
+            intent.SetNamedValue(L"value",lightHostModern::ipc::JsonValue::CreateStringValue(to_hstring(value)));
+            lightHostModern::ui::stampAudioIntent(intent,snapshot);
+            co_await sendCommand("ui-audio-intent:"+to_string(intent.Stringify()));
+        } catch (...) { if(!windowClosing)showNotification(localization.text("audio.selectionFailed", L"Could not apply this audio selection. Refresh the device list and try again.").c_str()); }
+    }
+
+    Windows::Foundation::IAsyncAction MainWindow::changeAudioChannels(bool input,int first,int last,bool enabled)
+    {
+        auto lifetime=get_strong();
+        try {
+            auto snapshot=lightHostModern::ipc::parseSnapshotObject(hostConnection->snapshotJson);
+            lightHostModern::ipc::JsonObject intent;
+            intent.SetNamedValue(L"field",lightHostModern::ipc::JsonValue::CreateStringValue(input?L"inputChannels":L"outputChannels"));
+            intent.SetNamedValue(L"first",lightHostModern::ipc::JsonValue::CreateNumberValue(first));
+            intent.SetNamedValue(L"last",lightHostModern::ipc::JsonValue::CreateNumberValue(last));
+            intent.SetNamedValue(L"enabled",lightHostModern::ipc::JsonValue::CreateBooleanValue(enabled));
+            lightHostModern::ui::stampAudioIntent(intent,snapshot);
+            co_await sendCommand("ui-audio-intent:"+to_string(intent.Stringify()));
+        } catch (...) { if(!windowClosing)showNotification(localization.text("audio.selectionFailed", L"Could not apply this audio selection. Refresh the device list and try again.").c_str()); }
     }
 
     winrt::fire_and_forget MainWindow::AudioBackendBox_SelectionChanged(IInspectable, SelectionChangedEventArgs)
@@ -2018,13 +2170,25 @@ namespace winrt::LightHostModernWinUI::implementation
         const auto command = tag.substr(0, firstSeparator);
         const int first = std::atoi(tag.substr(firstSeparator + 1).c_str());
         const int last = secondSeparator == std::string::npos ? first : std::atoi(tag.substr(secondSeparator + 1).c_str());
-        if (commandInProgress || snapshotInProgress || !hasFullSnapshot) co_return;
+        if (!hasFullSnapshot || pendingNormalClose) { co_await refreshSnapshot(true); co_return; }
         const auto& rows = command == "set-input-channel" ? currentInputChannelRows : currentOutputChannelRows;
         const auto row = std::find_if(rows.begin(), rows.end(), [&](const auto& value) { return value.startIndex == first && value.endIndex == last; });
-        if (row == rows.end() || (!row->partial && isChecked(box) == row->active)) co_return;
-        const bool desired = !row->active;
-        try { co_await sendCommand(to_string(lightHostModern::ui::AudioPageController::channelCommand(hostConnection->snapshotJson,
-            command == "set-input-channel", first, last, desired))); }
+        if (row == rows.end()) co_return;
+        const auto stateSeparator = secondSeparator == std::string::npos ? std::string::npos : tag.find(':', secondSeparator + 1);
+        const bool wasPartial = stateSeparator != std::string::npos && tag.substr(stateSeparator + 1) == "partial";
+        const bool desired = wasPartial || isChecked(box);
+        try {
+            if (wasPartial) {
+                // WinUI toggles Indeterminate to Off. A partially selected pair
+                // enables both channels instead. Consume the presented state
+                // now so another click can turn it off before the IPC completes.
+                struct RestoreSync { bool& flag; bool previous; ~RestoreSync() { flag = previous; } } restore{syncingHostControls, syncingHostControls};
+                syncingHostControls = true;
+                box.Tag(box_value(hs(tag.substr(0, stateSeparator))));
+                box.IsChecked(true);
+            }
+            co_await changeAudioChannels(command == "set-input-channel", first, last, desired);
+        }
         catch (...) { showNotification(localization.text("audio.selectionFailed", L"Could not apply this audio selection. Refresh the device list and try again.").c_str()); }
 
     }
@@ -2041,8 +2205,7 @@ namespace winrt::LightHostModernWinUI::implementation
 
         const auto rows = currentInputChannelRows;
         if (rows.empty()) co_return;
-        try { co_await sendCommand(to_string(lightHostModern::ui::AudioPageController::channelCommand(hostConnection->snapshotJson,
-            true, rows.front().startIndex, rows.back().endIndex, shouldCheck))); }
+        try { co_await changeAudioChannels(true, rows.front().startIndex, rows.back().endIndex, shouldCheck); }
         catch (...) { showNotification(localization.text("audio.selectionFailed", L"Could not apply this audio selection. Refresh the device list and try again.").c_str()); }
 
     }
@@ -2059,8 +2222,7 @@ namespace winrt::LightHostModernWinUI::implementation
 
         const auto rows = currentOutputChannelRows;
         if (rows.empty()) co_return;
-        try { co_await sendCommand(to_string(lightHostModern::ui::AudioPageController::channelCommand(hostConnection->snapshotJson,
-            false, rows.front().startIndex, rows.back().endIndex, shouldCheck))); }
+        try { co_await changeAudioChannels(false, rows.front().startIndex, rows.back().endIndex, shouldCheck); }
         catch (...) { showNotification(localization.text("audio.selectionFailed", L"Could not apply this audio selection. Refresh the device list and try again.").c_str()); }
 
     }
@@ -2094,8 +2256,7 @@ namespace winrt::LightHostModernWinUI::implementation
         const auto channelIndex = tag.substr(first + 1, second - first - 1);
         const bool currentlyActive = tag.substr(second + 1) == "1";
         const int index = std::atoi(channelIndex.c_str());
-        try { co_await sendCommand(to_string(lightHostModern::ui::AudioPageController::channelCommand(hostConnection->snapshotJson,
-            command == "set-input-channel", index, index, !currentlyActive))); }
+        try { co_await changeAudioChannels(command == "set-input-channel", index, index, !currentlyActive); }
         catch (...) { showNotification(localization.text("audio.selectionFailed", L"Could not apply this audio selection. Refresh the device list and try again.").c_str()); }
     }
 
@@ -2103,14 +2264,18 @@ namespace winrt::LightHostModernWinUI::implementation
     {
         if (currentSection != section && currentSection != L"Plugins") pageScrollOffsets[currentSection] = ContentScrollViewer().VerticalOffset();
         currentSection = section;
+        if (operatingPresenter) operatingPresenter->visible(section == L"Plugins");
         if (section == L"Diagnostics") diagnosticsPresenter.resetCpuSampler();
-        DashboardAudioNotice().Visibility(section == L"Dashboard" ? Visibility::Visible : Visibility::Collapsed);
+        if (section == L"Dashboard") { dashboardCpuSampler.reset(); lastDiagnosticTick = 0; }
+        DashboardAudioNotice().Visibility(section == L"Dashboard" && DashboardAudioNotice().IsOpen() ? Visibility::Visible : Visibility::Collapsed);
         const bool created = ensurePage(section);
+        applyLayoutMode();
         DiagnosticsPageHost().Visibility(section == L"Diagnostics" ? Visibility::Visible : Visibility::Collapsed);
         SettingsPageHost().Visibility(section == L"Settings" ? Visibility::Visible : Visibility::Collapsed);
         SupportPageHost().Visibility(section == L"Support me" ? Visibility::Visible : Visibility::Collapsed);
         PluginsPageHost().Visibility(section == L"Plugins" ? Visibility::Visible : Visibility::Collapsed);
         AudioPageHost().Visibility(section == L"Audio" ? Visibility::Visible : Visibility::Collapsed);
+        ProfilesPageHost().Visibility(section == L"Profiles" ? Visibility::Visible : Visibility::Collapsed);
         DashboardPanel().Visibility(section == L"Dashboard" ? Visibility::Visible : Visibility::Collapsed);
         if (PreferencesPanel()) PreferencesPanel().Visibility(section == L"Audio" ? Visibility::Visible : Visibility::Collapsed);
         if (PluginsPanel()) PluginsPanel().Visibility(section == L"Plugins" ? Visibility::Visible : Visibility::Collapsed);
@@ -2125,6 +2290,8 @@ namespace winrt::LightHostModernWinUI::implementation
             PageTitleText().Text(localization.text("nav.audio", L"Audio"));
         else if (section == L"Plugins")
             PageTitleText().Text(localization.text("nav.plugins", L"Plugins"));
+        else if (section == L"Profiles")
+            PageTitleText().Text(localization.text("nav.profiles", L"Profiles"));
         else if (section == L"Support me")
             PageTitleText().Text(localization.text("nav.support", L"Support me"));
         else if (section == L"Diagnostics")
@@ -2137,7 +2304,11 @@ namespace winrt::LightHostModernWinUI::implementation
         else if (section == L"Audio")
             PageSubtitleText().Text(localization.text("page.audio.subtitle", L"Configure audio devices and stream format."));
         else if (section == L"Plugins")
-            PageSubtitleText().Text(localization.text("page.plugins.subtitle", L"Manage the running chain and installed plugin database."));
+            PageSubtitleText().Text(operatingPresenter && operatingPresenter->chainMode()
+                ? localization.translatedSource(L"Connect plugins and shape your audio flow.")
+                : localization.text("page.plugins.subtitle", L"Manage the running chain and installed plugin database."));
+        else if (section == L"Profiles")
+            PageSubtitleText().Text(localization.text("page.profiles.subtitle", L"Save and manage your List and Chain setups."));
         else if (section == L"Support me")
             PageSubtitleText().Text(localization.text("page.support.subtitle", L"Support the project and help LightHostModern keep improving."));
         else if (section == L"Diagnostics")
@@ -2149,6 +2320,7 @@ namespace winrt::LightHostModernWinUI::implementation
         if (section == L"Dashboard") selectedItem = DashboardButton();
         else if (section == L"Audio") selectedItem = PreferencesButton();
         else if (section == L"Plugins") selectedItem = PluginsButton();
+        else if (section == L"Profiles") selectedItem = ProfilesButton();
         else if (section == L"Support me") selectedItem = SupportButton();
         else if (section == L"Diagnostics") selectedItem = DiagnosticsButton();
         else selectedItem = ConfigButton();
@@ -2220,6 +2392,7 @@ namespace winrt::LightHostModernWinUI::implementation
 
     void MainWindow::applyLocalization()
     {
+        updateDashboardSummary(hostConnection->snapshotJson);
         if(verboseLogsPresenter)verboseLogsPresenter->translate(localization);
         const auto accessibleName = [this](FrameworkElement const& element, const char* key, const wchar_t* fallback)
         {
@@ -2261,7 +2434,7 @@ namespace winrt::LightHostModernWinUI::implementation
             const auto label = localization.text("audio.globalMute", L"Mute output");
             button.Label(label);
             Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(button, label);
-            ToolTipService::SetToolTip(button, box_value(localization.text("audio.globalMute.help", L"Silence output while plugins keep processing.")));
+            lightHostModern::ui::HoverHelp::SetToolTip(button, box_value(localization.text("audio.globalMute.help", L"Silence output while plugins keep processing.")));
         }
         for (auto button : { RunningGlobalBypassButton() })
         {
@@ -2269,14 +2442,17 @@ namespace winrt::LightHostModernWinUI::implementation
             const auto label = localization.text("audio.globalBypass", L"Bypass chain");
             button.Label(label);
             Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(button, label);
-            ToolTipService::SetToolTip(button, box_value(localization.text("audio.globalBypass.help", L"Listen to latency-compensated dry audio while plugins keep processing.")));
+            lightHostModern::ui::HoverHelp::SetToolTip(button, box_value(localization.text("audio.globalBypass.help", L"Listen to latency-compensated dry audio while plugins keep processing.")));
         }
 
+        HoverHelp::current().localize(localization);
         localizeVisualTree(RootLayout());
         BrandTitleText().Text(localization.text("app.title", L"LightHostModern"));
         DashboardButton().Content(box_value(localization.text("nav.dashboard", L"Dashboard")));
         PreferencesButton().Content(box_value(localization.text("nav.audio", L"Audio")));
         PluginsButton().Content(box_value(localization.text("nav.plugins", L"Plugins")));
+        ProfilesButton().Content(box_value(localization.text("nav.profiles", L"Profiles")));
+        if (operatingPresenter) operatingPresenter->localize(localization);
         SupportButton().Content(box_value(localization.text("nav.support", L"Support me")));
         ConfigButton().Content(box_value(localization.text("nav.settings", L"Settings")));
         DiagnosticsButton().Content(box_value(localization.text("nav.diagnostics", L"Diagnostics")));
@@ -2294,7 +2470,7 @@ namespace winrt::LightHostModernWinUI::implementation
         }
         if (Pages().SettingsLoaded()) {
             auto page = winrt::get_self<SettingsPageView>(settingsPageView);
-            page->PluginDatabaseTitle().Text(localization.text("settings.pluginDatabase", L"Plugin database"));
+            page->PluginDatabaseTitle().Text(localization.translatedSource(L"Danger zone"));
             page->RemoveMissingTitle().Text(localization.text("settings.removeMissingTitle", L"Remove missing plugins"));
             page->ClearDatabaseTitle().Text(localization.text("settings.clearDatabaseTitle", L"Clear plugin database"));
             page->RemoveMissingDescription().Text(localization.text("plugins.removeMissingDescription", L"Remove database entries whose plugin files are no longer available."));
@@ -2412,7 +2588,7 @@ namespace winrt::LightHostModernWinUI::implementation
         }
         if (Pages().SupportLoaded())
         {
-            ToolTipService::SetToolTip(KoFiButton(), box_value(koFiAutomationName));
+            lightHostModern::ui::HoverHelp::SetToolTip(KoFiButton(), box_value(koFiAutomationName));
         }
         if (Pages().SupportLoaded())
         {
@@ -2487,9 +2663,14 @@ namespace winrt::LightHostModernWinUI::implementation
         if (!root)
             return;
 
+        HoverHelp::current().describe(root);
         if (root == LanguageBox())
             return;
 
+        if(auto bar=root.try_as<CommandBar>()){
+            for(auto command:bar.PrimaryCommands())if(auto control=command.try_as<DependencyObject>())HoverHelp::current().describe(control);
+            if(auto content=bar.Content().try_as<DependencyObject>())HoverHelp::current().describe(content);
+        }
         // These controls localize their public properties or observable models.
         // Writing into their template TextBlocks would replace TemplateBindings,
         // leaving old labels on screen after a language change.
@@ -2549,9 +2730,36 @@ namespace winrt::LightHostModernWinUI::implementation
             localizeVisualTree(VisualTreeHelper::GetChild(root, childIndex));
     }
 
+    void MainWindow::notifyAvailableRelease()
+    {
+        if(windowClosing||!updateService->latest.available)return;
+        const auto legacy=loadUiSetting(L"Updates",L"NotifyNewReleases",L"1");
+        if(loadUiSetting(L"Updates",L"NotifyReleasesOnWindows",legacy.c_str())!=L"0")notifyWindowsRelease(updateService->latest.version);
+        if(loadUiSetting(L"Updates",L"NotifyReleasesInApp",legacy.c_str())==L"0")return;
+        HWND hwnd=nullptr;try_as<::IWindowNative>()->get_WindowHandle(&hwnd);if(!IsWindowVisible(hwnd)||IsIconic(hwnd))return;
+        const auto version=updateService->latest.version;if(appNotifiedRelease==version)return;
+        ReleaseNotification().Title(localization.translatedSource(L"Update available"));ReleaseNotification().Message(localization.format("settings.update.bodyVersion",L"LightHostModern {0} is available.",{version}));ViewReleaseNotificationButton().Content(box_value(localization.translatedSource(L"View update")));ReleaseNotification().IsOpen(true);
+        appNotifiedRelease=version;
+    }
+
+    fire_and_forget MainWindow::notifyWindowsRelease(std::wstring version)
+    {
+        if(windowsNoticePending || windowsNotifiedRelease==version)co_return;
+        auto lifetime=get_strong();windowsNoticePending=true;
+        try {
+            const auto response=co_await hostConnection->requestAsync("notify-release:"+wideToUtf8(version));
+            if(extractString(to_string(response),"status")!="ok")winUILog("Windows release notification was not submitted.");
+            else windowsNotifiedRelease=version;
+        }catch(...){winUILog("Windows release notification unavailable.");}
+        windowsNoticePending=false;
+    }
+
     fire_and_forget MainWindow::checkForUpdatesAsync()
     {
-        auto lifetime = get_strong();
+        if(windowClosing||updateCheckInProgress||updateInstallInProgress||updateChoiceOpen)co_return;
+        auto lifetime = get_strong();updateCheckInProgress=true;
+        winUILog("Checking for a newer stable release.");
+        struct FinishCheck{bool& pending;~FinishCheck(){pending=false;}} finish{updateCheckInProgress};
         try
         {
             if (windowClosing) co_return;
@@ -2559,9 +2767,11 @@ namespace winrt::LightHostModernWinUI::implementation
             if (windowClosing) co_return;
             presentUpdateResult();
             const auto hostPid = lightHostModern::ipc::extractNumber(hostConnection->snapshotJson, "hostPid");
-            if (hostPid <= 0 || hostPid > UINT32_MAX) co_return;
+            if (hostPid <= 0 || hostPid > UINT32_MAX) { winUILog("Update check deferred: host process identity unavailable."); updateCheckStarted=false; co_return; }
             co_await updateService->checkAsync(APP_VERSION, static_cast<uint32_t>(hostPid));
             if (windowClosing) co_return;
+            winUILog("Release check completed: " + to_string(updateService->latest.version) + (updateService->latest.available ? " (newer release)." : " (no newer release)."));
+            notifyAvailableRelease();
             if (updateService->latest.available && Pages().SettingsLoaded())
             {
                 UpdateAvailableBodyText().Text(localization.format(
@@ -2586,13 +2796,7 @@ namespace winrt::LightHostModernWinUI::implementation
     void MainWindow::updateDownloadButtonText()
     {
         if (!Pages().SettingsLoaded()) return;
-        const auto key = !updateService->validatedPackage.empty() && updateService->portable() ? "update.openPackage"
-            : updateService->latest.artifactUrl.empty() ? "update.releasePage"
-            : updateService->portable() ? "update.downloadPortable" : "settings.update.download";
-        const auto fallback = !updateService->validatedPackage.empty() && updateService->portable() ? L"Show downloaded ZIP"
-            : updateService->latest.artifactUrl.empty() ? L"View release"
-            : updateService->portable() ? L"Download portable ZIP" : L"Download and install";
-        DownloadUpdateButton().Content(box_value(localization.text(key, fallback)));
+        DownloadUpdateButton().Content(box_value(localization.text("update.choice.button", L"Update options")));
         CancelUpdateButton().Content(box_value(localization.text("common.cancel", L"Cancel")));
         Automation::AutomationProperties::SetName(UpdateTransferProgress(), localization.text("update.progress", L"Download progress"));
         presentUpdateResult();
@@ -2614,12 +2818,6 @@ namespace winrt::LightHostModernWinUI::implementation
     {
         auto lifetime = get_strong();
         if (updateInstallInProgress || updateService->latest.artifactUrl.empty()) co_return;
-        if (updateService->portable() && !updateService->validatedPackage.empty())
-        {
-            try { updateService->showPortablePackage(); }
-            catch (...) { showNotification(std::wstring(localization.text("update.error.package_unavailable", L"The downloaded package could not be opened."))); }
-            co_return;
-        }
         updateInstallInProgress = true;
         DownloadUpdateButton().IsEnabled(false);
         CancelUpdateButton().IsEnabled(true);
@@ -2665,31 +2863,32 @@ namespace winrt::LightHostModernWinUI::implementation
             });
             if (windowClosing) co_return;
             CancelUpdateButton().IsEnabled(false);
-            if (updateService->portable())
-            {
-                UpdateAvailableBodyText().Text(localization.text("update.portableReady", L"The portable ZIP is verified and ready to use."));
-                ToolTipService::SetToolTip(DownloadUpdateButton(), box_value(hstring(updateService->validatedPackage.wstring())));
+            UpdateAvailableBodyText().Text(localization.text("update.preparing", L"Preparing the update..."));
+            if (!(co_await sendCommand("flush-session"))) throw lightHostModern::update::Error("session_save_failed");
+            if (windowClosing) co_return;
+            co_await updateService->prepareUpdateAsync();
+            if (windowClosing) { updateService->cancel(); co_return; }
+            UpdateAvailableBodyText().Text(localization.text("update.applying", L"LightHostModern will reopen when the update is ready."));
+            // Host shutdown also posts WM_CLOSE to this window. Arm first so
+            // that normal window cleanup cannot cancel the prepared update.
+            // The helper still requires both exact processes to exit.
+            updateService->armUpdate();
+            const auto previousCloseBehavior=closeQuitsHost;
+            closeQuitsHost = false;
+            const auto shutdown=to_string(co_await hostConnection->requestAsync("quit-host"));
+            if(windowClosing)co_return;
+            if(extractString(shutdown,"status")!="ok") {
+                updateService->abortUpdate();closeQuitsHost=previousCloseBehavior;
+                throw lightHostModern::update::Error("shutdown_failed");
             }
-            else
-            {
-                if (!(co_await sendCommand("flush-session"))) throw lightHostModern::update::Error("session_save_failed");
-                if (windowClosing) co_return;
-                co_await updateService->prepareInstallerAsync();
-                if (windowClosing) { updateService->cancel(); co_return; }
-                UpdateAvailableBodyText().Text(localization.text("settings.update.launching",
-                    L"The installer is ready. LightHostModern will close to finish the update."));
-                if (!(co_await sendCommand("quit-host"))) throw lightHostModern::update::Error("shutdown_failed");
-                updateService->armInstaller();
-                closeQuitsHost = false;
-                Close();
-                co_return;
-            }
+            co_await finishNormalCloseAsync();
+            co_return;
         }
         catch (const lightHostModern::update::Error& error) { failure = error.code; }
         catch (const hresult_error& error) { failure = updateService->lastError.empty() ? "network_failed" : updateService->lastError; winUILog(to_string(error.message())); }
         catch (const std::exception& error) { failure = "package_invalid"; winUILog(error.what()); }
         catch (...) { failure = "package_invalid"; }
-        if (!failure.empty()) updateService->cancel();
+        if (!failure.empty()) { if(!windowClosing) updateService->abortUpdate(); updateService->cancel(); }
         if (windowClosing) co_return;
         if (!failure.empty())
         {
@@ -2726,7 +2925,7 @@ namespace winrt::LightHostModernWinUI::implementation
         // containers. Finish that traversal before changing inherited theme resources.
         DispatcherQueue().TryEnqueue(Microsoft::UI::Dispatching::DispatcherQueuePriority::Low,
             [weak = get_weak(), index] { if (auto owner = weak.get(); owner && !owner->windowClosing)
-                owner->applyTheme(index == 0 ? ElementTheme::Default : index == 1 ? ElementTheme::Light : ElementTheme::Dark); });
+                {owner->applyTheme(index == 0 ? ElementTheme::Default : index == 1 ? ElementTheme::Light : ElementTheme::Dark);owner->showNotification(L"Theme updated.",false);} });
     }
 
     void MainWindow::RootLayout_SizeChanged(IInspectable const&, SizeChangedEventArgs const& args)
@@ -2797,21 +2996,38 @@ namespace winrt::LightHostModernWinUI::implementation
         try
         {
             preferDarkFallback = RootLayout().ActualTheme() == ElementTheme::Dark;
+            const int effective=VisualPreferences::current().performance?3:selectedIndex;
+            SurfaceMaterials::current().configure(effective,RootLayout().ActualTheme(),highContrastActive);
+            if(contentFade)contentFade->configure(VisualPreferences::current().fade,highContrastActive);
+            if(pluginsPageView)winrt::get_self<PluginsPageView>(pluginsPageView)->configureEffects(highContrastActive);
             // Controllers observe activation explicitly and receive theme changes
             // after the XAML theme traversal through updateThemeVisuals().
             MainContent().Background(nullptr);
             SidebarRail().Background(nullptr);
-            if (windowMaterial.apply(*this, highContrastActive ? 3 : selectedIndex,
+            if (windowMaterial.apply(*this, highContrastActive ? 3 : effective,
                                      RootLayout().ActualTheme(), highContrastActive))
                 RootLayout().Background(brush(makeColorA(0, 0, 0, 0)));
             else
-                RootLayout().Background(resourceBrush(L"AppSolidBackgroundBrush", themedFallback(makeColor(243, 243, 243), makeColor(32, 32, 32))));
+                RootLayout().ClearValue(Panel::BackgroundProperty());
         }
         catch (...)
         {
             windowMaterial.close();
-            RootLayout().Background(resourceBrush(L"AppSolidBackgroundBrush", themedFallback(makeColor(243, 243, 243), makeColor(32, 32, 32))));
+            RootLayout().ClearValue(Panel::BackgroundProperty());
             winUILog("System backdrop unavailable; using solid fallback.");
+        }
+    }
+
+    void MainWindow::applyVisualPreferences()
+    {
+        HoverHelp::current().configure(VisualPreferences::current().hoverTooltips);
+        if(!(lastNotificationImportant?VisualPreferences::current().warningNotifications:VisualPreferences::current().actionNotifications))NotificationToast().Visibility(Visibility::Collapsed);
+        if(refreshTimer)refreshTimer.Interval(std::chrono::milliseconds(VisualPreferences::current().performance?100:50));
+        applyBackdrop(loadBackdropModeIndex());
+        if(Pages().SettingsLoaded()){
+            const auto page=winrt::get_self<SettingsPageView>(settingsPageView);
+            page->EdgeFadeSwitch().IsEnabled(!VisualPreferences::current().performance);
+            BackdropModeBox().IsEnabled(!VisualPreferences::current().performance);
         }
     }
 
@@ -2822,10 +3038,12 @@ namespace winrt::LightHostModernWinUI::implementation
         MainContent().MaxWidth(std::numeric_limits<double>::infinity());
         const double width = MainContent().ActualWidth();
         const double edge = RootLayout().ActualWidth() < 840.0 ? 16.0 : 24.0;
-        const double inset = compactLayout ? (std::max)(edge, (width - COMPACT_CONTENT_MAX_WIDTH) / 2.0) : edge;
+        const bool expandChain=currentSection==L"Plugins"&&operatingPresenter&&operatingPresenter->chainMode()&&loadUiSetting(L"Appearance",L"ExpandChain",L"1")!=L"0";
+        const double inset = compactLayout && !expandChain ? (std::max)(edge, (width - COMPACT_CONTENT_MAX_WIDTH) / 2.0) : edge;
         HeaderGrid().Margin({inset, 0, inset, 0});
         PageContentStack().Margin({inset, 0, inset, 0});
         if (pluginsPageView) winrt::get_self<PluginsPageView>(pluginsPageView)->setContentInsets(inset);
+        if (operatingPresenter) operatingPresenter->setContentInsets(inset);
 
     }
 
@@ -2888,6 +3106,15 @@ namespace winrt::LightHostModernWinUI::implementation
         }
 
         diagnosticsPresenter.resize(measuredContentWidth);
+        const bool stackResources = measuredContentWidth < 560;
+        DashboardResourcesGrid().RowSpacing(stackResources ? 14 : 0);
+        int resourceIndex = 0;
+        for (auto card : { DashboardCpuCard(), DashboardVramCard(), DashboardRamCard() }) {
+            Grid::SetColumn(card, stackResources ? 0 : resourceIndex);
+            Grid::SetRow(card, stackResources ? resourceIndex : 0);
+            Grid::SetColumnSpan(card, stackResources ? 3 : 1);
+            ++resourceIndex;
+        }
         if (Pages().AudioLoaded())
         {
             const bool hasInput = InputChannelGroup().Visibility() == Visibility::Visible;
@@ -2930,6 +3157,7 @@ namespace winrt::LightHostModernWinUI::implementation
 
     void MainWindow::updateSidebarLayout()
     {
+        SidebarToggleButton().Visibility(loadUiSetting(L"Appearance",L"HideSidebarToggle",L"0")==L"1"?Visibility::Collapsed:Visibility::Visible);
         SidebarRail().IsPaneOpen(!sidebarCollapsed);
         BrandTitleText().Visibility(sidebarCollapsed ? Visibility::Collapsed : Visibility::Visible);
         CompactLogoNavItem().Visibility(sidebarCollapsed ? Visibility::Visible : Visibility::Collapsed);
@@ -2940,7 +3168,7 @@ namespace winrt::LightHostModernWinUI::implementation
             sidebarCollapsed ? L"Expand sidebar" : L"Collapse sidebar");
         SidebarToggleText().Text(accessibleName);
         Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(SidebarToggleButton(), accessibleName);
-        ToolTipService::SetToolTip(SidebarToggleButton(), box_value(accessibleName));
+        lightHostModern::ui::HoverHelp::SetToolTip(SidebarToggleButton(), box_value(accessibleName));
     }
 
     void MainWindow::updateToggleStateLabels()
@@ -3045,6 +3273,19 @@ namespace winrt::LightHostModernWinUI::implementation
         }
     }
 
+    winrt::fire_and_forget MainWindow::renameAudioChannel(bool input,int channel,int width,hstring label)
+    {
+        auto lifetime=get_strong();
+        try{
+            const auto generation=lightHostModern::ipc::parseSnapshotObject(hostConnection->snapshotJson).GetNamedObject(L"audioSelection").GetNamedValue(L"generation");
+            const auto result=co_await lightHostModern::ui::editDisplayName(RootLayout(),localization,localization.translatedSource(L"Rename channel"),label);
+            if(result){Windows::Data::Json::JsonObject request;using Windows::Data::Json::JsonValue;
+                request.SetNamedValue(L"direction",JsonValue::CreateStringValue(input?L"input":L"output"));request.SetNamedValue(L"channel",JsonValue::CreateNumberValue(channel));request.SetNamedValue(L"width",JsonValue::CreateNumberValue(width));request.SetNamedValue(L"name",JsonValue::CreateStringValue(unbox_value<hstring>(result)));request.SetNamedValue(L"expectedGeneration",generation);
+                co_await sendCommand("rename-audio-channel:"+to_string(request.Stringify()));
+            }
+        }catch(...){}
+    }
+
     void MainWindow::syncChannelCheckBoxes(StackPanel const& panel,
         std::vector<ChannelRowData> const& rows,
         std::string const& commandPrefix,
@@ -3056,11 +3297,12 @@ namespace winrt::LightHostModernWinUI::implementation
             const auto children = panel.Children();
             for (int i = 0; i < (int) rows.size() && i < (int) children.Size(); ++i)
             {
-                if (auto box = children.GetAt(i).try_as<CheckBox>())
+                if (auto rowGrid = children.GetAt(i).try_as<Grid>(); rowGrid && rowGrid.Children().Size()>0)
+                if (auto box = rowGrid.Children().GetAt(0).try_as<CheckBox>())
                 {
                     auto const& row = rows[(size_t) i];
                     setAudioCheckBoxLabel(box, hs(row.label));
-                    box.Tag(box_value(hs(commandPrefix + ":" + std::to_string(row.startIndex) + ":" + std::to_string(row.endIndex))));
+                    box.Tag(box_value(hs(commandPrefix + ":" + std::to_string(row.startIndex) + ":" + std::to_string(row.endIndex) + (row.partial ? ":partial" : ""))));
                     if (row.partial) box.IsChecked(nullptr); else box.IsChecked(row.active);
                 }
             }
@@ -3085,7 +3327,7 @@ namespace winrt::LightHostModernWinUI::implementation
             auto const& row = rows[(size_t) i];
             auto box = CheckBox();
             setAudioCheckBoxLabel(box, hs(row.label));
-            box.Tag(box_value(hs(commandPrefix + ":" + std::to_string(row.startIndex) + ":" + std::to_string(row.endIndex))));
+            box.Tag(box_value(hs(commandPrefix + ":" + std::to_string(row.startIndex) + ":" + std::to_string(row.endIndex) + (row.partial ? ":partial" : ""))));
             if (row.partial) box.IsChecked(nullptr); else box.IsChecked(row.active);
             Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(box,
                 hs(commandPrefix + "-" + std::to_string(row.startIndex) + "-" + std::to_string(row.endIndex)));
@@ -3093,7 +3335,12 @@ namespace winrt::LightHostModernWinUI::implementation
             box.Margin(ThicknessHelper::FromLengths(0, 0, 0, 4));
             box.Checked({ this, &MainWindow::ChannelCheckBox_Changed });
             box.Unchecked({ this, &MainWindow::ChannelCheckBox_Changed });
-            panel.Children().Append(box);
+            Grid channelRow;ColumnDefinition labelColumn,actionColumn;labelColumn.Width({1,GridUnitType::Star});actionColumn.Width(GridLengthHelper::Auto());channelRow.ColumnDefinitions().Append(labelColumn);channelRow.ColumnDefinitions().Append(actionColumn);channelRow.Children().Append(box);
+            Button rename;rename.Style(Application::Current().Resources().Lookup(box_value(L"SubtleButtonStyle")).as<Style>());FontIcon pencil;pencil.Glyph(L"\xE70F");pencil.FontSize(14);rename.Content(pencil);rename.Width(32);rename.Height(32);rename.Padding({0,0,0,0});rename.VerticalAlignment(VerticalAlignment::Center);
+            lightHostModern::ui::HoverHelp::SetToolTip(rename,box_value(localization.translatedSource(L"Rename channel")));Automation::AutomationProperties::SetName(rename,localization.translatedSource(L"Rename channel")+L" "+hs(row.label));
+            rename.Click([weak=get_weak(),input=commandPrefix=="set-input-channel",first=row.startIndex,width=row.endIndex-row.startIndex+1,label=hs(row.label)](const auto&,const auto&){if(auto owner=weak.get())owner->renameAudioChannel(input,first,width,label);});
+            HoverHelp::current().describe(box);
+            channelRow.Children().Append(rename);Grid::SetColumn(rename,1);panel.Children().Append(channelRow);
         }
 
         renderedKeys = keys;
@@ -3113,7 +3360,7 @@ namespace winrt::LightHostModernWinUI::implementation
         button.Content(box_value(localization.text(allActive ? "audio.uncheckAll" : "audio.checkAll",
             allActive ? L"Uncheck all" : L"Check all")));
         button.Tag(box_value(hstring(allActive ? L"uncheck" : L"check")));
-        ToolTipService::SetToolTip(button, box_value(allActive ? localization.text("audio.disableChannels", L"Disable every visible channel") : localization.text("audio.enableChannels", L"Enable every visible channel")));
+        lightHostModern::ui::HoverHelp::SetToolTip(button, box_value(allActive ? localization.text("audio.disableChannels", L"Disable every visible channel") : localization.text("audio.enableChannels", L"Enable every visible channel")));
     }
 
     void MainWindow::syncEnabledAudioChoicesSummary()
@@ -3161,71 +3408,56 @@ namespace winrt::LightHostModernWinUI::implementation
         for (auto notice : { DashboardAudioNotice(), AudioUnavailableNotice() })
             if (notice) { notice.Message(message); notice.IsOpen(!available && hostConnection->connected); }
         const auto previous = syncingHostControls; syncingHostControls = true;
+        for(auto box:{audioBackendBox,inputBox,outputBox,sampleRateBox,bufferSizeBox})if(box)HoverHelp::current().describe(box);
         const auto key = selection.GetNamedString(L"preferenceKey", L"");
         channelPreferenceKey = std::wstring(key);
         const auto section = L"AudioChannels." + channelPreferenceKey;
         inputChannelPairs = !key.empty() && loadUiSetting(section.c_str(), L"InputMode", L"Individual") == L"Pairs";
         outputChannelPairs = key.empty() || loadUiSetting(section.c_str(), L"OutputMode", L"Pairs") != L"Individual";
         for (bool input : {true, false}) {
-            const auto control = input ? MonoInputsSwitch() : MonoOutputSwitch();
+            const auto control = input ? InputModeBox() : OutputModeBox();
             if (!control) continue;
-            const bool pending = input ? monoCommandPending : monoOutputCommandPending;
+            const bool pending = commandIntents.pending(input ? "ui-audio-intent:monoInputs" : "ui-audio-intent:monoOutput");
             const bool mono = extractBool(hostConnection->snapshotJson, input ? "monoInputs" : "monoOutput");
-            if (!pending && control.IsOn() != mono) control.IsOn(mono);
-            control.IsEnabled(hasFullSnapshot && !windowClosing && !key.empty());
-            const auto title = localization.text(input ? "audio.monoInputs" : "audio.monoOutput", input ? L"Mix inputs to mono" : L"Main output to mono");
+            control.Items().GetAt(0).as<ComboBoxItem>().Content(box_value(localization.translatedSource(L"Stereo")));
+            control.Items().GetAt(1).as<ComboBoxItem>().Content(box_value(localization.translatedSource(L"Mono")));
+            if (!pending) control.SelectedIndex(mono ? 1 : 0);
+            control.IsEnabled(hasFullSnapshot && !windowClosing && !pendingNormalClose && !key.empty());
+            const auto title = localization.text(input ? "audio.inputMode" : "audio.mainOutputMode", input ? L"Input mode" : L"Output mode");
             const auto page = winrt::get_self<AudioPageView>(audioPageView);
             (input ? page->InputMonoLabel() : page->OutputMonoLabel()).Text(title);
-            (input ? page->InputMonoStateText() : page->OutputMonoStateText()).Text(
-                localization.text(control.IsOn() ? "common.on" : "common.off", control.IsOn() ? L"On" : L"Off"));
-            auto help = localization.text(input ? "audio.monoInputs.tooltip" : "audio.monoOutput.tooltip", L"");
+            auto help = localization.text(input ? "audio.inputMode.tooltip" : "audio.mainOutputMode.tooltip", L"");
             if (!input && !selection.GetNamedBoolean(L"mainOutputPairActive", false))
                 help = help + L" " + localization.text("audio.monoOutput.inactive", L"The main pair is not fully active. This preference is saved; no output mixing is applied.");
-            ToolTipService::SetToolTip(control, box_value(help));
+            lightHostModern::ui::HoverHelp::SetToolTip(control, box_value(help));
             Automation::AutomationProperties::SetHelpText(control, help);
             Automation::AutomationProperties::SetName(control, title);
             const auto grouping = input ? InputGroupingBox() : OutputGroupingBox();
             (input ? page->InputSelectionLabel() : page->OutputSelectionLabel()).Text(localization.text("audio.channelSelection", L"Channel selection"));
-            grouping.Items().GetAt(0).as<ComboBoxItem>().Content(box_value(localization.text("audio.channelsIndividual", L"Individual")));
-            grouping.Items().GetAt(1).as<ComboBoxItem>().Content(box_value(localization.text("audio.channelsPairs", L"Pairs")));
-            grouping.SelectedIndex((input ? inputChannelPairs : outputChannelPairs) ? 1 : 0);
+            grouping.Items().GetAt(0).as<ComboBoxItem>().Content(box_value(localization.text("audio.channelsPairs", L"Pairs")));
+            grouping.Items().GetAt(1).as<ComboBoxItem>().Content(box_value(localization.text("audio.channelsIndividual", L"Individual")));
+            grouping.SelectedIndex((input ? inputChannelPairs : outputChannelPairs) ? 0 : 1);
             grouping.IsEnabled(!key.empty());
             const auto count = extractStringArray(hostConnection->snapshotJson, input ? "inputChannelNames" : "outputChannelNames").size();
             grouping.Visibility(count > 1 ? Visibility::Visible : Visibility::Collapsed);
             const auto groupingHelp = localization.text("audio.channelSelection.tooltip", L"Choose channels individually or in consecutive pairs. Changing this view preserves the enabled channels.");
-            ToolTipService::SetToolTip(grouping, box_value(groupingHelp));
+            lightHostModern::ui::HoverHelp::SetToolTip(grouping, box_value(groupingHelp));
             Automation::AutomationProperties::SetHelpText(grouping, groupingHelp);
             Automation::AutomationProperties::SetName(grouping, localization.text(input ? "audio.inputSelection" : "audio.outputSelection", L"Channel selection"));
         }
         syncingHostControls = previous;
     }
 
-    winrt::fire_and_forget MainWindow::MonoInputs_Toggled(IInspectable, RoutedEventArgs)
-    { changeMono(true); co_return; }
-
-    winrt::fire_and_forget MainWindow::MonoOutput_Toggled(IInspectable, RoutedEventArgs)
-    { changeMono(false); co_return; }
+    winrt::fire_and_forget MainWindow::AudioMode_Changed(IInspectable sender, SelectionChangedEventArgs)
+    { if (sender.as<ComboBox>().SelectedIndex() >= 0) changeMono(sender.as<ComboBox>() == InputModeBox()); co_return; }
 
     winrt::fire_and_forget MainWindow::changeMono(bool input)
     {
-        auto& pending = input ? monoCommandPending : monoOutputCommandPending;
-        if (syncingHostControls || pending || !hasFullSnapshot) co_return;
-        auto lifetime = get_strong();
-        const bool desired = (input ? MonoInputsSwitch() : MonoOutputSwitch()).IsOn();
-        if (desired == extractBool(hostConnection->snapshotJson, input ? "monoInputs" : "monoOutput")) co_return;
-        lightHostModern::ipc::JsonObject request;
-        request.SetNamedValue(L"enabled", lightHostModern::ipc::JsonValue::CreateBooleanValue(desired));
-        request.SetNamedValue(L"expectedGeneration", lightHostModern::ipc::parseObject(hostConnection->snapshotJson).GetNamedObject(L"audioSelection").GetNamedValue(L"generation"));
-        pending = true;
-        const winrt::apartment_context apartment;
-        try {
-            while ((snapshotInProgress || commandInProgress) && !windowClosing) {
-                co_await winrt::resume_after(std::chrono::milliseconds(25)); co_await apartment;
-            }
-            if (!windowClosing) co_await sendCommand(std::string(input ? "set-mono-inputs:" : "set-mono-output:") + to_string(request.Stringify()));
-        } catch (...) { hostConnection->snapshotNeeded = true; }
-        pending = false;
-        if (!windowClosing) updateAudioAvailability();
+        auto lifetime=get_strong();
+        if(syncingHostControls||!hasFullSnapshot||pendingNormalClose)co_return;
+        const bool desired=(input?InputModeBox():OutputModeBox()).SelectedIndex()==1;
+        co_await changeAudioSelection(input?"monoInputs":"monoOutput",desired?"1":"0");
+        if(!windowClosing)updateAudioAvailability();
     }
 
     winrt::fire_and_forget MainWindow::ChannelGrouping_Changed(IInspectable sender, SelectionChangedEventArgs)
@@ -3234,15 +3466,13 @@ namespace winrt::LightHostModernWinUI::implementation
         auto lifetime = get_strong();
         const auto box = sender.as<ComboBox>();
         if (box.SelectedIndex() < 0) co_return;
-        const bool input = box == InputGroupingBox(), pairs = box.SelectedIndex() == 1;
+        const bool input = box == InputGroupingBox(), pairs = box.SelectedIndex() == 0;
         if (pairs == (input ? inputChannelPairs : outputChannelPairs)) co_return;
         (input ? inputChannelPairs : outputChannelPairs) = pairs;
         saveUiSetting((L"AudioChannels." + channelPreferenceKey).c_str(), input ? L"InputMode" : L"OutputMode", pairs ? L"Pairs" : L"Individual");
-        const winrt::apartment_context apartment;
-        while ((snapshotInProgress || commandInProgress || monoCommandPending || monoOutputCommandPending) && !windowClosing) {
-            co_await winrt::resume_after(std::chrono::milliseconds(25)); co_await apartment;
-        }
-        if (!windowClosing) co_await refreshSnapshot(true);
+        // The grouping preference is already saved locally. A later snapshot
+        // also adopts it; it must never wait behind an outstanding host command.
+        if (!windowClosing && !pendingNormalClose) co_await refreshSnapshot(true);
     }
 
     void MainWindow::updateGlobalAudioControls()
@@ -3270,26 +3500,14 @@ namespace winrt::LightHostModernWinUI::implementation
         if (!button) co_return;
         const bool value = unbox_value_or<bool>(button.IsChecked(), false);
         const auto tag = unbox_value_or<hstring>(button.Tag(), L"");
-        if (globalControlPending || commandInProgress || !hasFullSnapshot)
+        if (!hasFullSnapshot || pendingNormalClose)
         {
             updateGlobalAudioControls();
             co_return;
         }
-        globalControlPending = true;
-        updateGlobalAudioControls();
-        // A structural refresh must not discard an explicit toolbar click.
-        // Wait before the first send; never repeat a command already accepted by the host.
-        const winrt::apartment_context uiApartment;
-        while (snapshotInProgress && !windowClosing)
-        {
-            co_await winrt::resume_after(std::chrono::milliseconds(25));
-            co_await uiApartment;
-        }
-        if (windowClosing) { globalControlPending = false; co_return; }
         const auto command = tag == L"mute" ? "set-global-mute:" : "set-global-bypass:";
         co_await sendCommand(std::string(command) + (value ? "1" : "0"));
-        globalControlPending = false;
-        if (!windowClosing) updateGlobalAudioControls();
+
     }
 
     bool MainWindow::isMinimized() const
@@ -3379,6 +3597,77 @@ namespace winrt::LightHostModernWinUI::implementation
         if (isControlVisible(OutputMeterBarHost())) outputMeter.update(extractNumber(json, "outputPeak"));
     }
 
+    void MainWindow::updateDashboardSummary(const std::string& json)
+    {
+        const auto operating = lightHostModern::ipc::parseSnapshotObject(json).GetNamedObject(L"operating", JsonObject{});
+        DashboardOperatingModeText().Text(localization.translatedSource(operating.GetNamedString(L"mode", L"list") == L"chain" ? L"Chain" : L"List"));
+        const auto active = operating.GetNamedString(L"activeProfile", L"");
+        auto profileName = localization.text("common.unavailable", L"Unavailable");
+        for (const auto& entry : operating.GetNamedArray(L"profiles", JsonArray{})) {
+            const auto profile = entry.GetObject();
+            if (profile.GetNamedString(L"id", L"") == active) {
+                profileName = profile.GetNamedBoolean(L"isDefault", false) ? localization.translatedSource(L"Default") : profile.GetNamedString(L"name", L"");
+                break;
+            }
+        }
+        DashboardActiveProfileText().Text(profileName);
+        lightHostModern::ui::HoverHelp::SetToolTip(DashboardActiveProfileText(), box_value(profileName));
+        DashboardVersionText().Text(hstring(L"v") + APP_VERSION);
+        const bool enabled = diagnosticsEnabled;
+        const auto help = [&](const FrameworkElement& card, const char* key) {
+            const auto description = localization.text(enabled ? key : "dashboard.metricsDisabled.tooltip");
+            lightHostModern::ui::HoverHelp::SetToolTip(card, box_value(description));
+            Automation::AutomationProperties::SetHelpText(card, description);
+        };
+        help(DashboardCpuCard(), "dashboard.cpuUsage.tooltip");
+        help(DashboardRamCard(), "dashboard.ramUsage.tooltip");
+        help(DashboardVramCard(), "dashboard.vramUsage.tooltip");
+    }
+
+    void MainWindow::updateDashboardPerformance(const std::string& json)
+    {
+        const auto unavailable = localization.text("common.unavailable", L"Unavailable");
+        if (!diagnosticsEnabled) {
+            const auto disabled = localization.text("dashboard.metricsDisabled", L"Disabled");
+            for (auto value : { DashboardCpuText(), DashboardRamText(), DashboardVramText() }) value.Text(disabled);
+            return;
+        }
+        const auto cpu = dashboardCpuSampler.sample(lightHostModern::processCpuTicks(), GetTickCount64(), lightHostModern::processorCount());
+        const auto memory = lightHostModern::processMemory();
+        const auto total = [&](const char* host, const char* worker, std::optional<double> local) -> std::optional<double> {
+            const auto h = lightHostModern::ipc::field(json, host), w = lightHostModern::ipc::field(json, worker);
+            if (!local || h.ValueType() != JsonValueType::Number || w.ValueType() != JsonValueType::Number) return {};
+            return h.GetNumber() + w.GetNumber() + *local;
+        };
+        const auto appCpu = total("hostCpuPercent", "workerCpuPercent", cpu);
+        const auto appRam = total("hostResidentMiB", "workerResidentMiB", memory.resident ? std::optional<double>(*memory.resident / 1048576.0) : std::nullopt);
+        DashboardCpuText().Text(appCpu ? hs(formatNumber(*appCpu, 1) + "%") : unavailable);
+        DashboardRamText().Text(appRam ? hs(formatNumber(*appRam, 1) + " MiB") : unavailable);
+    }
+
+    winrt::fire_and_forget MainWindow::refreshDashboardGpu(const std::string& json)
+    {
+        if (dashboardGpuInProgress || windowClosing || !diagnosticsEnabled) co_return;
+        auto lifetime = get_strong();
+        dashboardGpuInProgress = true;
+        const winrt::apartment_context ui;
+        const auto hostPid = extractNumber(hostConnection->snapshotJson, "hostPid");
+        std::set<DWORD> processes{GetCurrentProcessId()};
+        if (hostPid > 0 && hostPid <= UINT32_MAX) processes.insert(static_cast<DWORD>(hostPid));
+        for (const auto& value : lightHostModern::ipc::extractArray(json, "isolatedPlugins")) {
+            if (value.ValueType() != JsonValueType::Object) continue;
+            const auto pid = value.GetObject().GetNamedNumber(L"pid", 0);
+            if (pid > 0 && pid <= UINT32_MAX) processes.insert(static_cast<DWORD>(pid));
+        }
+        std::optional<uint64_t> bytes;
+        try { co_await winrt::resume_background(); bytes = dashboardGpuSampler.sample(processes); } catch (...) {}
+        co_await ui;
+        dashboardGpuInProgress = false;
+        if (windowClosing || !diagnosticsEnabled || currentSection != L"Dashboard" || isMinimized()
+            || hostPid != extractNumber(hostConnection->snapshotJson, "hostPid")) co_return;
+        DashboardVramText().Text(bytes ? hs(formatNumber(*bytes / 1048576.0, 1) + " MiB") : localization.text("common.unavailable", L"Unavailable"));
+    }
+
     winrt::fire_and_forget MainWindow::refreshTelemetry()
     {
         auto lifetime = get_strong();
@@ -3394,8 +3683,9 @@ namespace winrt::LightHostModernWinUI::implementation
         const bool metersVisible = (currentSection == L"Dashboard" && (isControlVisible(InputMeterBarHost()) || isControlVisible(OutputMeterBarHost())));
         const bool diagnosticsVisible = currentSection == L"Diagnostics" && diagnosticsPageView
             && isControlVisible(winrt::get_self<DiagnosticsPageView>(diagnosticsPageView)->DiagnosticsPanel());
+        const bool dashboardVisible = currentSection == L"Dashboard" && isControlVisible(DashboardResourcesGrid());
         const bool diagnosticsDue = diagnosticsVisible && tick - lastDiagnosticTick >= 1000;
-        if (!diagnosticsEnabled || !diagnosticsVisible || tick - lastDiagnosticTick < 1000) co_return;
+        if (!diagnosticsEnabled || (!diagnosticsVisible && !dashboardVisible) || tick - lastDiagnosticTick < 1000) co_return;
         if (telemetryInProgress || windowClosing || commandInProgress) co_return;
         lastDiagnosticTick = tick;
         telemetryInProgress = true;
@@ -3404,6 +3694,7 @@ namespace winrt::LightHostModernWinUI::implementation
         if (windowClosing) co_return;
         if (extractString(json, "status") == "error")
         {
+            if (dashboardVisible) { updateDashboardPerformance("{}"); DashboardVramText().Text(localization.text("common.unavailable", L"Unavailable")); }
             HeaderStatusText().Text(ipcErrorText(json, localization));
             hasFullSnapshot = false;
             updateGlobalAudioControls();
@@ -3411,13 +3702,16 @@ namespace winrt::LightHostModernWinUI::implementation
         }
         if (json.empty())
         {
+            if (dashboardVisible) { updateDashboardPerformance("{}"); DashboardVramText().Text(localization.text("common.unavailable", L"Unavailable")); }
             if (!hasFullSnapshot)
                 refreshSnapshot();
             co_return;
         }
 
         globalMuted = extractBool(json, "globalMuted", globalMuted);
+        const auto previousBypass=globalBypassed;
         globalBypassed = extractBool(json, "globalBypassed", globalBypassed);
+        if(previousBypass!=globalBypassed)refreshPluginViews();
         updateGlobalAudioControls();
         const auto status = extractString(json, "status", "unknown");
         const auto backend = extractString(json, "backend", "none");
@@ -3447,6 +3741,10 @@ namespace winrt::LightHostModernWinUI::implementation
         // Navigation, scrolling or minimization may change while IPC is pending.
         if (!isMinimized())
         {
+            if (dashboardVisible && currentSection == L"Dashboard" && isControlVisible(DashboardResourcesGrid())) {
+                updateDashboardPerformance(json);
+                refreshDashboardGpu(json);
+            }
             if (metersVisible && currentSection == L"Dashboard"
                 && (isControlVisible(InputMeterBarHost()) || isControlVisible(OutputMeterBarHost()))) updateMeters(json);
             if (diagnosticsEnabled && diagnosticsDue && currentSection == L"Diagnostics" && diagnosticsPageView
@@ -3462,7 +3760,7 @@ namespace winrt::LightHostModernWinUI::implementation
             refreshSnapshot();
     }
 
-    winrt::Windows::Foundation::IAsyncAction MainWindow::refreshSnapshot(bool fromCache)
+    winrt::Windows::Foundation::IAsyncAction MainWindow::refreshSnapshot(bool fromCache, uint64_t deadline)
     {
         auto lifetime = get_strong();
         if (snapshotInProgress || windowClosing) co_return;
@@ -3470,7 +3768,7 @@ namespace winrt::LightHostModernWinUI::implementation
         lastSnapshotAttemptTick = GetTickCount64();
         std::string json;
         try { json = fromCache && !hostConnection->snapshotJson.empty() ? hostConnection->snapshotJson
-            : winrt::to_string(co_await hostConnection->snapshotAsync()); }
+            : winrt::to_string(co_await hostConnection->snapshotAsync(deadline)); }
         catch (...) { hostConnection->snapshotNeeded = true; }
         snapshotInProgress = false;
         if (windowClosing) co_return;
@@ -3503,6 +3801,8 @@ namespace winrt::LightHostModernWinUI::implementation
         }
 
         syncDiagnosticsSetting(extractBool(json, "diagnosticsEnabled", true));
+        if (operatingPresenter) operatingPresenter->update(json);
+        applyLayoutMode();
         globalMuted = extractBool(json, "globalMuted", globalMuted);
         globalBypassed = extractBool(json, "globalBypassed", globalBypassed);
         updateGlobalAudioControls();
@@ -3605,6 +3905,7 @@ namespace winrt::LightHostModernWinUI::implementation
         DashboardChannelsText().Text(localization.format("audio.channelSummary", L"Input: {0} ch / Output: {1} ch", { std::to_wstring(inputChannels), std::to_wstring(outputChannels) }));
         DashboardFormatText().Text(sampleRate > 0 && bufferSize > 0 ? hs(formatNumber(sampleRate, 0) + " Hz / " + std::to_string(bufferSize) + " " + to_string(localization.text("common.samples", L"samples"))) : localization.text("common.unavailable", L"Unavailable"));
         ActivePluginsText().Text(hs(std::to_string(activePlugins)));
+        updateDashboardSummary(json);
         KnownPluginsText().Text(hs(std::to_string(knownPlugins)));
 
         updateMeters(json);
@@ -3665,8 +3966,15 @@ namespace winrt::LightHostModernWinUI::implementation
             setVisible(OutputBox(), !editingAsioBackend && !outputDeviceNames.empty());
         }
 
-        const auto groupedOutputChannels = groupedChannelRows(backend, outputChannelNames, activeOutputChannels, false, outputChannelPairs, localization);
-        const auto groupedInputChannels = groupedChannelRows(backend, inputChannelNames, activeInputChannels, true, inputChannelPairs, localization);
+        const auto deviceAliases=lightHostModern::ipc::parseSnapshotObject(json).GetNamedObject(L"audioDeviceAliases",JsonObject{});
+        const auto deviceLabel=[&](std::string const& backend,std::string const& role,std::string const& original){auto alias=deviceAliases.GetNamedString(hs(backend+"|"+role+"|"+original),L"");return alias.empty()?hs(original):alias;};
+        for(bool input:{true,false}){auto box=input?InputBox():OutputBox();if(!box)continue;for(const auto& value:box.Items())if(auto item=value.try_as<ComboBoxItem>()){const auto original=to_string(unbox_value<hstring>(item.Tag()));if(!original.empty())item.Content(box_value(deviceLabel(currentAudioBackendName,editingAsioBackend?"device":input?"input":"output",original)));}}
+        if(device!="none"){DashboardInputDeviceText().Text(deviceLabel(backend,isAsioBackend?"device":"input",isAsioBackend?device:inputDeviceText));DashboardOutputDeviceText().Text(deviceLabel(backend,isAsioBackend?"device":"output",outputDeviceText));}
+        auto groupedOutputChannels = groupedChannelRows(backend, outputChannelNames, activeOutputChannels, false, outputChannelPairs, localization);
+        auto groupedInputChannels = groupedChannelRows(backend, inputChannelNames, activeInputChannels, true, inputChannelPairs, localization);
+        const auto aliases=lightHostModern::ipc::parseSnapshotObject(json).GetNamedObject(L"audioConfig",Windows::Data::Json::JsonObject{}).GetNamedObject(L"channelAliases",Windows::Data::Json::JsonObject{});
+        const auto applyAliases=[&](auto& rows,const wchar_t* direction){const bool input=std::wstring(direction)==L"input";auto names=aliases.GetNamedObject(direction,JsonObject{});JsonArray source;for(auto const& name:input?inputChannelNames:outputChannelNames)source.Append(JsonValue::CreateStringValue(hs(name)));for(auto& row:rows)row.label=to_string(lightHostModern::ui::audioChannelName(source,names,row.startIndex,row.endIndex-row.startIndex+1,input,localization));};
+        applyAliases(groupedInputChannels,L"input");applyAliases(groupedOutputChannels,L"output");
         currentOutputChannelRows = groupedOutputChannels;
         currentInputChannelRows = groupedInputChannels;
         if (Pages().AudioLoaded())
@@ -3909,7 +4217,7 @@ namespace winrt::LightHostModernWinUI::implementation
             + L" (" + std::to_wstring(activePluginCount) + L")"));
         InstalledPluginsTabButton().Text(hstring(std::wstring(localization.text("plugins.installed", L"Installed").c_str())
             + L" (" + std::to_wstring(installedPluginCount) + L")"));
-        runningPage.render(runningPluginSearch, runningPluginSortMode, compactPluginCards, localization, RunningPluginsListView());
+        runningPage.render(runningPluginSearch, runningPluginSortMode, compactPluginCards, localization, RunningPluginsListView(),false,globalBypassed);
         installedPage.render(installedPluginSearch, installedPluginSortMode, compactPluginCards, localization, InstalledPluginsListView(), installedGrouped);
         RunningPluginsSummaryText().Text(L"");
         InstalledPluginsSummaryText().Text(L"");
@@ -3921,10 +4229,44 @@ namespace winrt::LightHostModernWinUI::implementation
         updateInstalledPluginActions();
     }
 
-    winrt::Windows::Foundation::IAsyncOperation<bool> MainWindow::sendCommand(std::string command)
+    winrt::Windows::Foundation::IAsyncOperation<bool> MainWindow::sendCommand(std::string command,bool chainPrepared)
     {
-        auto lifetime = get_strong();
-        if (windowClosing || commandInProgress || snapshotInProgress) co_return false;
+        auto lifetime=get_strong();winrt::apartment_context ui;
+        auto deadline=pendingNormalClose?normalCloseDeadline:GetTickCount64()+120000;
+        const auto verb=command.substr(0,command.find(':'));
+        std::string key;
+        const bool audioIntent=verb=="ui-audio-intent";
+        lightHostModern::ipc::JsonObject intent;
+        try {
+            if(audioIntent){
+                intent=lightHostModern::ipc::parseObject(command.substr(16));
+                key=verb+":"+to_string(intent.GetNamedString(L"field"));
+                if(intent.HasKey(L"first"))key+=":"+to_string(intent.GetNamedValue(L"first").Stringify())+":"+to_string(intent.GetNamedValue(L"last").Stringify());
+                // Device transitions are barriers; only scalar controls coalesce.
+                const auto field=intent.GetNamedString(L"field");if(field==L"backend"||field==L"input"||field==L"output")key.clear();
+            }
+            if(verb=="operating-command"){
+                const auto request=lightHostModern::ipc::parseObject(command.substr(18));
+                if(request.HasKey(L"uiDeadline"))deadline=(std::min)(deadline,std::stoull(to_string(request.GetNamedString(L"uiDeadline"))));
+            }
+        }catch(...){co_return false;}
+        for(const auto* setter:{"set-audio-persistence-retry-seconds","set-audio-persistence-retry-attempts","set-audio-persistence-mode","set-close-behavior","set-enable-vst2","set-start-with-windows","set-tray-icon-mode","set-global-mute","set-global-bypass"})if(verb==setter)key=verb;
+        const bool externalStructure=verb=="add-known-plugin"||verb=="remove-plugin"||verb=="duplicate-plugin"||verb=="move-plugin-to"||verb=="move-plugin-up"||verb=="move-plugin-down"||verb=="remove-known-plugin"||verb=="clear-known-plugins";
+        struct UnfreezeChain { std::shared_ptr<lightHostModern::ui::OperatingPresenter> presenter;bool previous=false;~UnfreezeChain(){if(presenter)presenter->freezeEdits(previous);} } unfreezeChain;
+        if(operatingPresenter&&externalStructure&&!chainPrepared){
+            unfreezeChain.presenter=operatingPresenter;unfreezeChain.previous=operatingPresenter->editsFrozen();operatingPresenter->freezeEdits(true);
+            if(!(co_await operatingPresenter->flushPending(deadline)))co_return false;
+        }
+        auto ticket=commandIntents.reserve(key,command.size());
+        if(!ticket){if(!windowClosing)showNotification(localization.translatedSource(L"Too many pending changes. Wait for the host and try again.").c_str());co_return false;}
+        struct ReleaseIntent { lightHostModern::ui::IntentAdmission& queue;lightHostModern::ui::IntentAdmission::Ticket ticket;~ReleaseIntent(){queue.release(ticket);} } releaseIntent{commandIntents,ticket};
+        while(!windowClosing&&!ticket->superseded&&(!commandIntents.ready(ticket)||commandInProgress||snapshotInProgress)&&GetTickCount64()<deadline){
+            co_await winrt::resume_after(std::chrono::milliseconds(10));co_await ui;
+        }
+        if(ticket->superseded)co_return true; // The newer explicit value owns acknowledgement/feedback.
+        if(windowClosing)co_return false;
+        if(GetTickCount64()>=deadline){showNotification(localization.translatedSource(L"The change expired before it could be sent. Try again after reconnecting.").c_str());co_return false;}
+        ticket->started=true;
         if (hostPipeName.empty())
         {
             winUILog("Command skipped because host pipe is empty: " + command.substr(0,command.find(':')));
@@ -3949,7 +4291,32 @@ namespace winrt::LightHostModernWinUI::implementation
                 }
             }
         } endCommand{*this};
-        const auto response = winrt::to_string(co_await hostConnection->requestAsync(command));
+        const auto previousSnapshot=hostConnection->snapshotJson;
+        std::string audioOrigin;
+        if(audioIntent){
+            bool valid=false;
+            try {
+                const auto snapshot=lightHostModern::ipc::parseSnapshotObject(previousSnapshot);
+                const auto current=to_string(snapshot.GetNamedObject(L"audioSelection").GetNamedValue(L"generation").Stringify());
+                audioOrigin=to_string(intent.GetNamedValue(L"origin").Stringify());
+                valid=lightHostModern::ui::audioIntentMatchesDevice(intent,snapshot) &&
+                    (current==audioOrigin||(current==audioLastGeneration&&audioOwnedGenerations.count(audioOrigin)));
+                if(valid){
+                    const auto field=intent.GetNamedString(L"field");
+                    if(intent.HasKey(L"first"))command=to_string(lightHostModern::ui::AudioPageController::channelCommand(previousSnapshot,field==L"inputChannels",static_cast<int>(intent.GetNamedNumber(L"first")),static_cast<int>(intent.GetNamedNumber(L"last")),intent.GetNamedBoolean(L"enabled")));
+                    else if(field==L"monoInputs"||field==L"monoOutput"){
+                        lightHostModern::ipc::JsonObject request;
+                        request.SetNamedValue(L"enabled",lightHostModern::ipc::JsonValue::CreateBooleanValue(intent.GetNamedString(L"value")==L"1"));
+                        request.SetNamedValue(L"expectedGeneration",snapshot.GetNamedObject(L"audioSelection").GetNamedValue(L"generation"));
+                        command=std::string(field==L"monoInputs"?"set-mono-inputs:":"set-mono-output:")+to_string(request.Stringify());
+                    }
+                    else command=to_string(co_await lightHostModern::ui::AudioPageController::selectionCommand(hostConnection,to_string(field),to_string(intent.GetNamedString(L"value"))));
+                }
+            }catch(...){valid=false;}
+            if(!valid){showNotification(localization.text("audio.selectionFailed",L"Could not apply this audio selection. Refresh the device list and try again.").c_str());co_await refreshSnapshot(true);co_return false;}
+        }
+        const auto now=GetTickCount64();if(now>=deadline)co_return false;
+        const auto response = winrt::to_string(co_await hostConnection->requestAsync(command,static_cast<DWORD>((std::min)(deadline-now,static_cast<ULONGLONG>(120000)))));
         lastCommandResponse = response;
         if (windowClosing) co_return !response.empty();
         if (response.empty())
@@ -3966,15 +4333,23 @@ namespace winrt::LightHostModernWinUI::implementation
             const auto message = ipcErrorText(response, localization);
             HeaderStatusText().Text(message);
             showNotification(message.c_str());
-            if (!comboDropDownOpen)
-                co_await refreshSnapshot();
+            if (!pendingNormalClose)
+                co_await refreshSnapshot(false,deadline);
             co_return false;
         }
 
-        if (!comboDropDownOpen)
-            co_await refreshSnapshot();
+        if (!pendingNormalClose)
+            co_await refreshSnapshot(false,deadline);
 
-        co_return extractString(response, "status") == "ok";
+        const bool succeeded=extractString(response,"status")=="ok";
+        if(succeeded&&!pendingNormalClose&&hostConnection->snapshotNeeded)co_return false;
+        if(succeeded&&audioIntent){try{
+            audioLastGeneration=to_string(lightHostModern::ipc::parseSnapshotObject(hostConnection->snapshotJson).GetNamedObject(L"audioSelection").GetNamedValue(L"generation").Stringify());
+            audioOwnedGenerations.insert(audioOrigin);audioOwnedGenerations.insert(audioLastGeneration);
+            while(audioOwnedGenerations.size()>128)audioOwnedGenerations.erase(audioOwnedGenerations.begin());
+        }catch(...){audioOwnedGenerations.clear();}}
+        if(succeeded){try{if(const auto message=actionFeedback(command,previousSnapshot))showNotification(message,false);}catch(...){winUILog("Action feedback unavailable.");}}
+        co_return succeeded;
     }
 
     int MainWindow::selectedRunningPluginIndex()
@@ -4035,22 +4410,31 @@ namespace winrt::LightHostModernWinUI::implementation
         const auto row = std::find_if(source.begin(), source.end(), [&](const auto& value) {
             return (item.Running() ? value.instanceId : value.knownId) == to_string(item.Id());
         });
-        const bool hasCustomName = row != source.end() && !row->customName.empty() && row->name != row->originalName;
         const auto renameActions = [&] {
             append(dialogAction("rename", item.Running() ? "plugins.rename" : "plugins.renameInstalled",
                 item.Running() ? L"Rename instance" : L"Rename plugin", L"\xE8AC"), item.Running());
-            auto restore = dialogAction("restore", "plugins.restoreName", L"Restore original name", L"\xE777");
-            restore.IsEnabled(hasCustomName); append(restore, item.Running());
         };
         if (item.Running())
             append(actionMenuItem(localization.text("plugins.openEditor", L"Open editor").c_str(), L"\xE8A7", item.Id(), {this, &MainWindow::OpenPluginEditor_Click}), false);
-        append(dialogAction("details", "plugins.details", L"Plugin details", L"\xE946"), false);
+        if (item.Running()) append(actionMenuItem(localization.translatedSource(L"Configure plugin channels").c_str(),L"\xE713",item.Id(),
+            [weak=get_weak(),id=item.Id()](const auto&,const auto&){if(auto owner=weak.get())if(owner->operatingPresenter)owner->operatingPresenter->configurePluginBuses(id);}),false);
+        if (item.Running()) append(dialogAction("details", "plugins.details", L"Plugin details", L"\xE946"), false);
         if (item.Running())
         {
             separator();
+            append(actionMenuItem(localization.translatedSource(row!=source.end()&&row->isolated?L"Run inside the host":L"Run in a separate process (experimental)").c_str(),L"\xE7F4",item.Id(),
+                [weak=get_weak(),id=item.Id()](const auto&,const auto&){if(auto owner=weak.get())if(owner->operatingPresenter)owner->operatingPresenter->configureIsolation(id);}));
+            append(actionMenuItem(localization.translatedSource(L"Retry loading").c_str(),L"\xE72C",item.Id(),
+                [weak=get_weak(),id=item.Id()](const auto&,const auto&)->fire_and_forget{if(auto owner=weak.get()){Windows::Data::Json::JsonObject r;r.SetNamedValue(L"action",Windows::Data::Json::JsonValue::CreateStringValue(L"retry"));r.SetNamedValue(L"id",Windows::Data::Json::JsonValue::CreateStringValue(id));co_await owner->sendCommand("operating-command:"+to_string(r.Stringify()));}}));
             append(actionMenuItem(localization.text("plugins.duplicate", L"Duplicate").c_str(), L"\xE8C8", item.Id(), {this, &MainWindow::DuplicatePlugin_Click}));
-            append(actionMenuItem(localization.text(item.Bypassed() ? "plugins.enable" : "plugins.bypass", item.Bypassed() ? L"Enable" : L"Bypass").c_str(), L"\xE7E8", item.Id(), {this, &MainWindow::BypassPlugin_Click}));
-            separator(); renameActions(); separator();
+            append(actionMenuItem((globalBypassed?localization.translatedSource(L"Disable bypass chain"):localization.text(item.Bypassed() ? "plugins.enable" : "plugins.bypass", item.Bypassed() ? L"Enable" : L"Bypass")).c_str(), L"\xE7E8", item.Id(), {this, &MainWindow::BypassPlugin_Click}));
+            separator(); renameActions();
+            append(actionMenuItem(localization.translatedSource(L"Card color").c_str(),L"\xE790",item.Id(),
+                [weak=get_weak(),id=item.Id(),color=row!=source.end()?to_hstring(row->cardColor):hstring{}](const auto&,const auto&)->fire_and_forget {
+                    if(auto owner=weak.get()) { const auto targetId=id; const auto result=co_await lightHostModern::ui::chooseVisualColor(owner->RootLayout(),owner->localization,owner->localization.translatedSource(L"Card color"),color);
+                        if(result&&!owner->windowClosing){Windows::Data::Json::JsonObject request;request.SetNamedValue(L"action",Windows::Data::Json::JsonValue::CreateStringValue(L"card-color"));request.SetNamedValue(L"id",Windows::Data::Json::JsonValue::CreateStringValue(targetId));request.SetNamedValue(L"color",Windows::Data::Json::JsonValue::CreateStringValue(unbox_value<hstring>(result)));co_await owner->sendCommand("operating-command:"+to_string(request.Stringify()));}
+                    }
+                })); separator();
             for (const bool up : {true, false})
             {
                 const auto action = actionMenuItem(localization.text(up ? "plugins.moveUp" : "plugins.moveDown", up ? L"Move up" : L"Move down").c_str(), up ? L"\xE74A" : L"\xE74B", item.Id(),
@@ -4068,8 +4452,11 @@ namespace winrt::LightHostModernWinUI::implementation
         else
         {
             append(actionMenuItem(localization.text("plugins.addToChain", L"Add to chain").c_str(), L"\xE710", item.Id(), {this, &MainWindow::AddInstalledPlugin_Click}));
+            separator();
+            append(dialogAction("details", "plugins.details", L"Plugin details", L"\xE946"), false);
             append(actionMenuItem(localization.text("plugins.openFolder", L"Open folder").c_str(), L"\xE8B7", item.Id(), {this, &MainWindow::OpenInstalledPluginLocation_Click}), false);
-            separator(); renameActions(); separator();
+            separator(); renameActions();
+            separator();
             append(actionMenuItem(localization.text("plugins.removeDatabase", L"Remove from database").c_str(), L"\xE74D", item.Id(), {this, &MainWindow::RemoveInstalledPlugin_Click}));
         }
         menu.ShowAt(button);
@@ -4084,8 +4471,6 @@ namespace winrt::LightHostModernWinUI::implementation
         const auto id = to_string(item.Id());
         try
         {
-            if (action == "restore") co_await sendCommand(std::string(item.Running() ? "rename-plugin:" : "rename-known-plugin:") + id + ":");
-            else
             {
                 const auto details = to_string(co_await hostConnection->requestAsync(std::string(item.Running() ? "instance-details:" : "known-plugin-details:") + id));
                 if (windowClosing) co_return;
@@ -4111,9 +4496,9 @@ namespace winrt::LightHostModernWinUI::implementation
         const auto id = element ? winrt::to_string(unbox_value_or<hstring>(element.Tag(), L"")) : std::string();
         if (!id.empty())
         {
-            if ((co_await sendCommand("toggle-bypass:" + id)))
+            if ((co_await sendCommand(globalBypassed?"set-global-bypass:0":"toggle-bypass:" + id)))
             {
-                showNotification(localization.text("plugins.bypassUpdated", L"Plugin bypass updated.").c_str());
+                // Feedback is emitted by sendCommand after acknowledgement.
             }
         }
     }
@@ -4136,7 +4521,7 @@ namespace winrt::LightHostModernWinUI::implementation
         {
             if ((co_await sendCommand("duplicate-plugin:" + id)))
             {
-                showNotification(localization.text("plugins.duplicated", L"Plugin duplicated.").c_str());
+                // Feedback is emitted by sendCommand after acknowledgement.
             }
         }
     }
@@ -4150,7 +4535,7 @@ namespace winrt::LightHostModernWinUI::implementation
         {
             if ((co_await sendCommand("remove-plugin:" + id)))
             {
-                showNotification(localization.text("plugins.removedFromChain", L"Plugin removed from chain.").c_str());
+                // Feedback is emitted by sendCommand after acknowledgement.
             }
         }
     }
@@ -4219,12 +4604,12 @@ namespace winrt::LightHostModernWinUI::implementation
             {
                 scanFailuresRequested = false;
                 if (!scanShowingProgress) {
-                    const auto choice = co_await pluginScanDialog.ShowAsync();
+                    const auto choice = co_await lightHostModern::ui::showAppDialog(pluginScanDialog);
                     if (choice == ContentDialogResult::None || windowClosing) break;
                     scanShowingProgress = true;
                     if (choice == ContentDialogResult::Primary) ScanDefaultPlugins_Click(nullptr, RoutedEventArgs{});
                 }
-                co_await scanProgressDialog.ShowAsync();
+                co_await lightHostModern::ui::showAppDialog(scanProgressDialog);
                 // Complete each dialog before opening the next: WinUI permits
                 // only one ContentDialog per XamlRoot.
                 if (!scanFailuresRequested || windowClosing) break;
@@ -4352,7 +4737,7 @@ namespace winrt::LightHostModernWinUI::implementation
         const auto file = to_hstring(extractString(json, "currentFile"));
         view->PluginScanCurrentFileText().Text(file);
         view->PluginScanCurrentFileText().Visibility(busy && !file.empty() ? Visibility::Visible : Visibility::Collapsed);
-        ToolTipService::SetToolTip(view->PluginScanCurrentFileText(), box_value(file));
+        lightHostModern::ui::HoverHelp::SetToolTip(view->PluginScanCurrentFileText(), box_value(file));
         PluginScanFailuresText().Text(localization.format("scan.recognizedSummary",L"{0} plugins recognized. {1} items skipped.",
             {std::to_wstring((int)extractNumber(json,"recognized")),std::to_wstring((int)extractNumber(json,"ignored"))}));
         PluginScanFailuresText().Visibility(Visibility::Visible);
@@ -4392,7 +4777,7 @@ namespace winrt::LightHostModernWinUI::implementation
         {
             if ((co_await sendCommand("add-known-plugin:" + id)))
             {
-                showNotification(localization.text("plugins.addedToChain", L"Plugin added to chain.").c_str());
+                // Feedback is emitted by sendCommand after acknowledgement.
             }
         }
     }
@@ -4439,22 +4824,22 @@ namespace winrt::LightHostModernWinUI::implementation
             dialog.CloseButtonText(localization.text("common.cancel", L"Cancel"));
             dialog.DefaultButton(ContentDialogButton::Close);
 
-            if (co_await dialog.ShowAsync() != ContentDialogResult::Primary)
+            if (co_await lightHostModern::ui::showAppDialog(dialog) != ContentDialogResult::Primary)
                 co_return;
         }
         if ((co_await sendCommand("remove-known-plugin:" + id)))
         {
             const int removedActive = (int) extractNumber(lastCommandResponse, "removedActive", 0);
-            showNotification((removedActive > 0 ? localization.text("plugins.removedFromBoth", L"Plugin removed from database and running chain.") : localization.text("plugins.removedFromDatabase", L"Plugin removed from database.")).c_str());
+            showNotification((removedActive > 0 ? localization.text("plugins.removedFromBoth", L"Plugin removed from database and running chain.") : localization.text("plugins.removedFromDatabase", L"Plugin removed from database.")).c_str(),false);
         }
     }
 
     winrt::fire_and_forget MainWindow::RemoveMissingPlugins_Click(IInspectable, RoutedEventArgs)
     {
         auto lifetime = get_strong();
-        if ((co_await sendCommand("remove-missing-known-plugins")))
+        if ((co_await lightHostModern::ui::confirmDanger(RootLayout(),localization,localization.translatedSource(L"Remove missing plugins?"),localization.translatedSource(L"Remove database entries whose plugin files are no longer available."))) && (co_await sendCommand("remove-missing-known-plugins")))
         {
-            showNotification(localization.format("plugins.missingRemoved", L"{0} missing plugins removed.", { std::to_wstring((int) extractNumber(lastCommandResponse, "removed", 0)) }).c_str());
+            showNotification(localization.format("plugins.missingRemoved", L"{0} missing plugins removed.", { std::to_wstring((int) extractNumber(lastCommandResponse, "removed", 0)) }).c_str(),false);
         }
     }
 
@@ -4468,22 +4853,12 @@ namespace winrt::LightHostModernWinUI::implementation
     Windows::Foundation::IAsyncAction MainWindow::confirmClearPluginDatabase()
     {
         auto lifetime = get_strong();
-        auto dialog = ContentDialog();
-        dialog.XamlRoot(RootLayout().XamlRoot());
-        dialog.RequestedTheme(RootLayout().ActualTheme());
-        dialog.Title(box_value(localization.text("dialogs.plugins.clearTitle", L"Clear plugin database?")));
-        dialog.Content(box_value(localization.text("dialogs.plugins.clearMessage", L"This removes every installed plugin entry and clears the current running chain.")));
-        dialog.PrimaryButtonText(localization.text("common.clear", L"Clear"));
-        dialog.CloseButtonText(localization.text("common.cancel", L"Cancel"));
-        dialog.DefaultButton(ContentDialogButton::Close);
-
-        if (co_await dialog.ShowAsync() != ContentDialogResult::Primary)
-            co_return;
+        if (!(co_await lightHostModern::ui::confirmDanger(RootLayout(),localization,localization.text("dialogs.plugins.clearTitle",L"Clear plugin database?"),localization.text("dialogs.plugins.clearMessage",L"This removes every installed plugin entry and clears the current running chain."),L"Clear"))) co_return;
         if ((co_await sendCommand("clear-known-plugins")))
         {
             const int removed = (int) extractNumber(lastCommandResponse, "removed", 0);
             const int removedActive = (int) extractNumber(lastCommandResponse, "removedActive", 0);
-            showNotification(localization.format("plugins.databaseCleared", L"{0} installed plugins cleared. {1} running plugins removed.", { std::to_wstring(removed), std::to_wstring(removedActive) }).c_str());
+            showNotification(localization.format("plugins.databaseCleared", L"{0} installed plugins cleared. {1} running plugins removed.", { std::to_wstring(removed), std::to_wstring(removedActive) }).c_str(),false);
         }
     }
 
@@ -4491,7 +4866,7 @@ namespace winrt::LightHostModernWinUI::implementation
     {
         auto lifetime = get_strong();
         if ((co_await sendCommand("delete-plugin-states")))
-            showNotification(localization.text("plugins.statesDeleted", L"Plugin states deleted.").c_str());
+            showNotification(localization.text("plugins.statesDeleted", L"Plugin states deleted.").c_str(),false);
     }
 
     winrt::fire_and_forget MainWindow::StartWithWindowsCheckBox_Changed(IInspectable, RoutedEventArgs)
@@ -4604,7 +4979,7 @@ namespace winrt::LightHostModernWinUI::implementation
         if (!input.empty()) summary += " · " + input;
         if (backend != "ASIO" && !output.empty() && output != input) summary += " / " + output;
         PreferredDeviceSummaryText().Text(hs(summary));
-        ToolTipService::SetToolTip(PreferredDeviceButton(), box_value(hs(summary)));
+        lightHostModern::ui::HoverHelp::SetToolTip(PreferredDeviceButton(), box_value(hs(summary)));
     }
 
     void MainWindow::PreferredDeviceButton_Click(IInspectable const&, RoutedEventArgs const&)
@@ -4630,7 +5005,7 @@ namespace winrt::LightHostModernWinUI::implementation
     {
         auto lifetime = get_strong();
         if ((co_await sendCommand("retry-audio-device")))
-            showNotification(localization.text("audio.retryStarted", L"Audio device retry started.").c_str());
+            showNotification(localization.text("audio.retryStarted", L"Audio device retry started.").c_str(),false);
         refreshSnapshot();
     }
 
@@ -4642,6 +5017,11 @@ namespace winrt::LightHostModernWinUI::implementation
     winrt::fire_and_forget MainWindow::ManageEnabledAudioDevices_Click(IInspectable, RoutedEventArgs)
     {
         auto lifetime = get_strong();
+        if (enabledDevicesOpening || windowClosing || pendingNormalClose) co_return;
+        enabledDevicesOpening = true;
+        struct ReleaseOpening { bool& value; ~ReleaseOpening() { value = false; } } release{enabledDevicesOpening};
+        try
+        {
         if (hostPipeName.empty())
         {
             auto dialog = ContentDialog();
@@ -4649,7 +5029,7 @@ namespace winrt::LightHostModernWinUI::implementation
             dialog.Title(box_value(localization.text("dialogs.enabledDevices.title", L"Enabled devices")));
             dialog.Content(box_value(localization.text("dialogs.enabledDevices.disconnected", L"LightHostModern is not connected to the audio host.")));
             dialog.CloseButtonText(localization.text("common.close", L"Close"));
-            dialog.ShowAsync();
+            co_await lightHostModern::ui::showAppDialog(dialog);
             co_return;
         }
 
@@ -4662,7 +5042,7 @@ namespace winrt::LightHostModernWinUI::implementation
             dialog.Title(box_value(localization.text("dialogs.enabledDevices.title", L"Enabled devices")));
             dialog.Content(box_value(localization.text("dialogs.enabledDevices.loadFailed", L"Could not load the available audio device list.")));
             dialog.CloseButtonText(localization.text("common.close", L"Close"));
-            dialog.ShowAsync();
+            co_await lightHostModern::ui::showAppDialog(dialog);
             co_return;
         }
 
@@ -4678,7 +5058,7 @@ namespace winrt::LightHostModernWinUI::implementation
             dialog.Title(box_value(localization.text("dialogs.enabledDevices.title", L"Enabled devices")));
             dialog.Content(box_value(localization.text("dialogs.enabledDevices.noBackends", L"No audio backends were detected.")));
             dialog.CloseButtonText(localization.text("common.close", L"Close"));
-            dialog.ShowAsync();
+            co_await lightHostModern::ui::showAppDialog(dialog);
             co_return;
         }
 
@@ -4704,9 +5084,13 @@ namespace winrt::LightHostModernWinUI::implementation
         auto deviceSections = StackPanel();
         deviceSections.Spacing(12);
 
+        auto renameRequest=std::make_shared<std::pair<hstring,hstring>>();auto requestRename=std::make_shared<std::function<void()>>();
+        auto deviceAliases=JsonObject::Parse(lightHostModern::ipc::parseObject(choicesJson).GetNamedObject(L"audioDeviceAliases",JsonObject{}).Stringify());
+        auto changedAliases=JsonObject{};
         auto updating = std::make_shared<bool>(false);
         auto rebuild = std::make_shared<std::function<void()>>();
-        *rebuild = [this, backendBox, backendToggle, deviceSections, backendEnabled, deviceEnabled, updating, rebuild]()
+        struct ReleaseDialogCallbacks { std::shared_ptr<std::function<void()>> callback; ~ReleaseDialogCallbacks() { *callback = {}; } } releaseCallbacks{rebuild};
+        *rebuild = [this, backendBox, backendToggle, deviceSections, backendEnabled, deviceEnabled, updating, rebuild, deviceAliases, changedAliases, renameRequest, requestRename]()
         {
             int backendIndex = backendBox.SelectedIndex();
             if (backendIndex < 0 || backendIndex >= (int) allAudioBackendNames.size())
@@ -4721,7 +5105,7 @@ namespace winrt::LightHostModernWinUI::implementation
 
             deviceSections.Children().Clear();
 
-            auto appendSection = [this, backendName, enabled, deviceEnabled, deviceSections, updating](std::string const& role, hstring const& title)
+            auto appendSection = [this, backendName, enabled, deviceEnabled, deviceSections, updating, deviceAliases, changedAliases, renameRequest, requestRename](std::string const& role, hstring const& title)
             {
                 auto section = StackPanel();
                 section.Spacing(10);
@@ -4740,13 +5124,14 @@ namespace winrt::LightHostModernWinUI::implementation
 
                     hasItems = true;
                     auto box = CheckBox();
-                    setAudioCheckBoxLabel(box, hs(entry.name));
+                    Automation::AutomationProperties::SetName(box,hs(entry.name));
+                    box.MinWidth(0); box.Width(20); box.Padding({0,0,0,0});
                     box.Tag(box_value(i));
                     box.IsChecked(static_cast<bool>((*deviceEnabled)[(size_t) i]));
                     box.IsEnabled(enabled);
                     box.VerticalAlignment(VerticalAlignment::Center);
                     box.HorizontalAlignment(HorizontalAlignment::Stretch);
-                    ToolTipService::SetToolTip(box, box_value(hs(entry.name)));
+                    lightHostModern::ui::HoverHelp::SetToolTip(box, box_value(lightHostModern::ui::HoverHelp::current().explanation(L"Enabled device")));
                     Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
                         box,
                         hstring(L"EnabledAudioDevice" + std::to_wstring(i)));
@@ -4764,7 +5149,13 @@ namespace winrt::LightHostModernWinUI::implementation
                         if (i >= 0 && i < (int) deviceEnabled->size())
                             (*deviceEnabled)[(size_t) i] = false;
                     });
-                    section.Children().Append(box);
+                    Grid deviceRow;deviceRow.ColumnSpacing(8);ColumnDefinition checkColumn,nameColumn;checkColumn.Width(GridLengthHelper::Auto());nameColumn.Width({1,GridUnitType::Star});deviceRow.ColumnDefinitions().Append(checkColumn);deviceRow.ColumnDefinitions().Append(nameColumn);deviceRow.Children().Append(box);
+                    TextBlock name;const auto key=hs(allAudioDeviceChoices[(size_t)i]);const auto alias=deviceAliases.GetNamedString(key,L"");name.Text(alias.empty()?hs(entry.name):alias);name.TextTrimming(TextTrimming::CharacterEllipsis);name.VerticalAlignment(VerticalAlignment::Center);
+                    lightHostModern::ui::HoverHelp::SetToolTip(name,box_value(hs(entry.name)));deviceRow.Children().Append(name);Grid::SetColumn(name,1);
+                    ColumnDefinition renameColumn;renameColumn.Width(GridLengthHelper::Auto());deviceRow.ColumnDefinitions().Append(renameColumn);
+                    Button rename;rename.Style(Application::Current().Resources().Lookup(box_value(L"SubtleButtonStyle")).as<Style>());FontIcon pencil;pencil.Glyph(L"\xE70F");pencil.FontSize(14);rename.Content(pencil);rename.Width(32);rename.Height(32);rename.Padding({0,0,0,0});rename.VerticalAlignment(VerticalAlignment::Center);
+                    lightHostModern::ui::HoverHelp::SetToolTip(rename,box_value(localization.translatedSource(L"Rename device")));Automation::AutomationProperties::SetName(rename,localization.translatedSource(L"Rename device")+L" "+name.Text());Automation::AutomationProperties::SetAutomationId(rename,L"RenameDevice-"+to_hstring(i));
+                    rename.Click([renameRequest,requestRename,key,original=hs(entry.name)](auto const&,auto const&){*renameRequest={key,original};if(*requestRename)(*requestRename)();});deviceRow.Children().Append(rename);Grid::SetColumn(rename,2);section.Children().Append(deviceRow);
                 }
 
                 if (hasItems)
@@ -4802,7 +5193,7 @@ namespace winrt::LightHostModernWinUI::implementation
 
         backendBox.SelectionChanged([rebuild](IInspectable const&, SelectionChangedEventArgs const&)
         {
-            (*rebuild)();
+            if(*rebuild)(*rebuild)();
         });
         backendToggle.Checked([backendBox, backendEnabled, updating, rebuild](IInspectable const&, RoutedEventArgs const&)
         {
@@ -4811,7 +5202,7 @@ namespace winrt::LightHostModernWinUI::implementation
             const int index = backendBox.SelectedIndex();
             if (index >= 0 && index < (int) backendEnabled->size())
                 (*backendEnabled)[(size_t) index] = true;
-            (*rebuild)();
+            if(*rebuild)(*rebuild)();
         });
         backendToggle.Unchecked([backendBox, backendEnabled, updating, rebuild](IInspectable const&, RoutedEventArgs const&)
         {
@@ -4820,9 +5211,9 @@ namespace winrt::LightHostModernWinUI::implementation
             const int index = backendBox.SelectedIndex();
             if (index >= 0 && index < (int) backendEnabled->size())
                 (*backendEnabled)[(size_t) index] = false;
-            (*rebuild)();
+            if(*rebuild)(*rebuild)();
         });
-        (*rebuild)();
+        if(*rebuild)(*rebuild)();
 
         auto modeCard = Border();
         modeCard.Background(resourceBrush(L"AppCardBrush", themedFallback(makeColor(255, 255, 255), makeColor(39, 39, 39))));
@@ -4870,34 +5261,38 @@ namespace winrt::LightHostModernWinUI::implementation
         sizeDialogToViewport(dialog, RootLayout(), 0.75);
         enableDialogBackgroundDefocus(dialog);
 
-        if (co_await dialog.ShowAsync() != ContentDialogResult::Primary)
-            co_return;
+        *requestRename=[weakDialog=make_weak(dialog)]{if(auto parent=weakDialog.get())parent.Hide();};
+        for(;;){
+            const auto result=co_await lightHostModern::ui::showAppDialog(dialog);
+            if(!renameRequest->first.empty()){
+                const auto key=renameRequest->first,original=renameRequest->second;renameRequest->first=L"";
+                const auto current=deviceAliases.GetNamedString(key,original);
+                const auto edited=co_await lightHostModern::ui::editDisplayName(RootLayout(),localization,localization.translatedSource(L"Rename device"),current.empty()?original:current);
+                if(edited){auto value=unbox_value<hstring>(edited);if(value==original)value=L"";deviceAliases.SetNamedValue(key,JsonValue::CreateStringValue(value));changedAliases.SetNamedValue(key,JsonValue::CreateStringValue(value));if(*rebuild)(*rebuild)();}
+                continue;
+            }
+            if(result!=ContentDialogResult::Primary)co_return;break;
+        }
         int changedCount = 0;
-        for (int i = 0; i < (int) backendEnabled->size() && i < (int) originalBackendEnabled.size(); ++i)
-        {
-            if ((*backendEnabled)[(size_t) i] == originalBackendEnabled[(size_t) i])
-                continue;
-
-            if ((co_await sendCommand("set-enabled-audio-backend:" + std::to_string(i) + ":" + ((*backendEnabled)[(size_t) i] ? "1" : "0"))))
-                ++changedCount;
+        JsonObject request, backendEdits, deviceEdits;
+        request.SetNamedValue(L"token", JsonValue::CreateStringValue(hs(extractString(choicesJson,"choiceToken"))));
+        for (size_t i=0;i<backendEnabled->size();++i) if ((*backendEnabled)[i]!=originalBackendEnabled[i]) {
+            backendEdits.SetNamedValue(hs(allAudioBackendNames[i]),JsonValue::CreateBooleanValue((*backendEnabled)[i])); ++changedCount;
         }
-
-        for (int i = 0; i < (int) deviceEnabled->size() && i < (int) originalDeviceEnabled.size(); ++i)
-        {
-            if ((*deviceEnabled)[(size_t) i] == originalDeviceEnabled[(size_t) i])
-                continue;
-
-            if ((co_await sendCommand("set-enabled-audio-device:" + std::to_string(i) + ":" + ((*deviceEnabled)[(size_t) i] ? "1" : "0"))))
-                ++changedCount;
+        for (size_t i=0;i<deviceEnabled->size();++i) if ((*deviceEnabled)[i]!=originalDeviceEnabled[i]) {
+            deviceEdits.SetNamedValue(hs(allAudioDeviceChoices[i]),JsonValue::CreateBooleanValue((*deviceEnabled)[i])); ++changedCount;
         }
-
+        request.SetNamedValue(L"backends",backendEdits);request.SetNamedValue(L"devices",deviceEdits);request.SetNamedValue(L"names",changedAliases);
+        changedCount+=changedAliases.Size();
+        if(changedCount>0 && !(co_await sendCommand("update-enabled-audio-choices:"+to_string(request.Stringify()))))co_return;
         refreshSnapshot();
         showNotification(changedCount == 0
             ? localization.text("dialogs.enabledDevices.unchanged", L"Enabled devices unchanged.").c_str()
             : localization.format(
                 "dialogs.enabledDevices.updated",
                 L"{0} enabled device setting(s) updated.",
-                { std::to_wstring(changedCount) }).c_str());
+                { std::to_wstring(changedCount) }).c_str(),false);        }
+        catch (...) { if (!windowClosing) showNotification(localization.text("dialogs.enabledDevices.loadFailed", L"Could not load the available audio device list.").c_str()); }
     }
 
     winrt::fire_and_forget MainWindow::IconModeBox_SelectionChanged(IInspectable, SelectionChangedEventArgs)
@@ -4915,7 +5310,7 @@ namespace winrt::LightHostModernWinUI::implementation
         currentIconMode = mode;
         applyIconMode(mode);
         if ((co_await sendCommand("set-tray-icon-mode:" + mode)))
-            showNotification(localization.text("settings.iconUpdated", L"App icon updated.").c_str());
+            showNotification(localization.text("settings.iconUpdated", L"App icon updated.").c_str(),false);
     }
 
     void MainWindow::resetDefaultPluginScanPaths()
@@ -4944,13 +5339,32 @@ namespace winrt::LightHostModernWinUI::implementation
         }
     }
 
-    winrt::fire_and_forget MainWindow::Window_Closed(IInspectable, WindowEventArgs)
+    winrt::fire_and_forget MainWindow::prepareNormalClose()
     {
-        windowMaterial.close();
-        auto lifetime = get_strong();
+        auto lifetime=get_strong();if(pendingNormalClose||windowClosing)co_return;pendingNormalClose=true;
+        normalCloseDeadline=GetTickCount64()+5000;RootLayout().IsHitTestVisible(false);
+        if(operatingPresenter)operatingPresenter->freezeEdits(true);
+        bool saved=true;try{if(operatingPresenter)saved=co_await operatingPresenter->flushPending(normalCloseDeadline);}catch(...){saved=false;}
+        pendingNormalClose=false;normalCloseDeadline=0;
+        if(windowClosing)co_return;
+        if(!saved){RootLayout().IsHitTestVisible(true);if(operatingPresenter)operatingPresenter->freezeEdits(false);showNotification(localization.translatedSource(L"Pending chain edits could not be sent. A local recovery copy was kept. Try closing again after reconnecting.").c_str());co_return;}
+        co_await finishNormalCloseAsync();
+    }
+
+    winrt::Windows::Foundation::IAsyncAction MainWindow::finishNormalCloseAsync()
+    {
+        auto lifetime=get_strong();if(windowClosing)co_return;
+        // Keep the window/dispatcher alive until asynchronous shutdown drains.
+        // Awaiting from Closed can strand the UI process after its HWND has
+        // already gone away (the host has quit, but Application::Exit never runs).
+        // Restart/reset/update already saved and stopped their host; they enter
+        // here directly without attempting another flush against that host.
         windowClosing = true;
         if(verboseLogsPresenter)verboseLogsPresenter->close();
+        if(operatingPresenter)operatingPresenter->close();
         updateService->cancel();
+        if(updateCheckTimer)updateCheckTimer.Stop();
+        if(notificationTimer)notificationTimer.Stop();
         if (refreshTimer) refreshTimer.Stop();
         hostConnection->close();
         if (closeQuitsHost)
@@ -4958,9 +5372,18 @@ namespace winrt::LightHostModernWinUI::implementation
             // Closing must not wait behind a stalled plugin command in the UI
             // FIFO. Cancel it first, then make one bounded quit attempt.
             auto shutdownTransport = std::make_shared<lightHostModern::ipc::ClientState>();
-            co_await lightHostModern::ipc::requestAsync(shutdownTransport, hostPipeName, "quit-host", 1000);
+            try { co_await lightHostModern::ipc::requestAsync(shutdownTransport, hostPipeName, "quit-host", 1000); }
+            catch (...) { winUILog("Host quit request failed during normal close; continuing UI shutdown."); }
             shutdownTransport->close();
         }
+
+        co_await updateService->cancelAndWaitAsync();
+        normalCloseReady=true;Close();
+    }
+
+    void MainWindow::Window_Closed(IInspectable, WindowEventArgs)
+    {
+        windowMaterial.close();
 
         try
         {
@@ -4973,7 +5396,6 @@ namespace winrt::LightHostModernWinUI::implementation
         }
         catch (...) {}
 
-        co_await updateService->cancelAndWaitAsync();
         // End task bypasses this path. Only acknowledge a completed normal close,
         // so a forced UI exit also stops the separate audio host.
         const auto closeEventName = commandLineOptionValue(L"--ui-close-event");

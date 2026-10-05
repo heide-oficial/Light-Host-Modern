@@ -1,5 +1,6 @@
 #pragma once
 #include "PluginsPageView.g.h"
+#include "ScrollEdgeFade.h"
 
 namespace winrt::LightHostModernWinUI::implementation
 {
@@ -7,6 +8,9 @@ struct PluginsPageView : PluginsPageViewT<PluginsPageView>
 {
     PluginsPageView();
     void refreshSearchAccessibility();
+    void configureEffects(bool contrast);
+    std::shared_ptr<lightHostModern::ui::ScrollEdgeFade> runningFade,installedFade;
+    std::function<void(Microsoft::UI::Xaml::Controls::Button)> catalogActions;
     void setContentInsets(double inset);
     double contentInset = 24;
     void Toolbar_SizeChanged(winrt::Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);

@@ -1,5 +1,9 @@
 # Build outputs
 out/
+/dev-test/*
+!/dev-test/.gitkeep
+/releases/*
+!/releases/.gitkeep
 build/
 Builds/
 cmake-build-*/
@@ -83,6 +87,8 @@ WinUI/**/XamlMetaDataProvider.idl
 WinUI/test-screenshots/
 
 # Test and analysis output
+/VM-RESULTS/
+/update-test-*/
 __pycache__/
 *.py[cod]
 screenshots/

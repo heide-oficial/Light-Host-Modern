@@ -1,6 +1,7 @@
 #pragma once
 #include "PluginItem.h"
 #include "PluginRows.h"
+#include "VisualColorDialog.h"
 #include "Localization.h"
 #include <unordered_set>
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -19,7 +20,7 @@ public:
     void adopt(std::vector<PluginRowData> rows) { source = std::move(rows); }
 
     void render(const std::wstring& query, int sort, bool compact,
-        ::LightHostModernWinUI::LocalizationCatalog& localization, const winrt::Microsoft::UI::Xaml::Controls::ListView& view, bool grouped = false)
+        ::LightHostModernWinUI::LocalizationCatalog& localization, const winrt::Microsoft::UI::Xaml::Controls::ListView& view, bool grouped = false, bool globalBypassed = false)
     {
         using namespace winrt;
         using namespace Microsoft::UI::Xaml;
@@ -32,25 +33,27 @@ public:
             auto found = models.find(id);
             if (found == models.end()) found = models.emplace(id, winrt::make<winrt::LightHostModernWinUI::implementation::PluginItem>()).first;
             auto item = found->second;
-            item.Id(to_hstring(id)); item.KnownId(to_hstring(row.knownId)); item.Name(to_hstring(row.name));
+            item.Id(to_hstring(id)); item.KnownId(to_hstring(row.knownId)); item.Name(to_hstring(row.name)); item.CardTint(cardTint(running?to_hstring(row.cardColor):hstring{}));
             item.Manufacturer(row.manufacturer.empty() ? localization.text("plugins.unknownManufacturer", L"Unknown manufacturer") : to_hstring(row.manufacturer));
             item.Format(to_hstring(row.format)); item.Status(localization.translatedSource(to_hstring(row.status)));
             const bool failed = row.status == "Error" || row.status == "Unavailable" || row.status == "In chain (unavailable)";
-            const bool bypassed = row.bypassed || row.status == "Running (bypassed)";
+            const bool bypassed = (running&&globalBypassed) || row.bypassed || row.status == "Running (bypassed)";
             const auto state = failed ? L"Critical" : bypassed ? L"Caution" : row.status == "Available" ? L"Available" : L"Success";
             item.StateGlyph(failed ? L"\xEA39" : bypassed ? L"\xE769" : row.status == "Available" ? L"\xE710" : L"\xE768");
             const auto resources = Application::Current().Resources();
             item.StatusBadgeStyle(resources.Lookup(box_value(hstring(L"Plugin") + state + L"BadgeStyle")).as<Style>());
             item.StatusIconStyle(resources.Lookup(box_value(hstring(L"Plugin") + state + L"IconStyle")).as<Style>());
             item.Position(running ? to_hstring(row.originalIndex + 1) : L""); item.OriginalIndex(row.originalIndex);
-            item.Running(running); item.Bypassed(row.bypassed); item.CanReorder(allowChanges && running && sort == 0 && query.empty());
+            if(running&&globalBypassed&&!failed)item.Status(localization.translatedSource(L"Bypassed"));
+            item.Running(running); item.Bypassed(bypassed); item.CanReorder(allowChanges && running && sort == 0 && query.empty());
             item.RowHeight(compact ? 56.0 : 64.0);
             item.Metadata(item.Manufacturer() + L" \u00b7 " + item.Format());
             item.PositionVisibility(running ? Visibility::Visible : Visibility::Collapsed);
             item.AccessibleName(item.Position() + L" " + item.Name() + L", " + item.Status());
             item.ActionName(localization.format("plugins.actionsFor", L"Actions for {0}", {std::wstring(item.Position() + L" " + item.Name())}));
-            if (auto container = view.ContainerFromItem(item).try_as<FrameworkElement>())
-                Automation::AutomationProperties::SetName(container, item.AccessibleName());
+            if (auto container = view.ContainerFromItem(item).try_as<FrameworkElement>()){
+                container.Opacity(running&&bypassed?.65:1);
+                Automation::AutomationProperties::SetName(container, item.AccessibleName());}
         }
         for (auto it = models.begin(); it != models.end();)
             if (!alive.contains(it->first)) it = models.erase(it); else ++it;
@@ -110,7 +113,7 @@ public:
             items.InsertAt(index, desired[index]); changed = true;
         }
         while (items.Size() > desired.size()) { items.RemoveAtEnd(); changed = true; }
-        if (selected)
+        if (selected && view.SelectionMode() == ListViewSelectionMode::Single)
         {
             uint32_t index = 0;
             if (items.IndexOf(selected, index)) view.SelectedItem(selected);

@@ -1,10 +1,13 @@
 #include "MeterJson.h"
 #include "HostIpcServer.h"
 #include "StartupRegistration.h"
+#include "PortablePaths.h"
 #include "DebugLog.h"
 #include "RuntimeProfile.h"
 #include "VerboseLog.h"
 #include "HostRestart.h"
+#include "UpdateContract.h"
+#include "SettingsReset.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -26,7 +29,8 @@ namespace
 
 	String startupCommand()
 	{
-		return "\"" + File::getSpecialLocation(File::currentExecutableFile).getFullPathName() + "\" --startup";
+        const auto host=std::filesystem::path(File::getSpecialLocation(File::currentExecutableFile).getFullPathName().toWideCharPointer());
+		return "\"" + String(lightHostModern::update::launchEntry(host).wstring().c_str()) + "\" --startup";
 	}
 
 	String normaliseTrayIconMode(String mode)
@@ -143,14 +147,17 @@ HostIpcServer::HostIpcServer(AudioEngine& engineToExpose)
 {
 }
 
-HostIpcServer::HostIpcServer(AudioEngine& engineToExpose, std::function<void()> trayIconChangedCallback)
+HostIpcServer::HostIpcServer(AudioEngine& engineToExpose, std::function<void()> trayIconChangedCallback, std::function<bool(const String&)> releaseNotificationCallback)
 	: engine(engineToExpose),
 	  trayIconChanged(std::move(trayIconChangedCallback)),
+      releaseNotification(std::move(releaseNotificationCallback)),
 	  pipeName(lightHostModern::RuntimeProfile::current().pipeName().c_str())
 {
     lifetime = std::make_shared<lightHostModern::ipc::LifetimeGate<HostIpcServer>>(*this);
     const std::filesystem::path executable(File::getSpecialLocation(File::currentExecutableFile).getFullPathName().toWideCharPointer());
-    lightHostModern::migrateStartupRegistration(executable.parent_path() / L"Light Host Modern.exe", executable);
+    const auto entry=lightHostModern::update::launchEntry(executable);
+    lightHostModern::migrateStartupRegistration(executable.parent_path() / L"Light Host Modern.exe", entry);
+    if(entry!=executable)lightHostModern::migrateStartupRegistration(executable,entry);
     transport = std::make_unique<Transport>();
     worker = std::thread([this] { run(); });
     eventWorker = std::thread([this] { runEvents(); });
@@ -192,8 +199,16 @@ var HostIpcServer::revisionsJson(const lightHostModern::ipc::StateRevisions& rev
 
 void HostIpcServer::timerCallback()
 {
+    drainMutations();
     using namespace lightHostModern::ipc;
     const auto currentScan = engine.getPluginScanVersion();
+    // Saving progress is presentation state, not a graph edit. Advancing the
+    // graph revision here used to reject valid edits while autosave completed.
+    if (const auto status = engine.getSessionSaveStatus(); status.changeSerial != lastSessionStatusSerial) {
+        lastSessionStatusSerial = status.changeSerial;
+        ++operationRevision;
+        completedOperationIds.push_back("session-save");
+    }
     auto revisions = publishedRevisions;
     revisions[0] = engine.getChainVersion(); revisions[1] = engine.getPluginDatabaseVersion();
     revisions[2] = engine.getAudioConfigVersion(); revisions[4] = operationRevision.load();
@@ -217,7 +232,7 @@ void HostIpcServer::timerCallback()
         std::map<std::string, std::string> next;
         int position = 0;
         for (const auto& item : engine.getPluginInstances())
-            next[item.id.toStdString()] = String(position++).toStdString() + "\n" + item.customName.toStdString()
+            next[item.id.toStdString()] = String(position++).toStdString() + "\n" + item.customName.toStdString() + "\n" + item.cardColor.toStdString()
                 + "\n" + item.loading.toStdString() + "\n" + item.error.toStdString() + (item.bypassed ? "\n1" : "\n0");
         diff("chain", chainEntities, std::move(next));
     }
@@ -380,7 +395,7 @@ void HostIpcServer::run(bool metersOnly)
 
 String HostIpcServer::withEnvelope(const String& json, const String& id) const
 {
-    auto result = JSON::parse(json);
+    auto result = lightHostModern::parseBoundedJson(json);
     if (auto* object = result.getDynamicObject())
     {
         object->setProperty("version", lightHostModern::ipc::protocolVersion);
@@ -410,7 +425,7 @@ String HostIpcServer::operationResponse(const lightHostModern::ipc::Request& req
     object->setProperty("status", "operation");
     object->setProperty("operationId", String(record.id));
     object->setProperty("operationState", lightHostModern::ipc::stateName(record.state));
-    if (!record.response.empty()) object->setProperty("result", JSON::parse(String(record.response)));
+    if (!record.response.empty()) object->setProperty("result", lightHostModern::parseBoundedJson(String(record.response)));
     return withEnvelope(JSON::toString(var(object), true), request.id);
 }
 
@@ -463,27 +478,8 @@ String HostIpcServer::acceptRequest(const String& json)
         const auto gate = lifetime;
         if (!MessageManager::callAsync([gate, request, json] {
             gate->invoke([&](HostIpcServer& server) {
-                if (!server.operations.start(request.id.toStdString())) return;
-                String result;
-                try { result = server.processRequest(json); }
-                catch (...)
-                {
-                    auto error = request;
-                    error.errorCode = "command_exception";
-                    error.errorMessage = "Host command threw an exception";
-                    result = server.withEnvelope(errorResponse(error), request.id);
-                }
-                if (result.getNumBytesAsUTF8() > maxMessageBytes - 4096)
-                {
-                    auto error = request;
-                    error.errorCode = "message_too_large";
-                    error.errorMessage = "Operation result exceeds the message limit";
-                    result = server.withEnvelope(errorResponse(error), request.id);
-                }
-                server.operations.finish(request.id.toStdString(), result.toStdString(),
-                    JSON::parse(result)["status"].toString() != "error");
-                ++server.operationRevision;
-                if (server.completedOperationIds.size() < 257) server.completedOperationIds.push_back(request.id.toStdString());
+                server.pendingMutations.push_back(json);
+                server.drainMutations();
             });
         }))
         {
@@ -495,6 +491,74 @@ String HostIpcServer::acceptRequest(const String& json)
         }
     }
     return operationResponse(request, *admission.record);
+}
+
+void HostIpcServer::requestShutdown()
+{
+    requestLocal("quit-host", {});
+}
+
+void HostIpcServer::requestLocal(const String& command, const Array<var>& args, std::function<void(const var&)> completed)
+{
+    auto* request = new DynamicObject(); request->setProperty("version", lightHostModern::ipc::protocolVersion);
+    const auto id = Uuid().toString(); request->setProperty("id", id); request->setProperty("hostSession", hostSession);
+    request->setProperty("command", command); request->setProperty("args", args);
+    if (completed) localCompletions[id.toStdString()] = std::move(completed);
+    const auto response = lightHostModern::parseBoundedJson(acceptRequest(JSON::toString(var(request), true)));
+    if (response["status"].toString() == "error") if (const auto found = localCompletions.find(id.toStdString()); found != localCompletions.end()) {
+        auto callback = std::move(found->second); localCompletions.erase(found); callback(response);
+    }
+}
+
+void HostIpcServer::drainMutations()
+{
+    if (pendingMutations.empty() || stopping.load()) return;
+    const auto json = pendingMutations.front();
+    const auto request = lightHostModern::ipc::parseRequest(json);
+    const auto action = request.command == "operating-command" ? request.args[0]["action"].toString() : String();
+    const bool capture = request.command == "flush-session" || request.command == "quit-host"
+        || request.command == "restart-host" || request.command == "duplicate-plugin"
+        || action == "save" || action == "create" || action == "overwrite" || action == "isolation"
+        || action == "activate" || action == "mode" || action == "duplicate" || action == "remove" || action == "batch"
+        || action == "undo" || action == "redo" || action == "add" || action == "mixer-channels";
+    String captureError, captureErrorMessage;
+    if (capture) {
+        try {
+            const auto status = captureBarrier.poll([] { return GetTickCount64(); },
+                [&](bool start) { return engine.prepareIsolatedStateCapture(start); });
+            if (status == lightHostModern::IsolatedCaptureBarrier::Status::waiting) return;
+            if (status == lightHostModern::IsolatedCaptureBarrier::Status::timedOut) {
+                captureError = "state_capture_timeout";
+                captureErrorMessage = "Plugin settings kept changing or could not be captured within 30 seconds. The operation was not applied; pending settings were preserved.";
+            }
+        } catch (...) {
+            captureError = "state_capture_failed";
+            captureErrorMessage = "Plugin settings could not be captured. The operation was not applied; pending settings were preserved.";
+        }
+    }
+    if (!operations.start(request.id.toStdString())) { pendingMutations.pop_front(); captureBarrier.reset(); engine.finishIsolatedStateCapture(); return; }
+    String result;
+    try {
+        if (captureError.isNotEmpty()) {
+            auto error = request; error.errorCode = captureError; error.errorMessage = captureErrorMessage;
+            result = withEnvelope(lightHostModern::ipc::errorResponse(error), request.id);
+        } else result = processRequest(json);
+    }
+    catch (...) {
+        auto error = request; error.errorCode = "command_exception"; error.errorMessage = "Host command threw an exception";
+        result = withEnvelope(lightHostModern::ipc::errorResponse(error), request.id);
+    }
+    if (result.getNumBytesAsUTF8() > lightHostModern::ipc::maxMessageBytes - 4096) {
+        auto error = request; error.errorCode = "message_too_large"; error.errorMessage = "Operation result exceeds the message limit";
+        result = withEnvelope(lightHostModern::ipc::errorResponse(error), request.id);
+    }
+    engine.finishIsolatedStateCapture(); captureBarrier.reset(); pendingMutations.pop_front();
+    operations.finish(request.id.toStdString(), result.toStdString(), lightHostModern::parseBoundedJson(result)["status"].toString() != "error");
+    ++operationRevision;
+    if (completedOperationIds.size() < 257) completedOperationIds.push_back(request.id.toStdString());
+    if (const auto found = localCompletions.find(request.id.toStdString()); found != localCompletions.end()) {
+        auto callback = std::move(found->second); localCompletions.erase(found); callback(lightHostModern::parseBoundedJson(result));
+    }
 }
 
 String HostIpcServer::processRequestOnMessageThread(const String& request)
@@ -543,7 +607,7 @@ String HostIpcServer::processRequest(const String& json)
         if(!lightHostModern::ipc::isReadOnly(request.command.toStdString()))
             lightHostModern::verbose::log("ipc.result","id="+request.id.toStdString()+" command="+request.command.toStdString()+" result="+result+" milliseconds="+std::to_string(GetTickCount64()-operationStarted));
     };
-    try { response = JSON::parse(dispatchRequest(request)); }
+    try { response = lightHostModern::parseBoundedJson(dispatchRequest(request)); }
     catch (const std::exception& exception) {
         logOperation(exception.what());
         request.errorCode="command_exception";request.errorMessage=exception.what();
@@ -601,20 +665,45 @@ String HostIpcServer::dispatchRequest(const lightHostModern::ipc::Request& reque
     if (command == "snapshot" || command == "state-snapshot") return buildSnapshot();
     if (command == "telemetry") { if (engine.isDiagnosticsEnabled()) lightHostModern::diagnosticsVisibleUntil.store(GetTickCount64() + 2000); return buildTelemetry(); }
     if (command == "enabled-audio-choices") return buildEnabledAudioChoices();
+    if (command == "plugin-buses") return JSON::toString(engine.getPluginBuses(args[0].toString()), true);
+    if (command == "operating-state") return JSON::toString(engine.getOperatingState(), true);
+    if (command == "routing-meters") return JSON::toString(engine.getRoutingMeters(), true);
     const auto fail = [&](const String& code, const String& message) {
         auto error = request; error.errorCode = code; error.errorMessage = message;
         return lightHostModern::ipc::errorResponse(error);
     };
+    if (command == "operating-command") {
+        const auto error = engine.handleOperatingCommand(args[0]);
+        return error.isEmpty() ? commandOk() : fail("operating_error", error);
+    }
+    if (command == "update-enabled-audio-choices") {
+        const auto error = engine.updateEnabledChoices(args[0]);
+        return error.isEmpty() ? commandOk() : fail("device_list_changed", error);
+    }
+    if (command == "restore-all-names" || command == "rename-audio-devices") {
+        const auto error = command == "restore-all-names" ? engine.restoreAllOriginalNames() : engine.renameAudioDevices(args[0]);
+        return error.isEmpty() ? commandOk() : fail("names_error", error);
+    }
     if (command == "set-verbose-logs") { lightHostModern::verbose::arm((bool) args[0]); return commandOk(); }
     if (command == "stop-verbose-logs") { lightHostModern::verbose::stop(); return commandOk(); }
     if (command == "complete-verbose-logs") { lightHostModern::verbose::complete(args[0].toString().toStdString()); return commandOk(); }
-    if (command == "restart-host") {
+    if (command == "restart-host" || command == "factory-reset") {
         if(quitRequested.load())return commandOk();
         const auto options = args[0];
         if(!options["uiPid"].isInt()&&!options["uiPid"].isInt64())return fail("invalid_arguments","Expected a UI process ID");
         if(!options["uiCreated"].isString()||options["uiCreated"].toString().getLargeIntValue()<=0)return fail("invalid_arguments","Expected the UI process creation time");
         if (!engine.flushSession()) return fail("session_save_failed", "The session could not be saved. Restart later.");
-        lightHostModern::restart::prepare((DWORD)(int64)options["uiPid"], (uint64)options["uiCreated"].toString().getLargeIntValue());
+        const bool reset = command == "factory-reset";
+        const auto settingsFile = getAppProperties().getUserSettings()->getFile();
+        const auto marker = settingsFile.getSiblingFile(settingsFile.getFileName() + ".factory-reset");
+        if (reset) {
+            try { lightHostModern::settingsReset::request({std::filesystem::path(settingsFile.getFullPathName().toWideCharPointer()),
+                lightHostModern::RuntimeProfile::current().uiSettings(), lightHostModern::verbose::root()}); }
+            catch (...) { return fail("reset_failed", "Could not safely schedule the reset."); }
+        }
+        try { lightHostModern::restart::prepare((DWORD)(int64)options["uiPid"], (uint64)options["uiCreated"].toString().getLargeIntValue()); }
+        catch (...) { if (reset) marker.deleteFile(); throw; }
+        if (reset && !lightHostModern::RuntimeProfile::current().test) setStartWithWindows(false);
         quitRequested.store(true);
         if (!responseInFlight.load()) JUCEApplication::getInstance()->quit();
         return commandOk();
@@ -754,7 +843,7 @@ String HostIpcServer::dispatchRequest(const lightHostModern::ipc::Request& reque
         details->setProperty("path", plugin.fileOrIdentifier); details->setProperty("identity", plugin.createIdentifierString());
         details->setProperty("availability", "unverified");
         Array<var> buses;
-        const auto metadata = XmlDocument::parse(engine.getPluginMetadata(record ? record->originalIdentity : id));
+        const auto metadata = lightHostModern::parseBoundedXml(engine.getPluginMetadata(record ? record->originalIdentity : id), 4 * 1024 * 1024, 32, 65536);
         details->setProperty("declaredMetadata", metadata ? metadata->getStringAttribute("declaredMetadata", "unavailable") : "unavailable");
         details->setProperty("verifiedMetadata", metadata ? metadata->getStringAttribute("verifiedMetadata", "unavailable") : "unavailable");
         if (metadata)
@@ -799,6 +888,10 @@ String HostIpcServer::dispatchRequest(const lightHostModern::ipc::Request& reque
     if (command == "rename-known-plugin")
         return engine.renameKnownPlugin(index, args[1].toString()) ? commandOk()
             : fail("invalid_instance_name", "Use a single-line name with at most 128 Unicode characters");
+    if (command == "rename-audio-channel") {
+        const auto error = engine.renameAudioChannel(args[0]);
+        return error.isEmpty() ? commandOk() : fail("invalid_arguments", error);
+    }
     if (command == "rename-plugin")
         return engine.renamePlugin(index, args[1].toString()) ? commandOk()
             : fail("invalid_instance_name", "Use a single-line name with at most 128 Unicode characters");
@@ -853,8 +946,8 @@ String HostIpcServer::dispatchRequest(const lightHostModern::ipc::Request& reque
 	{
 		try
 		{
-			engine.duplicatePlugin(index);
-			return commandOk();
+			PluginInstanceId created; engine.duplicatePlugin(index, &created);
+			return "{\"status\":\"ok\",\"instanceId\":" + quote(created) + "}";
 		}
 		catch (...)
 		{
@@ -1166,19 +1259,8 @@ String HostIpcServer::dispatchRequest(const lightHostModern::ipc::Request& reque
 		return commandResult(engine.removeBlockedAudioDevice(index));
 	}
 
-	if (command == "set-enabled-audio-backend")
-	{
-		const int backendIndex = static_cast<int>(args[0]);
-		const bool enabled = static_cast<bool>(args[1]);
-		return commandResult(engine.setAudioBackendEnabledByIndex(backendIndex, enabled));
-	}
-
-	if (command == "set-enabled-audio-device")
-	{
-		const int deviceIndex = static_cast<int>(args[0]);
-		const bool enabled = static_cast<bool>(args[1]);
-		return commandResult(engine.setAudioDeviceChoiceEnabledByIndex(deviceIndex, enabled));
-	}
+    if (command == "set-enabled-audio-backend" || command == "set-enabled-audio-device")
+        return fail("obsolete_device_command", "Use the versioned enabled-device transaction.");
 
 	if (command == "scan-default-plugins")
 	{
@@ -1264,6 +1346,13 @@ String HostIpcServer::dispatchRequest(const lightHostModern::ipc::Request& reque
 		return commandResult(setVst2RuntimeEnabled(index != 0));
 	}
 
+    if (command == "notify-release") {
+        const auto version=lightHostModern::update::parseVersion(std::wstring(payload.toWideCharPointer()));
+        const auto current=lightHostModern::update::parseVersion(std::wstring(String(JUCE_APPLICATION_VERSION_STRING).toWideCharPointer()));
+        if(!version || !current || *version<=*current) return fail("invalid_argument", "A newer release version is required.");
+        return commandResult(releaseNotification && releaseNotification(payload));
+    }
+
 	if (command == "set-tray-icon-mode")
 	{
 		const bool success = setTrayIconMode(payload);
@@ -1280,6 +1369,7 @@ String HostIpcServer::dispatchRequest(const lightHostModern::ipc::Request& reque
     }
 	if (command == "quit-host")
 	{
+		if (engine.isSessionWritable() && !engine.flushSession()) return fail("session_save_failed", "The session could not be saved. The app remains open.");
 		quitRequested.store(true);
 		if (!responseInFlight.load()) JUCEApplication::getInstance()->quit();
 		return commandOk();
@@ -1379,7 +1469,7 @@ String HostIpcServer::buildTelemetry()
         "\"chainVersion\":" + String((int64) engine.getChainVersion()) + ","
 		"\"pluginDbVersion\":" + String((int64) engine.getPluginDatabaseVersion()) + ","
 		"\"audioConfigVersion\":" + String((int64) engine.getAudioConfigVersion()) + ","
-		"\"diagnostics\":" + buildDiagnostics(diagnostics) + ""
+		"\"isolatedPlugins\":" + JSON::toString(engine.isolatedPluginDiagnostics(), true) + ",\"diagnostics\":" + buildDiagnostics(diagnostics) + ""
 	"}";
 }
 
@@ -1402,8 +1492,11 @@ String HostIpcServer::buildSnapshot()
             + ",\"knownId\":" + quote(record.originalIdentity)
             + ",\"name\":" + quote(record.displayName())
             + ",\"originalName\":" + quote(plugin.name)
+            + ",\"cardColor\":" + quote(record.cardColor)
             + ",\"customName\":" + quote(record.customName)
             + ",\"loading\":" + quote(record.loading)
+            + ",\"isolated\":" + String(record.isolated ? "true" : "false")
+            + ",\"worker\":" + JSON::toString(engine.isolatedPluginDiagnostics(record.id), true)
             + ",\"error\":" + quote(record.error)
 			+ ",\"manufacturer\":" + quote(plugin.manufacturerName)
 			+ ",\"format\":" + quote(plugin.pluginFormatName)
@@ -1441,7 +1534,9 @@ String HostIpcServer::buildSnapshot()
 		"\"status\":\"online\","
         "\"diagnosticsEnabled\":" + String(engine.isDiagnosticsEnabled() ? "true" : "false") + ","
 		"\"knownPlugins\":" + String(knownPlugins) + ","
+        "\"audioDeviceAliases\":" + JSON::toString(engine.getAudioDeviceAliases(), true) + ","
         "\"audioSelection\":" + JSON::toString(engine.getAudioSelectionState(), true) + ","
+        "\"operating\":" + JSON::toString(engine.getOperatingState(), true) + ","
         "\"hostPid\":" + String((int64) GetCurrentProcessId()) + ","
         "\"hostExecutable\":" + quote(File::getSpecialLocation(File::currentExecutableFile).getFullPathName()) + ","
 		"\"activePluginCount\":" + String((int) activePlugins.size()) + ","
@@ -1452,7 +1547,7 @@ String HostIpcServer::buildSnapshot()
         "\"chainVersion\":" + String((int64) engine.getChainVersion()) + ","
 		"\"pluginDbVersion\":" + String((int64) engine.getPluginDatabaseVersion()) + ","
 		"\"audioConfigVersion\":" + String((int64) engine.getAudioConfigVersion()) + ","
-		"\"diagnostics\":" + buildDiagnostics(diagnostics) + ","
+		"\"isolatedPlugins\":" + JSON::toString(engine.isolatedPluginDiagnostics(), true) + ",\"diagnostics\":" + buildDiagnostics(diagnostics) + ","
 		"\"appConfig\":{"
 			"\"startWithWindows\":" + String(isStartWithWindowsEnabled() ? "true" : "false") + ","
 			"\"closeBehavior\":" + quote(getCloseBehavior()) + ","
@@ -1479,6 +1574,7 @@ String HostIpcServer::buildSnapshot()
 			"\"customOutputDeviceNames\":" + stringArrayJson(audioConfig.customOutputDeviceNames) + ","
 			"\"inputDeviceNames\":" + stringArrayJson(audioConfig.inputDeviceNames) + ","
 			"\"outputDeviceNames\":" + stringArrayJson(audioConfig.outputDeviceNames) + ","
+			"\"channelAliases\":" + JSON::toString(engine.getAudioChannelAliases(), true) + ","
 			"\"inputChannelNames\":" + stringArrayJson(audioConfig.inputChannelNames) + ","
 			"\"outputChannelNames\":" + stringArrayJson(audioConfig.outputChannelNames) + ","
 			"\"activeInputChannels\":" + boolArrayJson(audioConfig.activeInputChannels) + ","
@@ -1508,10 +1604,12 @@ String HostIpcServer::buildEnabledAudioChoices()
 
 	return "{"
 		"\"status\":\"ok\","
-		"\"allAudioBackendNames\":" + stringArrayJson(choices.backendNames) + ","
+		"\"choiceToken\":" + quote(choices.token) + ","
+        "\"allAudioBackendNames\":" + stringArrayJson(choices.backendNames) + ","
 		"\"allAudioBackendEnabled\":" + boolArrayJson(choices.backendEnabled) + ","
 		"\"allAudioDeviceChoices\":" + stringArrayJson(deviceEntries) + ","
-		"\"allAudioDeviceChoiceEnabled\":" + boolArrayJson(choices.deviceEnabled) +
+		"\"audioDeviceAliases\":" + JSON::toString(engine.getAudioDeviceAliases(), true) + ","
+        "\"allAudioDeviceChoiceEnabled\":" + boolArrayJson(choices.deviceEnabled) +
 	"}";
 }
 

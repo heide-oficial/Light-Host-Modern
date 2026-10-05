@@ -1,5 +1,7 @@
 #pragma once
+#include "HoverHelp.h"
 #include "HostJson.h"
+#include "VisualPreferences.h"
 #include "Localization.h"
 #include "../../Source/ProcessMetrics.h"
 #include <iomanip>
@@ -54,8 +56,8 @@ public:
                 row.label.TextWrapping(TextWrapping::Wrap); row.value.TextWrapping(TextWrapping::Wrap);
                 row.value.IsTextSelectionEnabled(true); row.value.HorizontalAlignment(HorizontalAlignment::Right);
                 // Attach once: replacing ToolTip on every telemetry tick can cancel pending hover display.
-                ToolTipService::SetToolTip(row.label, row.labelTip);
-                ToolTipService::SetToolTip(row.value, row.valueTip);
+                lightHostModern::ui::HoverHelp::SetToolTip(row.label, row.labelTip);
+                lightHostModern::ui::HoverHelp::SetToolTip(row.value, row.valueTip);
                 Grid::SetRow(row.label, index); Grid::SetRow(row.value, index++); Grid::SetColumn(row.value, 1);
                 Automation::AutomationProperties::SetAutomationId(row.value, to_hstring(std::string("Diagnostic-") + definition.key));
                 group.values.Children().Append(row.label); group.values.Children().Append(row.value); rows.push_back(row);
@@ -65,7 +67,7 @@ public:
         addGroup("performance", L"\xE950", L"Performance", L"Audio processing load and CPU use by each part of the app.", {
             {"appCpuPercent", "App CPU", 2, "%"}, {"dspLoadPercent", "DSP load", 2, "%"}, {"hostCpuPercent", "Host CPU", 2, "%"},
             {"uiCpuPercent", "UI CPU", 2, "%"}, {"workerCpuPercent", "Worker CPU", 2, "%"}});
-        addGroup("memory", L"\xE950", L"App memory", L"Private memory used by the host, interface and scanner. Shared pages are excluded.", {
+        addGroup("memory", L"\xE950", L"App memory", L"Private memory used by the app and its helper processes. Shared pages are excluded.", {
             {"appResidentMiB", "Resident RAM", 1, " MiB"}, {"appCommittedMiB", "Committed memory", 1, " MiB"}});
         addGroup("reliability", L"\xE9D9", L"Audio reliability", L"Interruptions, processing errors and MIDI events that exceeded capacity.", {
             {"xRunCount", "Xruns", 0, ""}, {"processFailures", "Processing failures", 0, ""}, {"midiOverflow", "Dropped MIDI events", 0, ""}});
@@ -78,6 +80,9 @@ public:
         addGroup("activity", L"\xE9D2", L"Processing activity", L"Audio and MIDI processed during this host session.", {
             {"processedBlocks", "Processed blocks", 0, ""}, {"processedSamples", "Processed samples", 0, ""},
             {"inputMidiEvents", "Input MIDI events", 0, ""}, {"outputMidiEvents", "Output MIDI events", 0, ""}});
+        workerCard = Border(); workerCard.Style(resources.Lookup(box_value(L"AppCardStyle")).as<Style>());
+        workerText = TextBlock(); workerText.TextWrapping(TextWrapping::Wrap); workerText.IsTextSelectionEnabled(true);
+        workerCard.Child(workerText); workerCard.Visibility(Visibility::Collapsed);host.Children().Append(workerCard);
         resize(780); update("{}", catalog);
     }
     void resize(double)
@@ -96,6 +101,18 @@ public:
     void update(const std::string& json, ::LightHostModernWinUI::LocalizationCatalog& catalog)
     {
         using namespace winrt;
+        const auto workers=ipc::extractArray(json,"isolatedPlugins");std::wstring detail;
+        for(const auto& v:workers){if(v.ValueType()!=ipc::JsonValueType::Object)continue;const auto w=v.GetObject();
+            if(!detail.empty())detail+=L"\n\n";
+            detail+=std::wstring(w.GetNamedString(L"name",L"Plugin"))+L"\n";
+            detail+=std::wstring(catalog.translatedSource(L"Separate process"))+L" · PID "+std::to_wstring(static_cast<int>(w.GetNamedNumber(L"pid",0)));
+            detail+=L" · "+std::to_wstring(static_cast<int>(w.GetNamedNumber(L"latencySamples",0)))+L" "+std::wstring(catalog.text("common.samples",L"samples"));
+            detail+=L"\n"+std::wstring(catalog.translatedSource(L"Missed blocks"))+L": "+std::to_wstring(static_cast<uint64_t>(w.GetNamedNumber(L"underruns",0)));
+            detail+=L" · RAM: "+std::to_wstring(static_cast<int>(w.GetNamedNumber(L"committedBytes",0)/1048576))+L" MiB";
+            if(w.HasKey(L"cpuPercent")&&w.GetNamedValue(L"cpuPercent").ValueType()==ipc::JsonValueType::Number){std::wostringstream cpu;cpu<<std::fixed<<std::setprecision(2)<<w.GetNamedNumber(L"cpuPercent");detail+=L" · CPU: "+cpu.str()+L"%";}
+            const auto error=w.GetNamedString(L"error",L"");if(!error.empty())detail+=L"\n"+std::wstring(error);
+        }
+        if(workerCard){workerCard.Visibility(detail.empty()?Microsoft::UI::Xaml::Visibility::Collapsed:Microsoft::UI::Xaml::Visibility::Visible);workerText.Text(detail);}
         for (const auto& group : groups)
         {
             group.title.Text(catalog.text(std::string("diagnostics.group.") + group.key, group.fallbackTitle));
@@ -140,6 +157,8 @@ public:
     }
     void resetCpuSampler() { cpuSampler.reset(); }
 private:
+    winrt::Microsoft::UI::Xaml::Controls::Border workerCard{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TextBlock workerText{nullptr};
     struct Definition { const char* key; const char* label; int precision; const char* unit; };
     struct Row
     {

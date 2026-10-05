@@ -1,5 +1,8 @@
 #include "UpdatePackage.h"
 #include "UpdateApply.h"
+#include "PortableUpdate.h"
+#include "UpdateCache.h"
+#include "InstallerLocation.h"
 #include "ScenarioRunner.h"
 #include <cstring>
 #include <iostream>
@@ -71,6 +74,7 @@ std::filesystem::path zipFixture(const std::filesystem::path& parent, const char
         builder.addEntry(new juce::MemoryInputStream(contents.data(), contents.size(), true), 6, name, juce::Time::getCurrentTime());
     };
     add("release-info.json", std::string("{\"name\":\"LightHostModern\",\"version\":\"") + version + "\",\"platform\":\"" + platform + "\"}");
+    add("legacy-payload-files.json", "[]");
     add("LightHostModern.exe", pe(!wrongPe)); add("LightHostModernScanner.exe", pe());
     if (!omitHelper) add("LightHostModernUpdateHelper.exe", pe());
     add("WinUI/x64/Release/LightHostModern.WinUI/LightHostModernWinUI.exe", pe());
@@ -104,9 +108,30 @@ Artifact forFile(const std::filesystem::path& file, Distribution distribution = 
     artifact.url = L"https://github.com/heide-oficial/Light-Host-Modern/releases/download/" + artifact.version + L"/" + artifact.name; return artifact;
 }
 }
-int main()
+#include "PortableUpdateScenarios.h"
+#include "BackgroundReleaseScenarios.h"
+int main(int argc, char** argv)
 {
+    if (argc >= 2 && std::string(argv[1]) == "--verify-configured-manifest")
+    {
+        // This entry point deliberately uses the compiled production roots.
+        // No TestSigningKey, trust override, package preparation or installation.
+        try
+        {
+            require(argc == 3, "invalid_arguments");
+            const auto operation = std::filesystem::absolute(juce::String::fromUTF8(argv[2]).toWideCharPointer());
+            const auto body = readSmallFile(operation / L"update-manifest.json", 4 * 1024 * 1024);
+            const auto signature = readSmallFile(operation / L"update-manifest.sig", 16384);
+            verifySignedManifest(body, signature);
+            std::cout << "configured_manifest_validated\n";
+            return 0;
+        }
+        catch (const Error& error) { std::cerr << error.code << '\n'; return 1; }
+        catch (const std::exception&) { std::cerr << "manifest_read_failed\n"; return 1; }
+    }
     scenarios::Runner runner;
+    if (argc == 2 && std::string(argv[1]) == "--background-release") { backgroundReleaseTests::run(runner); return runner.result(); }
+    if (argc == 2) { realPortablePackageScenario(runner, std::filesystem::absolute(juce::String::fromUTF8(argv[1]).toWideCharPointer())); return runner.result(); }
     runner.run("Strict release identity, architecture, artifact, size and checksum metadata", [] {
         scenarios::require(parseVersion(L"v1.2.2") == parseVersion(L"1.2.2"), "Version normalization failed");
         for (const auto* value : {L"1.2", L"1.2.2.4", L"1.2.2-beta", L"1x2x3", L"1.02.3", L"1.2.3 ", L"999999999999.2.3"})
@@ -201,9 +226,12 @@ int main()
         for (auto code : {0u, 1602u, 1603u, 1641u, 3010u}) {
             Apply environment; environment.exitCode = code; applyWhenReady(environment);
             scenarios::require(environment.state == installerOutcome(code) && environment.reportedCode == code, "Installer result was lost");
+            scenarios::require(installationCompleted(environment.state, environment.reportedCode)
+                == (code == 0 || code == 3010 || code == 1641), "Only successful installation can change the restart location");
         }
         Apply failure; failure.failStart = true; applyWhenReady(failure);
         scenarios::require(failure.state == "installer_start_failed", "Start failure was hidden");
+        scenarios::require(!installationCompleted(failure.state, failure.reportedCode), "A start failure with code zero must preserve the old executable path");
     });
     runner.run("Process creation identity and installation path prevent reuse or portable misclassification", [] {
         const auto process = processHandle(GetCurrentProcessId()); const auto created = processCreation(process.value);
@@ -213,5 +241,33 @@ int main()
         const auto parent = directory(); std::filesystem::create_directory(parent / L"elsewhere");
         scenarios::require(sameDirectory(parent / L"host.exe", parent.wstring()) && !sameDirectory(parent / L"host.exe", (parent / L"elsewhere").wstring()), "Installation location was approximated");
     });
+    runner.run("MSI upgrades select a unique registered directory and preserve custom paths", [] {
+        using namespace lightHostModern::installation;
+        scenarios::require(uniqueRoot({}).empty(), "Fresh install must use the MSI default directory");
+        const std::filesystem::path custom = LR"(D:\Audio Apps\LightHostModern)";
+        scenarios::require(samePath(uniqueRoot({custom, LR"(d:\Audio Apps\LightHostModern\)"}), custom), "Equivalent MSI registrations changed the install directory");
+        bool rejected = false;
+        try { (void)uniqueRoot({custom, LR"(C:\Program Files\LightHostModern)"}); } catch (...) { rejected = true; }
+        scenarios::require(rejected, "Ambiguous installation must not silently choose a different directory");
+        for (const auto* invalid : {L"", L"C:\\", L"relative\\app", L"C:\\bad\"name"}) {
+            rejected = false;
+            try { (void)uniqueRoot({invalid}); } catch (...) { rejected = true; }
+            scenarios::require(rejected, "Invalid MSI installation path accepted");
+        }
+    });
+    runner.run("Update cache retains leased operations and bounds completed history", [] {
+        const auto parent=directory();std::vector<std::filesystem::path> operations;
+        Handle lease;
+        for(int n=0;n<7;++n){const auto path=parent/(L"{"+std::wstring(juce::Uuid().toDashedString().toWideCharPointer())+L"}");std::filesystem::create_directory(path);markUpdateCache(path);operations.push_back(path);std::filesystem::last_write_time(path,std::filesystem::file_time_type::clock::now()-std::chrono::hours(24*(n+1)));}
+        lease=updateCacheLease(operations.back());
+        std::filesystem::last_write_time(operations.back(),std::filesystem::file_time_type::clock::now()-std::chrono::hours(24*8));
+        const auto unrelated=parent/L"user-files";std::filesystem::create_directory(unrelated);
+        pruneUpdateCache(parent);
+        scenarios::require(std::filesystem::exists(operations.back())&&std::filesystem::exists(unrelated),"Active operation or unowned directory deleted");
+        scenarios::require(!std::filesystem::exists(operations[5]),"Old inactive cache not pruned");
+        lease.reset();pruneUpdateCache(parent);scenarios::require(!std::filesystem::exists(operations.back()),"Expired released lease retained forever");
+    });
+    backgroundReleaseTests::run(runner);
+    portableScenarios(runner);
     return runner.result();
 }

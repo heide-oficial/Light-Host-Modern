@@ -3,7 +3,7 @@
 
 namespace lightHostModern::ipc
 {
-inline constexpr int protocolVersion = 4;
+inline constexpr int protocolVersion = 5;
 enum class Arguments { none, integer, number, boolean, text, object, twoIntegers, integerBoolean, twoTexts, unknown };
 
 inline Arguments argumentsFor(std::string_view command)
@@ -15,15 +15,16 @@ inline Arguments argumentsFor(std::string_view command)
         {"snapshot", A::none}, {"state-snapshot", A::none}, {"telemetry", A::none}, {"meter-levels", A::none},
         {"snapshot-manifest", A::none}, {"snapshot-page", A::object}, {"events", A::object},
         {"transport-diagnostics", A::none},
+        {"restore-all-names", A::none}, {"factory-reset", A::object}, {"rename-audio-devices", A::object}, {"rename-audio-channel", A::object}, {"operating-state", A::none}, {"operating-command", A::object}, {"routing-meters", A::none},
         {"verbose-log-status", A::none}, {"set-verbose-logs", A::boolean},
         {"stop-verbose-logs", A::none}, {"complete-verbose-logs", A::text}, {"restart-host", A::object},
         {"measure-callbacks", A::twoIntegers}, {"callback-measurement", A::none},
         {"select-audio-device", A::object}, {"audio-device-options", A::text}, {"set-preferred-audio-device", A::object},
-        {"enabled-audio-choices", A::none}, {"remove-missing-known-plugins", A::none},
+        {"update-enabled-audio-choices", A::object}, {"enabled-audio-choices", A::none}, {"remove-missing-known-plugins", A::none},
         {"plugin-scan-status", A::none}, {"cancel-plugin-scan", A::none}, {"retry-plugin-scan", A::none},
         {"plugin-scan-failures", A::object}, {"retry-plugin-scan-selection", A::object},
         {"known-plugin-details", A::text},
-        {"instance-details", A::text},
+        {"instance-details", A::text}, {"plugin-buses", A::text},
         {"begin-plugin-scan", A::none},
         {"clear-known-plugins", A::none}, {"retry-audio-device", A::none},
         {"delete-plugin-states", A::none}, {"quit-host", A::none}, {"flush-session", A::none},
@@ -50,7 +51,7 @@ inline Arguments argumentsFor(std::string_view command)
         {"block-audio-input", A::text}, {"block-audio-output", A::text},
         {"scan-default-plugins", A::text}, {"scan-plugin-path", A::text},
         {"scan-plugin-roots", A::object},
-        {"set-close-behavior", A::text}, {"set-tray-icon-mode", A::text},
+        {"notify-release", A::text}, {"set-close-behavior", A::text}, {"set-tray-icon-mode", A::text},
         {"move-plugin-to", A::twoTexts}, {"swap-plugin-with", A::twoTexts},
         {"set-input-channel", A::integerBoolean}, {"set-output-channel", A::integerBoolean},
         {"set-enabled-audio-backend", A::integerBoolean}, {"set-enabled-audio-device", A::integerBoolean}
@@ -66,10 +67,11 @@ inline bool isReadOnly(std::string_view command)
         || command == "state-snapshot" || command == "telemetry" || command == "meter-levels"
         || command == "snapshot-manifest" || command == "snapshot-page" || command == "events"
         || command == "transport-diagnostics"
+        || command == "operating-state" || command == "routing-meters"
         || command == "verbose-log-status"
         || command == "callback-measurement"
         || command == "audio-device-options"
         || command == "enabled-audio-choices" || command == "plugin-scan-status"
-        || command == "plugin-scan-failures" || command == "known-plugin-details" || command == "instance-details";
+        || command == "plugin-scan-failures" || command == "known-plugin-details" || command == "instance-details" || command == "plugin-buses";
 }
 }

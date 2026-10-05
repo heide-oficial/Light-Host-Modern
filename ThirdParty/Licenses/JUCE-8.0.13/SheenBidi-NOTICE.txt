@@ -1,0 +1,6 @@
+SheenBidi
+Copyright (C) 2014-2025 Muhammad Tayyab Akram
+
+This notice is retained from the SheenBidi source distributed with JUCE 8.0.13,
+including modules/juce_graphics/unicode/sheenbidi/Source/SheenBidi.c.
+The Apache License, Version 2.0 is included in SheenBidi-LICENSE.txt.

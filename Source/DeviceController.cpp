@@ -1,6 +1,7 @@
 #include "DeviceController.h"
 #include <algorithm>
 #include <cmath>
+#include "PluginInstances.h"
 void lightHostModernLog(const String& message);
 
 namespace
@@ -303,6 +304,31 @@ var DeviceController::optionsForBackend(const String& backend)
     return var(result);
 }
 
+bool DeviceController::restoreProfileConfiguration(const AudioDeviceSelection& request)
+{
+    if (selectConfiguration(request)) return true;
+    // A profile must never keep playing through the previous profile's device
+    // when its own target cannot be opened. Keep the requested identity for retry.
+    deviceManager.closeAudioDevice();
+    configuredBackend = request.backend; configuredSetup = request.setup; effectiveSetup = {};
+    attemptedBackend = request.backend; attemptedSetup = request.setup; attemptedGeneration = generation;
+    audioStartSuspended = false; applicationsSuspended = false;
+    audioRecoveryState = "failed"; audioRecoveryMessage = lastAudioConfigurationError;
+    preferences.setValue("audioSelectionSuspended", false);
+    for (const auto* prefix : {"audioPersistenceLast", "audioPersistenceCustom"})
+    {
+        preferences.setValue(String(prefix) + "Backend", request.backend);
+        preferences.setValue(String(prefix) + "InputDevice", request.setup.inputDeviceName);
+        preferences.setValue(String(prefix) + "OutputDevice", request.setup.outputDeviceName);
+    }
+    XmlElement saved("DEVICESETUP"); saved.setAttribute("deviceType", request.backend);
+    saved.setAttribute("audioInputDeviceName", request.setup.inputDeviceName); saved.setAttribute("audioOutputDeviceName", request.setup.outputDeviceName);
+    saved.setAttribute("audioDeviceRate", request.setup.sampleRate); saved.setAttribute("audioDeviceBufferSize", request.setup.bufferSize);
+    saved.setAttribute("audioDeviceInChans", request.setup.inputChannels.toString(2)); saved.setAttribute("audioDeviceOutChans", request.setup.outputChannels.toString(2));
+    preferences.setValue("audioDeviceState", &saved); ++audioConfigVersion; markSettingsDirty(); scheduleRetry();
+    return false;
+}
+
 bool DeviceController::selectConfiguration(const AudioDeviceSelection& request)
 {
     if (request.expectedGeneration != generation)
@@ -380,7 +406,7 @@ bool DeviceController::setPreferredDevice(const String& backend, const String& i
 
 void DeviceController::start(bool safeMode, bool suspended)
 {
-    if (const auto saved = preferences.getXmlValue("audioDeviceState"))
+    if (const auto saved = lightHostModern::parseBoundedXml(preferences.getValue("audioDeviceState"), 4 * 1024 * 1024))
     {
         configuredBackend = saved->getStringAttribute("deviceType");
         configuredSetup.inputDeviceName = saved->getStringAttribute("audioInputDeviceName", saved->getStringAttribute("audioDeviceName"));
@@ -816,7 +842,63 @@ AvailableAudioChoicesConfiguration DeviceController::getAvailableAudioChoicesCon
 		}
 	}
 
-	return config;
+    String identity = String(generation);
+    const auto add = [&](const String& value) { identity += ":" + String(value.length()) + ":" + value; };
+    for (size_t i = 0; i < config.backendNames.size(); ++i) { add(config.backendNames[i]); add(config.backendEnabled[i] ? "1" : "0"); }
+    for (size_t i = 0; i < config.deviceChoices.size(); ++i) {
+        const auto& choice = config.deviceChoices[i]; add(choice.backendName); add(choice.role); add(choice.deviceName); add(config.deviceEnabled[i] ? "1" : "0");
+    }
+    config.token = juce::SHA256(identity.toRawUTF8(), identity.getNumBytesAsUTF8()).toHexString();
+    return config;
+}
+
+String DeviceController::updateEnabledChoices(const var& request)
+{
+    const auto current = getAvailableAudioChoicesConfiguration();
+    if (!request["token"].isString() || request["token"].toString() != current.token)
+        return "The audio device list changed. Reopen Enabled devices and try again.";
+    const auto* backends = request["backends"].getDynamicObject();
+    const auto* devices = request["devices"].getDynamicObject();
+    const auto* names = request["names"].getDynamicObject();
+    if (!backends || !devices || !names) return "Invalid enabled-device transaction.";
+    std::map<String, int> backendCounts, deviceCounts;
+    for (const auto& name : current.backendNames) {
+        if(name.containsAnyOf("|\r\n"))return "Ambiguous audio backend identity. No settings were changed.";
+        ++backendCounts[name.toLowerCase()];
+    }
+    for (const auto& choice : current.deviceChoices) {
+        if(choice.backendName.containsAnyOf("|\r\n")||choice.deviceName.containsAnyOf("|\r\n"))return "Ambiguous audio device identity. No settings were changed.";
+        ++deviceCounts[(choice.backendName + "|" + choice.role + "|" + choice.deviceName).toLowerCase()];
+    }
+    auto nextBackends = readSettingLines(preferences, "blockedAudioBackends");
+    auto nextDevices = readSettingLines(preferences, "blockedAudioDevices");
+    auto aliases = lightHostModern::parseBoundedJson(preferences.getValue("audioDeviceAliases", "{}"));
+    if (!aliases.isObject()) aliases = var(new DynamicObject);
+    const auto editFlags = [](const DynamicObject& edits, const std::map<String,int>& available, StringArray& blocked) {
+        for (const auto& edit : edits.getProperties()) {
+            const auto key = edit.name.toString(); const auto it = available.find(key.toLowerCase());
+            if (it == available.end() || it->second != 1 || !edit.value.isBool()) return false;
+            for (int i = blocked.size(); --i >= 0;) if (blocked[i].equalsIgnoreCase(key)) blocked.remove(i);
+            if (!static_cast<bool>(edit.value)) blocked.add(key);
+        }
+        return true;
+    };
+    if (!editFlags(*backends, backendCounts, nextBackends) || !editFlags(*devices, deviceCounts, nextDevices))
+        return "An audio device is missing or ambiguous. No settings were changed.";
+    for (const auto& edit : names->getProperties()) {
+        const auto key = edit.name.toString(); String normalized;
+        if (deviceCounts[key.toLowerCase()] != 1 || !edit.value.isString() || !lightHostModern::normalizeInstanceName(edit.value.toString(), normalized))
+            return "Invalid or ambiguous device name. No settings were changed.";
+        if (normalized.isEmpty()) aliases.getDynamicObject()->removeProperty(edit.name);
+        else aliases.getDynamicObject()->setProperty(edit.name, normalized);
+    }
+    // All validation precedes all changes. One inventory and one invalidation.
+    writeSettingLines(preferences, "blockedAudioBackends", nextBackends);
+    writeSettingLines(preferences, "blockedAudioDevices", nextDevices);
+    preferences.setValue("audioDeviceAliases", JSON::toString(aliases, true));
+    invalidateConfiguration(); markSettingsDirty(); ++audioConfigVersion;
+    closeCurrentAudioDeviceIfBlocked("enabled device transaction");
+    return {};
 }
 
 bool DeviceController::isAudioBackendBlocked(const String& backendName) const

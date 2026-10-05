@@ -17,6 +17,22 @@ function(lighthost_patch_once path marker before after)
         file(WRITE "${path}" "${content}")
     endif()
 endfunction()
+# Preferences must consume the bounded tree itself. A preflight followed by
+# PropertiesFile reopening the file would leave an unsafe second read. Keep the
+# hooks optional so other JUCE consumers retain their original behavior.
+set(LH_PROPERTIES "${juce_SOURCE_DIR}/modules/juce_data_structures/app_properties")
+lighthost_patch_once("${LH_PROPERTIES}/juce_PropertiesFile.h" "xmlFileReader;"
+    "        InterProcessLock* processLock;"
+    "        InterProcessLock* processLock;\n\n        std::function<std::unique_ptr<XmlElement>(const File&)> xmlFileReader;\n        std::function<std::unique_ptr<XmlElement>(const String&)> xmlValueParser;")
+lighthost_patch_once("${LH_PROPERTIES}/juce_PropertiesFile.cpp" "options.xmlFileReader ? loadAsXml()"
+    "    loadedOk = (! file.exists()) || loadAsBinary() || loadAsXml();"
+    "    loadedOk = (! file.exists()) || (options.xmlFileReader ? loadAsXml() : (loadAsBinary() || loadAsXml()));")
+lighthost_patch_once("${LH_PROPERTIES}/juce_PropertiesFile.cpp" "options.xmlFileReader (file)"
+    "    if (auto doc = parseXMLIfTagMatches (file, PropertyFileConstants::fileTag))"
+    "    auto doc = options.xmlFileReader ? options.xmlFileReader (file) : parseXMLIfTagMatches (file, PropertyFileConstants::fileTag);\n    if (doc != nullptr && doc->hasTagName (PropertyFileConstants::fileTag))")
+lighthost_patch_once("${LH_PROPERTIES}/juce_PropertiesFile.cpp" "options.xmlValueParser (props"
+    "        if (auto childElement = parseXML (props.getAllValues() [i]))"
+    "        if (auto childElement = options.xmlValueParser ? options.xmlValueParser (props.getAllValues() [i]) : parseXML (props.getAllValues() [i]))")
 set(LH_PROCESSORS "${juce_SOURCE_DIR}/modules/juce_audio_processors_headless/processors")
 lighthost_patch_once("${LH_PROCESSORS}/juce_PluginDescription.h" "String vst3ClassId;"
     "    int uniqueId = 0;" "    int uniqueId = 0;\n    String vst3ClassId;")

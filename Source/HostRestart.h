@@ -1,6 +1,7 @@
 #pragma once
 #include "UpdateWindows.h"
 #include "RuntimeProfile.h"
+#include "PortablePaths.h"
 #include <map>
 
 namespace lightHostModern::restart
@@ -44,9 +45,10 @@ inline int run(const std::map<std::wstring, std::wstring>& args)
     HANDLE waits[]{host.value, ui.value};
     // Never kill a host that is still saving state or force-close the user's UI.
     require(WaitForMultipleObjects(2, waits, TRUE, 60000) == WAIT_OBJECT_0, "restart_shutdown_timeout");
-    auto command = quoteArgument(executable.wstring()) + L" --show-ui" + RuntimeProfile::current().arguments();
+    const auto entry=launchEntry(executable);
+    auto command = quoteArgument(entry.wstring()) + L" --show-ui" + RuntimeProfile::current().arguments();
     STARTUPINFOW startup{sizeof(startup)}; PROCESS_INFORMATION process{};
-    windowsCheck(CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, executable.parent_path().c_str(), &startup, &process), "restart_launch_failed");
+    windowsCheck(CreateProcessW(entry.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, entry.parent_path().c_str(), &startup, &process), "restart_launch_failed");
     CloseHandle(process.hThread); CloseHandle(process.hProcess); return 0;
 }
 }
