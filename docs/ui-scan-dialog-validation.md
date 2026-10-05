@@ -1,5 +1,7 @@
 # Navegação e busca de plugins — 12/09/2026
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 Support me fica abaixo de Settings. A página Database saiu da navegação. Remove missing e Clear database agora pertencem ao grupo Plugin database em Settings, com o mesmo padrão de ícone, título, descrição e ação dos demais cards. A confirmação de limpeza e o retorno do foco foram preservados.
 
 Installed contém Scan for plugins imediatamente à esquerda de Sort. Running e Installed usam a mesma regra de largura para a busca. O novo modal reúne caminhos e varredura sem abas: campo para adicionar uma pasta, lista de caminhos salvos, ação principal no rodapé e progresso somente quando relevante. Alterações de caminhos são salvas automaticamente. É possível cancelar a varredura, fechar e reabrir o modal enquanto ela continua e consultar falhas sem sobrepor dois ContentDialogs.
@@ -20,13 +22,13 @@ Pacote gerado em 12/09/2026 às 17h42, horário local:
 
 Evidências:
 
-- [Cenários de UI](../out/ui-scan-20260912/screenshots/results.json)
-- [Verificação final da UI](../out/ui-scan-20260912/screenshots-final/results.json)
-- [Settings no portátil](../out/ui-scan-20260912/portable/screenshots/portable-settings.png)
-- [Modal no portátil](../out/ui-scan-20260912/portable/screenshots/portable-combined-scan.png)
-- [Modal em português e tema claro](../out/ui-scan-20260912/screenshots-final/scan-dialog-portuguese-light.png)
-- [UI aberta pelo host portátil](../out/ui-scan-20260912/portable/host-launch-verification.json)
-- [Verificação da extração](../out/release-ui-layout-fixes/portable-verification.json)
-- [Comparação com build e MSI](../out/release-ui-layout-fixes/ui-layout-verification.json)
+- Cenários de UI (local evidence: `out/ui-scan-20260912/screenshots/results.json`)
+- Verificação final da UI (local evidence: `out/ui-scan-20260912/screenshots-final/results.json`)
+- Settings no portátil (local evidence: `out/ui-scan-20260912/portable/screenshots/portable-settings.png`)
+- Modal no portátil (local evidence: `out/ui-scan-20260912/portable/screenshots/portable-combined-scan.png`)
+- Modal em português e tema claro (local evidence: `out/ui-scan-20260912/screenshots-final/scan-dialog-portuguese-light.png`)
+- UI aberta pelo host portátil (local evidence: `out/ui-scan-20260912/portable/host-launch-verification.json`)
+- Verificação da extração (local evidence: `out/release-ui-layout-fixes/portable-verification.json`)
+- Comparação com build e MSI (local evidence: `out/release-ui-layout-fixes/ui-layout-verification.json`)
 
 Os pacotes anteriores estão preservados em `out/ui-scan-20260912/packages-before`; a extração anterior está em `out/release-ui-layout-fixes/portable-backups/20260912-174253-8d6cf1b067354d059b995cbb4f309a52`.

@@ -1,4 +1,8 @@
-# Protocol 4 state and event contract
+# Protocol 5 state and event contract
+
+LightHostModern 2.0.0 requires IPC version 5 for command, event and meter requests.
+Other protocol versions are rejected before dispatch; host and UI must be rebuilt
+and restarted together.
 
 The command pipe keeps operation admission and result queries. A separate pipe,
 formed by appending `-events` to the profile's command pipe, handles `events`
@@ -28,10 +32,14 @@ are not lost. Host-session changes invalidate both cursors and pending display
 deltas, but never authorize replaying a mutation. Collection reconciliation
 uses UUIDs/class IDs and updates observable properties without rebuilding rows.
 
-Visual telemetry is requested only while visible: meters at most 20 Hz and
-diagnostics at most 1 Hz. Meter reads use a third, independent pipe, formed by
+The WinUI shell requests visual telemetry only while visible: Dashboard meters at most 20 Hz
+and diagnostic telemetry at most 1 Hz. With diagnostic collection enabled, either
+the Diagnostics page or the Dashboard resource cards can request that telemetry.
+Meter reads use a third, independent pipe, formed by
 appending `-meters`, so pending commands and diagnostics cannot queue in front
 of a meter update. See [the meter contract](audio-meter-contract.md).
 A minimized window keeps structural events and a 5-second command heartbeat,
-with no visual telemetry. Closing the UI cancels all three transports and exits
-that UI process. A new UI attaches to the live host.
+with no visual telemetry requests from that window. The native tray Performance
+submenu can still read local resource measurements independently, without these
+IPC transports. Closing the UI cancels all three transports and exits that UI
+process. A new UI attaches to the live host.

@@ -18,4 +18,4 @@ The third card invites users who publish a video about the app to submit it for 
 
 The **Hide the Support me tab** setting removes the page from the sidebar. If the page is open, the app returns to Settings. Turning the option off restores it.
 
-External pages open only when their corresponding button or banner is activated. The Ko-fi banner itself is loaded from Ko-fi's content delivery network.
+External pages open only when their corresponding button or banner is activated. The Ko-fi banner is bundled with the app as a local image, so displaying this page does not fetch the banner from Ko-fi.

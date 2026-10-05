@@ -1,8 +1,8 @@
 # Diagnostics
 
-Diagnostics appears after Plugins and before Support me in the sidebar and presents local measurements in cards. Each card has an icon, heading, description, and readings below it.
+Diagnostics appears after Profiles and before Support me in the sidebar and presents local measurements in cards. Each card has an icon, heading, description, and readings below it.
 
-- **Performance:** whole-app CPU, DSP load and CPU use by the host, interface, and scanner worker.
+- **Performance:** whole-app CPU, DSP load and CPU use by the host, interface, scanner and isolated plugin workers.
 - **App memory:** private resident RAM and committed memory for the app processes.
 - **Audio reliability:** xruns, processing failures, and MIDI events dropped after exceeding capacity.
 - **Stream format:** requested sample rate and buffer size alongside the driver's actual values.
@@ -11,13 +11,15 @@ Diagnostics appears after Plugins and before Support me in the sidebar and prese
 
 Visible diagnostic readings refresh at approximately one-second intervals. These measurements are local and are not uploaded.
 
-**Settings > General > Diagnostics** is enabled by default. Turning it off requests confirmation, hides the page, and stops diagnostics collection. Audio processing, plugin scanning, and the Dashboard peak meters continue. Turning it on restores the page and resumes monitoring.
+**Settings > General > Diagnostics** is enabled by default. Turning it off requests confirmation and stops ordinary diagnostics collection. Dashboard and tray resource readings show **Disabled**; audio processing, plugin scanning, and Dashboard peak meters continue. The page is hidden unless detailed-log capture management still needs it. Turning the setting on restores the page and resumes monitoring.
 
 ## Resource readings and explanations
 
-App CPU is the sum of the audio host, this interface and scanner processes, normalized to the whole computer. Loaded plugins already belong to host usage. Resident RAM counts private physical pages; committed memory counts private committed bytes. Shared pages are excluded from both process sums. Missing OS measurements show Unavailable rather than zero.
+App CPU is the sum of the audio host, this interface, scanner and isolated plugin processes, normalized to the whole computer. Directly loaded plugins already belong to host usage. Resident RAM counts private physical pages; committed memory counts private committed bytes. Shared pages are excluded from both process sums. Missing OS measurements show Unavailable rather than zero. An additional section lists each isolated plugin's PID, resources, latency and missed blocks; see [plugin isolation](plugin-isolation.md).
 
-Memory sampling is requested only while Diagnostics is visible, at approximately 1 Hz. The host lease expires after two seconds without requests. Each metric has localized English/Portuguese hover text and accessible help text; numeric values remain keyboard selectable. Independent Dashboard meters continue when Diagnostics is disabled.
+Visible Diagnostics cards, Dashboard resource cards, and the tray **Performance** submenu request resource readings at approximately 1 Hz. The host memory-sampling lease expires after two seconds without requests. Hiding or minimizing the main window stops its requests; an open tray Performance submenu can continue requesting readings independently.
+
+Each metric has localized English/Portuguese hover text and accessible help text; numeric values remain keyboard selectable. **Enable tooltips when hovering options** controls hover explanations without removing accessible help. Independent Dashboard meters continue when Diagnostics is disabled.
 
 ## Detailed log capture
 

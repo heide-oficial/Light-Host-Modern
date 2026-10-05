@@ -1,20 +1,22 @@
 # Release performance validation
 
-The frozen preparation build is in `out/baselines/completion-20260908-release`.
-It has not been timed. Do not launch that binary with the production user's
-preferences: it predates complete test-profile isolation. A comparison copy must
-preserve its DSP and UI implementation and record any isolation/instrumentation
-adaptations separately. The original frozen files remain unchanged.
+This guide describes the current measurement tools, not a claim that every
+performance scenario passed for 2.0.0. Current candidate results and limitations
+are in [release preparation](release-2.0.0-validation.md). Historical 1.2.2 results
+and their old baseline paths are retained at the end of this page.
 
-`Tests/PrepareComparisonBaseline.py` verifies all 518 frozen artifacts and
-reconstructs the source from revision `93e7dd1097ea2730bb91ad73741972354c5c1d88`,
-the captured working-tree patch and captured untracked sources.
-`Tests/AdaptComparisonBaseline.py` records a separate diff/hash manifest for
-profile isolation, a timer forwarding to the original JUCE player, work counters
-and the same allocation auditor used by the final host. It does not replace the
-old DSP implementation or UI. The verified comparison build is under
-`out/bcmp1`; its UI is a copy of the original frozen executable. The incomplete
-first reconstruction under `out/bcmp` must not be used.
+## Current measurement workflow
+
+Build the Release host and WinUI first; see [Build and release](build-and-release.md).
+Run from the repository root using a disposable test setup and an exact output
+device name. The script opens that real output device, so schedule the measurement
+when it will not disturb another audio application. It uses isolated app profiles,
+no input, muted output and hashes of the normal user's preference/session files.
+UI scenarios require the `winapp ui` automation CLI.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests/ReleasePerformance.ps1 -Variant current -OutputDevice "YOUR OUTPUT DEVICE" -UiState dashboard -OutputDirectory out/performance-current
+```
 
 `Tests/ReleasePerformance.ps1` runs a named shared-WASAPI output at 48 kHz / 480
 samples in fresh profiles, with output muted and no input. It records process
@@ -29,15 +31,33 @@ performance; comparison, processing continuity and xrun review are still require
 `Tests/AnalyzeReleasePerformance.py BASELINE_JSON CURRENT_JSON --output REPORT`
 compares interval-weighted process CPU, median memory, endpoint memory growth,
 delivered work and per-run callback quantiles. It flags changes above five percent,
-lost work, xruns, callback allocations and minimized visual telemetry. Eight local
+lost work, xruns, callback allocations and minimized visual telemetry. Eight historical local
 tests passed for weighted samples, unavailable values, duration checks, regressions,
 work loss, memory/telemetry checks, mismatched window sizes and new GPU work after a zero baseline. Smoke reports remain explicitly incomplete.
 The script does not approve the overall application or substitute for the
 outstanding hardware, accessibility and installer scenarios.
 
+## Focused 2.0.0 benchmarks
+
+- `Tests/CanvasResourceBenchmark.ps1` accepts `-HostExecutable`, defaults to IPC 5,
+  128 nodes and 15 seconds per observation, and exercises canvas resources in an
+  isolated host/UI setup. Use it for canvas rendering and minimized-state costs,
+  not for audible audio latency.
+- `Tests/ProfileDigestBenchmark.ps1` compares profile inspection with small and
+  16 MiB synthetic plugin states, using the current `out/build/windows-vs2022`
+  host and plugin-instance fixture target. It writes measurements under `out`.
+- `Tests/AnalyzeReleasePerformance.py` compares compatible baseline/current
+  reports. Check device, buffer, workload, instrumentation, measurement duration
+  and executable hashes before interpreting a percentage as an improvement.
+
+The `-Variant baseline` option belongs to the historical 1.2.2 comparison and
+requires its separately reconstructed artifacts. A clean checkout does not
+contain those ignored files. Do not substitute an arbitrary executable or
+represent an unavailable baseline as a completed comparison.
+
 ## Callback measurement contract
 
-IPC 4 exposes two commands in an explicit temporary test profile:
+IPC 5 exposes two commands in an explicit temporary test profile:
 
 - `measure-callbacks` takes two integers: warmup seconds (0–300) and measurement
   seconds (1–1,800). Submit it as an operation, once per host, while no driver is
@@ -82,7 +102,29 @@ The audit is opt-in for normal distribution builds. Record whether it is enabled
 for both comparison variants; do not compare instrumented and uninstrumented CPU
 measurements as if their configurations matched.
 
-## Verification status
+## Historical baseline and results: September 2026
+
+The following paths and results belong to the 1.2.2 investigation, not the current
+release. Generated artifacts may no longer be present after workspace cleanup.
+No historical test was rerun for this documentation update.
+
+The frozen preparation build is in `out/baselines/completion-20260908-release`.
+It has not been timed. Do not launch that binary with the production user's
+preferences: it predates complete test-profile isolation. A comparison copy must
+preserve its DSP and UI implementation and record any isolation/instrumentation
+adaptations separately. The original frozen files remain unchanged.
+
+`Tests/PrepareComparisonBaseline.py` verifies all 518 frozen artifacts and
+reconstructs the source from revision `93e7dd1097ea2730bb91ad73741972354c5c1d88`,
+the captured working-tree patch and captured untracked sources.
+`Tests/AdaptComparisonBaseline.py` records a separate diff/hash manifest for
+profile isolation, a timer forwarding to the original JUCE player, work counters
+and the same allocation auditor used by the final host. It does not replace the
+old DSP implementation or UI. The verified comparison build is under
+`out/bcmp1`; its UI is a copy of the original frozen executable. The incomplete
+first reconstruction under `out/bcmp` must not be used.
+
+### Recorded checks
 
 The deterministic callback suite passed warmup/end boundaries, exact work counts,
 histogram precision up to the maximum integer value, interrupted runs and

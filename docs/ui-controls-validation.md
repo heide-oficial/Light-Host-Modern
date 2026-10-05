@@ -1,5 +1,7 @@
 # UI controls and plugin catalogue names — 2026-09-12
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 Release remains 1.2.2. Work preserves the existing audio/session architecture and incorporates the latest UI corrections.
 
 ## Behavior

@@ -1,8 +1,13 @@
-# Audio measurement contract (IPC 4)
+# Audio measurement contract (IPC 5)
 
 Input is measured before plugins. Output is measured after individual/global
 wet/dry selection, mute, optional main-output mono and the coordinated resume ramp. No clipping decision
 uses a value clamped to unity. Host processing continues while meters are hidden.
+
+LightHostModern 2.0.0 uses IPC 5 for both the command and dedicated meter endpoint.
+Detailed histories and diagnostic counters are collected while Diagnostics is
+enabled. Dashboard peak levels remain available when it is disabled; toggling
+diagnostic collection clears the detailed meter histories.
 
 `meters` contains `input` and `output`. Each direction contains `channels` and
 `aggregate`; each measurement contains linear `rms`, `peak`, `peakHold` and a
@@ -36,9 +41,19 @@ Diagnostics distinguish DSP deadline load, host process CPU, UI process CPU,
 application worker CPU, xruns, failed plugin calls, dropped MIDI events and
 chain latency. Requested device settings are separate from effective driver
 values. Unknown driver values are null, never fabricated zeroes.
-Diagnostics now has a dedicated sidebar page after Plugins and before Support me, with
-non-collapsible cards, and requests telemetry at 1 Hz only while that page is
-visible. Dashboard meters keep their existing maximum presentation rate of 20 Hz.
+Diagnostics has a dedicated sidebar page after Profiles and before Support me,
+with non-collapsible cards. When diagnostic collection is enabled, the UI requests
+telemetry at most once per second while either that page or the Dashboard resource
+cards are visible. Dashboard resource cards combine available host, UI and worker
+measurements; the two level meters retain their independent maximum presentation
+rate of 20 Hz, including when Diagnostics is disabled.
+
+The native tray Performance submenu also reads local resource measurements at
+approximately 1 Hz while visible, independently of the WinUI window and its IPC
+requests. Both consumers renew the host's two-second memory-sampling lease. A
+minimized or closed interface therefore does not prevent an open tray submenu
+from displaying current resource readings. Turning Diagnostics off disables
+these resource readings while retaining Dashboard peak meters.
 
 The Dashboard reads `meter-levels` from the independent `<host-pipe>-meters`
 endpoint. Its response contains `inputPeak`, `outputPeak` and the standard

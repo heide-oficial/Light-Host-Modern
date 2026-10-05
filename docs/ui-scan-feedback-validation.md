@@ -1,5 +1,7 @@
 # Busca de plugins e resposta dos medidores — 12/09/2026
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 O editor de caminhos agora coloca a inclusão de uma pasta em um card próprio, com título, campo e ações. Iniciar a busca fecha esse editor e abre um modal de progresso de até 480 DIP. Ao terminar, o mesmo modal apresenta os contadores e as ações de tentar novamente, consultar falhas e fechar. O resultado anterior pode ser reaberto sem ocupar a parte inferior do editor de caminhos. Cancelamento tem uma mensagem específica e conserva os resultados recebidos.
 
 A lista de falhas separa caminho, erro e formato/tentativa em linhas distintas. Caminhos longos e Unicode quebram linha. Não há Previous/Next nem campo de detalhes vazio. A lista virtualizada busca páginas de até 100 registros durante a rolagem, preservando os IDs selecionados e conferindo a revisão do scan.
@@ -32,16 +34,16 @@ Hashes do pacote final:
 
 Evidências:
 
-- [Cenários de UI e lista com 205 falhas](../out/ui-scan-feedback-20260912/screenshots/results.json)
-- [Fluxo final e Settings](../out/ui-scan-feedback-20260912/screenshots-final/results.json)
-- [Verificação final em português/claro](../out/ui-scan-feedback-20260912/screenshots-pt-final/results.json)
-- [Resposta visual dos medidores](../out/ui-scan-feedback-20260912/screenshots/meter-response.json)
-- [Transporte do host nativo](../out/ui-scan-feedback-20260912/native/meter-transport.json)
-- [Caminhos no portátil entregue](../out/ui-scan-feedback-20260912/portable/screenshots/portable-scan-paths.png)
-- [Progresso pequeno](../out/ui-scan-feedback-20260912/screenshots-final/scan-progress-small.png)
-- [Resultado e ações](../out/ui-scan-feedback-20260912/screenshots-final/scan-results-small.png)
-- [Falhas com caminhos e erros separados](../out/ui-scan-feedback-20260912/screenshots-final/scan-failures-separated.png)
-- [Falhas em português/claro](../out/ui-scan-feedback-20260912/screenshots-pt-final/scan-failures-portuguese-light.png)
-- [Abertura da UI pelo host portátil](../out/ui-scan-feedback-20260912/portable/host-launch-verification.json)
-- [Verificação dos arquivos extraídos](../out/release-ui-layout-fixes/portable-verification.json)
-- [Comparação com build e MSI](../out/release-ui-layout-fixes/ui-layout-verification.json)
+- Cenários de UI e lista com 205 falhas (local evidence: `out/ui-scan-feedback-20260912/screenshots/results.json`)
+- Fluxo final e Settings (local evidence: `out/ui-scan-feedback-20260912/screenshots-final/results.json`)
+- Verificação final em português/claro (local evidence: `out/ui-scan-feedback-20260912/screenshots-pt-final/results.json`)
+- Resposta visual dos medidores (local evidence: `out/ui-scan-feedback-20260912/screenshots/meter-response.json`)
+- Transporte do host nativo (local evidence: `out/ui-scan-feedback-20260912/native/meter-transport.json`)
+- Caminhos no portátil entregue (local evidence: `out/ui-scan-feedback-20260912/portable/screenshots/portable-scan-paths.png`)
+- Progresso pequeno (local evidence: `out/ui-scan-feedback-20260912/screenshots-final/scan-progress-small.png`)
+- Resultado e ações (local evidence: `out/ui-scan-feedback-20260912/screenshots-final/scan-results-small.png`)
+- Falhas com caminhos e erros separados (local evidence: `out/ui-scan-feedback-20260912/screenshots-final/scan-failures-separated.png`)
+- Falhas em português/claro (local evidence: `out/ui-scan-feedback-20260912/screenshots-pt-final/scan-failures-portuguese-light.png`)
+- Abertura da UI pelo host portátil (local evidence: `out/ui-scan-feedback-20260912/portable/host-launch-verification.json`)
+- Verificação dos arquivos extraídos (local evidence: `out/release-ui-layout-fixes/portable-verification.json`)
+- Comparação com build e MSI (local evidence: `out/release-ui-layout-fixes/ui-layout-verification.json`)

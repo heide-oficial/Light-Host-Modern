@@ -1,5 +1,7 @@
 # Ajustes de Settings e Plugins — 12/09/2026
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 Revisão da interface 1.2.2 após o feedback sobre Preferred device, abas, toolbar e hover. Complementa e substitui esses pontos do [relatório anterior](ui-toolbar-validation.md).
 
 - **Preferred device:** seletor abaixo do título e da descrição em Compact e em larguras reduzidas. Em Expanded com espaço suficiente, a coluna do seletor fica limitada a 360 DIPs. Nomes longos usam reticências e tooltip, sem comprimir a descrição até aumentar a altura do card.
@@ -17,25 +19,25 @@ Também foi inspecionada uma janela de 1700 pixels físicos de largura, com o re
 
 Os 18 testes CTest passaram em **12,41 segundos**. Os testes de interface usaram host simulado, perfil e pipe separados; a sessão de áudio do usuário não foi modificada.
 
-- [Cinco cenários principais](../out/ui-layout-fixes-20260912/visual/checks/results.json)
-- [Verificação final da toolbar e do foco](../out/ui-layout-fixes-20260912/final/checks/results.json)
-- [Janela de 1700 pixels físicos](../out/ui-layout-fixes-20260912/final/narrow-checks/results.json)
+- Cinco cenários principais (local evidence: `out/ui-layout-fixes-20260912/visual/checks/results.json`)
+- Verificação final da toolbar e do foco (local evidence: `out/ui-layout-fixes-20260912/final/checks/results.json`)
+- Janela de 1700 pixels físicos (local evidence: `out/ui-layout-fixes-20260912/final/narrow-checks/results.json`)
 
 ## Capturas inspecionadas
 
 | Tela | Evidência |
 | --- | --- |
-| Preferred device, Compact e nome longo | [Compact](../out/ui-layout-fixes-20260912/visual/checks/preferred-device-compact-long-name.png) |
-| Preferred device, Expanded | [Expanded](../out/ui-layout-fixes-20260912/visual/checks/preferred-device-expanded-long-name.png) |
-| Toolbar e status | [Running](../out/ui-layout-fixes-20260912/final/checks/running-final.png), [Installed](../out/ui-layout-fixes-20260912/final/checks/installed-final.png) |
-| Hover dos grupos e plugins | [Fabricante](../out/ui-layout-fixes-20260912/final/checks/manufacturer-hover-final.png), [plugin](../out/ui-layout-fixes-20260912/final/checks/plugin-hover-final.png) |
-| Agrupamento no menu Sort | [Menu](../out/ui-layout-fixes-20260912/visual/checks/installed-sort-grouping.png) |
-| Abas do gerenciador | [Modal](../out/ui-layout-fixes-20260912/visual/checks/database-paths.png) |
-| Teclado | [Foco na ação](../out/ui-layout-fixes-20260912/final/checks/plugin-keyboard-focus.png) |
-| Janela menor | [Running](../out/ui-layout-fixes-20260912/final/narrow-checks/running-1700px.png), [Installed](../out/ui-layout-fixes-20260912/final/narrow-checks/installed-1700px.png) |
+| Preferred device, Compact e nome longo | Compact (local evidence: `out/ui-layout-fixes-20260912/visual/checks/preferred-device-compact-long-name.png`) |
+| Preferred device, Expanded | Expanded (local evidence: `out/ui-layout-fixes-20260912/visual/checks/preferred-device-expanded-long-name.png`) |
+| Toolbar e status | Running (local evidence: `out/ui-layout-fixes-20260912/final/checks/running-final.png`), Installed (local evidence: `out/ui-layout-fixes-20260912/final/checks/installed-final.png`) |
+| Hover dos grupos e plugins | Fabricante (local evidence: `out/ui-layout-fixes-20260912/final/checks/manufacturer-hover-final.png`), plugin (local evidence: `out/ui-layout-fixes-20260912/final/checks/plugin-hover-final.png`) |
+| Agrupamento no menu Sort | Menu (local evidence: `out/ui-layout-fixes-20260912/visual/checks/installed-sort-grouping.png`) |
+| Abas do gerenciador | Modal (local evidence: `out/ui-layout-fixes-20260912/visual/checks/database-paths.png`) |
+| Teclado | Foco na ação (local evidence: `out/ui-layout-fixes-20260912/final/checks/plugin-keyboard-focus.png`) |
+| Janela menor | Running (local evidence: `out/ui-layout-fixes-20260912/final/narrow-checks/running-1700px.png`), Installed (local evidence: `out/ui-layout-fixes-20260912/final/narrow-checks/installed-1700px.png`) |
 
 ## Pacotes
 
-[ZIP portátil](../out/release-ui-layout-fixes/LightHostModern-Portable.zip) e [MSI](../out/release-ui-layout-fixes/LightHostModern-Setup.msi), versão 1.2.2. Verificados host, UI, scanner e auxiliar de atualização. O executável, `PluginsPageView.xbf`, `SettingsPageView.xbf` e `resources.pri` do ZIP correspondem por SHA-256 ao build atual e ao staging. O MSI inclui os componentes e layouts atualizados. Fixtures e plugins de teste não foram empacotados.
+ZIP portátil (local evidence: `out/release-ui-layout-fixes/LightHostModern-Portable.zip`) e MSI (local evidence: `out/release-ui-layout-fixes/LightHostModern-Setup.msi`), versão 1.2.2. Verificados host, UI, scanner e auxiliar de atualização. O executável, `PluginsPageView.xbf`, `SettingsPageView.xbf` e `resources.pri` do ZIP correspondem por SHA-256 ao build atual e ao staging. O MSI inclui os componentes e layouts atualizados. Fixtures e plugins de teste não foram empacotados.
 
-[Resultado da verificação dos pacotes](../out/release-ui-layout-fixes/ui-layout-verification.json).
+Resultado da verificação dos pacotes (local evidence: `out/release-ui-layout-fixes/ui-layout-verification.json`).

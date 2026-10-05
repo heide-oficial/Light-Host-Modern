@@ -1,5 +1,7 @@
 # Plano — seleção Individual/Pares e saída principal em mono
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 > Registro das etapas locais de desenvolvimento. A preparação do release 1.4.0 e os ajustes finais de layout estão registrados em [changelog-03](../devlog/1.4.0/changelog-03.md). A autorização posterior para publicar o release substitui a restrição ao remoto destas etapas anteriores; a issue e o PR permanecem abertos.
 
 Status: **implementado e validado localmente; pendências externas descritas abaixo**.

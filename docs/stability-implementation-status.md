@@ -1,5 +1,7 @@
 # Stability implementation status
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 This records the implementation checkpoint for the A–G plan. The overall plan is **not complete**. Version remains 1.2.2. No commit, push, tag, or release was created.
 
 ## Baseline — 2026-09-06

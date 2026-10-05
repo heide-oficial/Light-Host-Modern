@@ -1,5 +1,7 @@
 # Dashboard, Plugins e Diagnostics — 12/09/2026
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 Os ajustes posteriores de Preferred device, abas, hover, toolbar e posição dos status estão no [relatório de correções de layout](ui-layout-fixes-validation.md).
 
 Esta revisão substitui o desenho anterior dessas três áreas, mantendo C++/WinRT, WinUI 3 e a versão 1.2.2.
@@ -20,22 +22,22 @@ Os testes usaram perfis, pipes, preferências e dados simulados separados. Foram
 
 Esta revisão não repetiu ensaios prolongados de hardware/desempenho nem executou o instalador. A validação do modal de scan usa transporte simulado; a regressão CTest cobre o scanner separadamente.
 
-- [Resultados consolidados](../out/ui-toolbar-20260912/validation.json)
-- [Verificação dos pacotes](../out/release-ui-toolbar/ui-toolbar-verification.json)
+- Resultados consolidados (local evidence: `out/ui-toolbar-20260912/validation.json`)
+- Verificação dos pacotes (local evidence: `out/release-ui-toolbar/ui-toolbar-verification.json`)
 - [Cenários de interface](../WinUI/ui-tests-plugin-workspace.ps1)
 
 ## Capturas inspecionadas
 
 | Tela | Captura |
 | --- | --- |
-| Dashboard com medidores originais | [Dashboard](../out/ui-toolbar-20260912/final/checks/dashboard-final.png) |
-| Toolbar e agrupamento | [Plugins agrupados](../out/ui-toolbar-20260912/final/checks/grouped-final.png) |
-| Bypass e erro | [Bypass](../out/ui-toolbar-20260912/verified/checks/running-bypassed-badge.png), [erro](../out/ui-toolbar-20260912/verified/checks/running-error-badge.png) |
-| Busca dentro dos grupos | [Resultado filtrado](../out/ui-toolbar-20260912/verified/checks/installed-grouped-filtered.png) |
-| Gerenciamento do banco | [Caminhos](../out/ui-toolbar-20260912/final/checks/database-paths.png), [scan](../out/ui-toolbar-20260912/final/checks/database-scan-active.png), [manutenção](../out/ui-toolbar-20260912/final/checks/database-maintenance.png) |
-| Português e tema claro | [Plugins](../out/ui-toolbar-20260912/final/checks/installed-portuguese-light.png), [modal](../out/ui-toolbar-20260912/final/checks/database-portuguese-light.png) |
-| Diagnostics com valores abaixo | [Diagnostics](../out/ui-toolbar-20260912/final/checks/diagnostics-final.png) |
+| Dashboard com medidores originais | Dashboard (local evidence: `out/ui-toolbar-20260912/final/checks/dashboard-final.png`) |
+| Toolbar e agrupamento | Plugins agrupados (local evidence: `out/ui-toolbar-20260912/final/checks/grouped-final.png`) |
+| Bypass e erro | Bypass (local evidence: `out/ui-toolbar-20260912/verified/checks/running-bypassed-badge.png`), erro (local evidence: `out/ui-toolbar-20260912/verified/checks/running-error-badge.png`) |
+| Busca dentro dos grupos | Resultado filtrado (local evidence: `out/ui-toolbar-20260912/verified/checks/installed-grouped-filtered.png`) |
+| Gerenciamento do banco | Caminhos (local evidence: `out/ui-toolbar-20260912/final/checks/database-paths.png`), scan (local evidence: `out/ui-toolbar-20260912/final/checks/database-scan-active.png`), manutenção (local evidence: `out/ui-toolbar-20260912/final/checks/database-maintenance.png`) |
+| Português e tema claro | Plugins (local evidence: `out/ui-toolbar-20260912/final/checks/installed-portuguese-light.png`), modal (local evidence: `out/ui-toolbar-20260912/final/checks/database-portuguese-light.png`) |
+| Diagnostics com valores abaixo | Diagnostics (local evidence: `out/ui-toolbar-20260912/final/checks/diagnostics-final.png`) |
 
 ## Pacotes locais
 
-[ZIP portátil](../out/release-ui-toolbar/LightHostModern-Portable.zip) e [MSI](../out/release-ui-toolbar/LightHostModern-Setup.msi). Ambos incluem host, UI, scanner e auxiliar de atualização. A UI do ZIP corresponde por SHA-256 ao executável Release e ao staging. O MSI informa a versão 1.2.2. Fixtures e plugins de terceiros não foram incluídos. Os pacotes não foram publicados ou instalados.
+ZIP portátil (local evidence: `out/release-ui-toolbar/LightHostModern-Portable.zip`) e MSI (local evidence: `out/release-ui-toolbar/LightHostModern-Setup.msi`). Ambos incluem host, UI, scanner e auxiliar de atualização. A UI do ZIP corresponde por SHA-256 ao executável Release e ao staging. O MSI informa a versão 1.2.2. Fixtures e plugins de terceiros não foram incluídos. Os pacotes não foram publicados ou instalados.

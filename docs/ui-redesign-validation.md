@@ -1,5 +1,7 @@
 # Revisão da interface — 12/09/2026
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 > O desenho de Dashboard, Plugins e Diagnostics foi atualizado novamente. Consulte a [revisão de toolbars e medidores](ui-toolbar-validation.md) para o comportamento e os pacotes atuais.
 
 Alterações implementadas em C++/WinRT e WinUI 3, mantendo a versão 1.2.2. A sessão principal continuou aberta durante o trabalho. A validação visual utilizou processos, pipes e preferências de teste separados, com dados e níveis de áudio simulados.
@@ -31,21 +33,21 @@ Alterações implementadas em C++/WinRT e WinUI 3, mantendo a versão 1.2.2. A s
 
 Evidências locais:
 
-- [Resultados dos oito cenários](../out/ui-redesign-20260912/visual/verified/results.json)
-- [Resultados dos medidores](../out/ui-redesign-20260912/visual/verified/meters.json)
-- [Reverificação da tradução](../out/ui-redesign-20260912/visual/verified-language/results.json)
-- [Log CTest](../out/build/windows-vs2022/Testing/Temporary/LastTest.log)
+- Resultados dos oito cenários (local evidence: `out/ui-redesign-20260912/visual/verified/results.json`)
+- Resultados dos medidores (local evidence: `out/ui-redesign-20260912/visual/verified/meters.json`)
+- Reverificação da tradução (local evidence: `out/ui-redesign-20260912/visual/verified-language/results.json`)
+- Log CTest (local evidence: `out/build/windows-vs2022/Testing/Temporary/LastTest.log`)
 
 ## Capturas inspecionadas
 
 | Tela | Captura |
 | --- | --- |
-| Dashboard e barras | [Tema escuro](../out/ui-redesign-20260912/visual/verified/material-Mica-Alt.png), [tema claro](../out/ui-redesign-20260912/visual/verified/light-dashboard.png) |
-| Plugins | [Em execução](../out/ui-redesign-20260912/visual/verified/running.png), [Instalados](../out/ui-redesign-20260912/visual/verified/installed.png), [PT-BR final](../out/ui-redesign-20260912/visual/verified-language/pt-br-running.png) |
-| Audio | [Compact](../out/ui-redesign-20260912/visual/verified/audio-compact.png), [Expanded](../out/ui-redesign-20260912/visual/verified/audio-expanded.png) |
-| Diagnostics | [Inglês](../out/ui-redesign-20260912/visual/verified/diagnostics.png), [PT-BR](../out/ui-redesign-20260912/visual/verified-language/pt-br-diagnostics.png) |
-| Diálogos | [Scan paths](../out/ui-redesign-20260912/visual/verified/scan-paths.png), [dispositivos permitidos](../out/ui-redesign-20260912/visual/verified/enabled-devices.png) |
-| Settings | [Appearance](../out/ui-redesign-20260912/visual/verified/appearance.png), [About](../out/ui-redesign-20260912/visual/verified/about.png) |
+| Dashboard e barras | Tema escuro (local evidence: `out/ui-redesign-20260912/visual/verified/material-Mica-Alt.png`), tema claro (local evidence: `out/ui-redesign-20260912/visual/verified/light-dashboard.png`) |
+| Plugins | Em execução (local evidence: `out/ui-redesign-20260912/visual/verified/running.png`), Instalados (local evidence: `out/ui-redesign-20260912/visual/verified/installed.png`), PT-BR final (local evidence: `out/ui-redesign-20260912/visual/verified-language/pt-br-running.png`) |
+| Audio | Compact (local evidence: `out/ui-redesign-20260912/visual/verified/audio-compact.png`), Expanded (local evidence: `out/ui-redesign-20260912/visual/verified/audio-expanded.png`) |
+| Diagnostics | Inglês (local evidence: `out/ui-redesign-20260912/visual/verified/diagnostics.png`), PT-BR (local evidence: `out/ui-redesign-20260912/visual/verified-language/pt-br-diagnostics.png`) |
+| Diálogos | Scan paths (local evidence: `out/ui-redesign-20260912/visual/verified/scan-paths.png`), dispositivos permitidos (local evidence: `out/ui-redesign-20260912/visual/verified/enabled-devices.png`) |
+| Settings | Appearance (local evidence: `out/ui-redesign-20260912/visual/verified/appearance.png`), About (local evidence: `out/ui-redesign-20260912/visual/verified/about.png`) |
 
 ## Limite da validação de materiais
 
@@ -57,9 +59,9 @@ As capturas foram feitas a 200% de DPI. Esta rodada não comprova alto contraste
 
 ## Pacotes locais
 
-- [ZIP portátil](../out/release-ui-redesign/LightHostModern-Portable.zip)
-- [Instalador MSI](../out/release-ui-redesign/LightHostModern-Setup.msi)
-- [Verificação dos componentes e SHA-256](../out/release-ui-redesign/ui-redesign-verification.json)
+- ZIP portátil (local evidence: `out/release-ui-redesign/LightHostModern-Portable.zip`)
+- Instalador MSI (local evidence: `out/release-ui-redesign/LightHostModern-Setup.msi`)
+- Verificação dos componentes e SHA-256 (local evidence: `out/release-ui-redesign/ui-redesign-verification.json`)
 
 Os dois pacotes contêm host, UI, scanner e auxiliar de atualização; o ZIP também foi conferido contra a inclusão de fixtures. O SHA-256 da UI do ZIP corresponde ao executável Release atual e ao diretório de staging. O MSI informa a versão 1.2.2. O auxiliar de atualização validou nome, versão, tamanho e digest dos artefatos. Pacotes locais sem assinatura, sem publicação ou execução do instalador.
 

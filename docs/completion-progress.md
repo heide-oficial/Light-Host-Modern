@@ -1,5 +1,7 @@
 # Completion work (1.2.2)
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 This log supplements the prior stability checkpoint. Implementation and local packages are consolidated at the user's request on 2026-09-08; additional testing has ended. The complete integrated acceptance matrix has not passed. Existing uncommitted work is retained. See [the delivery report](implementation-delivery.md) for the current artifacts and remaining limits.
 
 ## Preparation

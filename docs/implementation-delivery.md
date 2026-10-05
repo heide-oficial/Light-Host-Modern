@@ -1,5 +1,7 @@
 # Entrega local — Light Host Modern 1.2.2
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 Entrega consolidada em 8 de setembro de 2026. A pedido do usuário, a rodada de testes foi encerrada. A versão permanece **1.2.2**, com C++/JUCE no áudio e C++/WinRT com WinUI 3 na interface. O código e os pacotes locais estão disponíveis; a matriz completa de aceitação do plano não foi aprovada.
 
 ## Implementação entregue
@@ -17,9 +19,9 @@ Preferências, estados e dados legados foram preservados pelos mecanismos de mig
 
 | Artefato | Arquivo |
 |---|---|
-| Portátil x64 | [LightHostModern-Portable.zip](../out/release-test-final-audit/LightHostModern-Portable.zip) |
-| Instalador x64 | [LightHostModern-Setup.msi](../out/release-test-final-audit/LightHostModern-Setup.msi) |
-| Tamanhos e SHA-256 | [release-artifacts.json](../out/release-test-final-audit/release-artifacts.json) |
+| Portátil x64 | LightHostModern-Portable.zip (local evidence: `out/release-test-final-audit/LightHostModern-Portable.zip`) |
+| Instalador x64 | LightHostModern-Setup.msi (local evidence: `out/release-test-final-audit/LightHostModern-Setup.msi`) |
+| Tamanhos e SHA-256 | release-artifacts.json (local evidence: `out/release-test-final-audit/release-artifacts.json`) |
 
 Os pacotes Release incluem host, UI, scanner e auxiliar, sem fixtures de terceiros. São pacotes locais de teste, sem assinatura, com auditoria de alocações do host habilitada. Nada foi instalado ou publicado. Não foi criado commit.
 

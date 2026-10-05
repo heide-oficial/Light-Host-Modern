@@ -1,21 +1,23 @@
 # Real plugin validation
 
+Current 2.0.0 candidate results are recorded in [release preparation](release-2.0.0-validation.md). The commands below describe opt-in tools; the dated September results later on this page are historical and do not certify a new build. No tests or downloads were run for the 2026-10-05 documentation review.
+
 ## Issue 7 manifest regression
 
 The opt-in `Tests/scanner-manifest-regression.py` copies a supplied VST3 bundle into a unique ignored `out/manifest-regression` directory. It exercises missing, valid, invalid and stale manifests, compares full class IDs against the actual factory, and requires final module-fingerprint verification. It never edits the installed/original plugin.
 
 ```powershell
-python Tests/scanner-manifest-regression.py --scanner out/build/modern-validation/LightHostModern_artefacts/Release/LightHostModernScanner.exe --module out/real-plugin-test/plugins/dragonfly-reverb-3.2.10/DragonflyRoomReverb.vst3
+python Tests/scanner-manifest-regression.py --scanner out/build/windows-vs2022/LightHostModern_artefacts/Release/LightHostModernScanner.exe --module out/real-plugin-test/plugins/dragonfly-reverb-3.2.10/DragonflyRoomReverb.vst3
 ```
 
-Use the actual extracted bundle path if the archive layout differs. See [the issue 7 validation report](issue-7-validation.md) for current results and commercial-plugin limitations.
+Use the actual extracted bundle path if the archive layout differs. See [the issue 7 validation report](issue-7-validation.md) for historical 1.4.x results and their plugin-coverage limits.
 
 The opt-in fixture uses [Dragonfly Reverb 3.2.10 for Windows x64](https://github.com/michaelwillis/dragonfly-reverb/releases/tag/3.2.10), a free plugin suite from its official publisher repository. It tests Early Reflections, Hall, Plate and Room in VST2 and VST3 format.
 
 Build the Release host/scanner and CTest targets, then run from the repository:
 
 ```powershell
-rtk proxy python Tests/real-plugin-scan.py --download
+python Tests/real-plugin-scan.py --download
 ```
 
 On a build without VST2, use `--formats VST3`. The normal CTest suite does not download or load third-party plugins. Subsequent explicit fixture runs reuse the cached archive and verify its SHA-256 before extraction. The hash is a reproducibility pin from the official downloaded artifact, not a publisher signature.
@@ -33,24 +35,49 @@ Checks include:
 
 `scan-results.json` records source URL, archive/scanner/runner hashes, timings and both formats' output. This validates discovery and cache behavior only. Audible processing, editors, device reconfiguration, MSI installation and compatibility with other publishers remain separate checks.
 
-## Observed result — 2026-09-07
+## Offline processing, state and editors
+
+`LightHostModernRealPluginTests` is an opt-in Release target. It uses the actual realtime processor, slots and editor windows without constructing an audio device manager. Each module runs in its own process with a 60-second deadline:
+
+```powershell
+cmake --build out/build/windows-vs2022 --config Release --target LightHostModernRealPluginTests
+python -X utf8 Tests/real-plugin-processing.py --download
+```
+
+The additional implementation is [Airwindows PurestGain](https://www.airwindows.com/purestgain-vst/), downloaded from the publisher's [original ZIP](https://www.airwindows.com/wp-content/uploads/2016/11/PurestGain.zip). Its pinned archive SHA-256 is `0a79f7b3c2d35fe7e3819edb64f680d6a141495bc6e7bb4bbca77e494f8fcc6e`. Only `PurestGain64.dll` is extracted. Earlier discovery and processing results are recorded in the historical section below.
+
+Processing checks submit 17/64/257/1001-sample blocks, verify finite nonzero output and exact block/sample accounting, capture distinct original/duplicate states, toggle mute and global bypass, and run callbacks while coordinated state capture, reordering, preparation, editor reuse and destruction take place. VST3 parameter changes are delivered through a process boundary before state capture; synthetic bypass/program parameters are excluded. The allocation audit covers host-image C++/CRT calls, not allocations inside third-party DLLs.
+
+## Isolated-worker checks with supplied plugins
+
+Build `LightHostModernIsolatedRealPluginTests` and the Release worker, then pass
+existing plugin paths to the opt-in runner. It does not download plugins.
+
+```powershell
+cmake --build out/build/windows-vs2022 --config Release --target LightHostModernIsolatedRealPluginTests LightHostModernWorker
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests/IsolatedRealPluginTests.ps1 -PluginPaths "C:\YOUR PLUGINS\Example.vst3" -Format VST3
+```
+
+`-BuildDirectory` selects a different native build tree; `-TimeoutSeconds` defaults
+to 120 per plugin. Reports are written to unique folders under
+`out/isolated-real-plugins/`. The checks cover worker loading, editor lifecycle,
+synthetic audio, state capture and restore. They do not open a real audio device
+or establish long-session compatibility. See [process isolation](plugin-isolation.md)
+for its runtime limits.
+
+## Historical results
+
+The following checks apply only to the dated artifacts. Paths under `out/` may
+have been removed during cleanup. Failures and partial passes remain recorded;
+no result below was promoted to a current release pass.
+
+### Scanner result — 2026-09-07
 
 All four VST2 modules and all four VST3 modules passed discovery and restored-cache validation. Every effect reported two input and two output channels, and identities remained stable through XML serialization. The real fixture exposed two issues now covered by simulated regressions: foreign-format DLLs being considered VST2 candidates, and JUCE's inner-binary VST3 descriptions being rejected when the requested module was the outer bundle. The original JUCE binary identifier is preserved; association with the requested bundle is checked for both result validation and cache lookup.
 
 Final host/scanner Release build passed. All seven CTest suites passed (7.07 seconds while the host link was running); the eight real-format checks passed again using the final scanner executable. The existing WinUI payload was copied and hash-verified. Version remains 1.2.2; no release, tag or push was created.
 
-## Offline processing, state and editors — 2026-09-08
-
-`LightHostRealPluginTests` is an opt-in Release target. It uses the actual realtime processor, slots and editor windows without constructing an audio device manager. Each module runs in its own process with a 60-second deadline:
-
-```powershell
-rtk proxy cmake --build out/build/windows-vs2022 --config Release --target LightHostRealPluginTests
-rtk proxy python -X utf8 Tests/real-plugin-processing.py --download
-```
-
-The additional implementation is [Airwindows PurestGain](https://www.airwindows.com/purestgain-vst/), downloaded from the publisher's [original ZIP](https://www.airwindows.com/wp-content/uploads/2016/11/PurestGain.zip). Its pinned archive SHA-256 is `0a79f7b3c2d35fe7e3819edb64f680d6a141495bc6e7bb4bbca77e494f8fcc6e`. Only `PurestGain64.dll` is extracted. Its discovery and cache check also passed using the isolated scanner.
-
-Processing checks submit 17/64/257/1001-sample blocks, verify finite nonzero output and exact block/sample accounting, capture distinct original/duplicate states, toggle mute and global bypass, and run callbacks while coordinated state capture, reordering, preparation, editor reuse and destruction take place. VST3 parameter changes are delivered through a process boundary before state capture; synthetic bypass/program parameters are excluded. The allocation audit covers host-image C++/CRT calls, not allocations inside third-party DLLs.
+### Offline processing result: 2026-09-08
 
 `out/real-plugin-test/processing-results.json` records eight complete passes: Dragonfly Hall/Plate/Room VST2, all four Dragonfly VST3 modules and PurestGain VST2. Those runs reported zero host callback allocations/frees and no process failures. PurestGain exposed a host bug where requesting a native editor repeatedly recreated its generic fallback; `PluginWindow` now reuses that window.
 

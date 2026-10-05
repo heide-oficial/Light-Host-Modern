@@ -1,5 +1,7 @@
 # Plano — correções do scanner e coleta de logs detalhados
 
+> **Historical record.** The behavior, version, test results and pending work below belong to the original checkpoint. For current behavior see the [2.0.0 guides](_index.md); for current release status see [release preparation](release-2.0.0-validation.md). See [historical records](historical-records.md) for context. Generated evidence under `out/` is local and may have been removed; its paths are retained for traceability, not as release downloads.
+
 Data: 23/09/2026. Base: LightHostModern 1.4.0, commit `2b7eea1`.
 Status: implementação local com validação parcial; resultados e limitações registrados em [issue-7-validation.md](issue-7-validation.md). A rodada adicional de desempenho inclui leitura com buffer, validação de VST3 de classe única no processo de catálogo, cache incremental e medições por etapa. Os novos testes de regressão estão preparados, com execução adiada a pedido do usuário. Compatibilidade comercial e a matriz completa de desempenho/validação continuam pendentes.
 
