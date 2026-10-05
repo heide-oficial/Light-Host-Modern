@@ -36,10 +36,10 @@ heartbeat; affected audio is silent while the new layout is prepared. Failed
 configuration requests report their error and retain the previous layout when
 the plugin accepts restoration. Restarted workers receive the saved bus layout.
 
-## Validation status
+## Testing
 
-The feature remains experimental in LightHostModern 2.0.0. The [audit execution log](../devlog/2.0.0/2026-10-01-audit-remediation.md) records the earlier `Tests/IsolatedPluginTests.cpp` run with real worker processes, controlled failures, pipeline audio/MIDI, fragmented and tiny callbacks, two instances in series, bus metadata, capture limits and zero host allocations/frees inside the instrumented callbacks. Controlled crash/hang fixtures are compiled into `LightHostModernWorkerFixture.exe`. The production `LightHostModernWorker.exe` is built with `LIGHTHOST_WORKER_TEST_FIXTURES=0`; the fixture executable is excluded from release packages.
+`Tests/IsolatedPluginTests.cpp` exercises real worker processes with controlled crashes and hangs, pipeline audio/MIDI, fragmented and tiny callbacks, serial instances, bus metadata and state-capture limits. Instrumented callbacks check host allocations and frees. The failure fixtures are compiled into `LightHostModernWorkerFixture.exe`; the production worker uses `LIGHTHOST_WORKER_TEST_FIXTURES=0`, and release packages exclude the fixture executable.
 
-That earlier audit also records short editor/audio/state/restore checks for RoughRider3, T-De-Esser and Renegate. `Tests/IsolatedAudioIntegrationTests.ps1` measured a muted fixture for 60 seconds each on WASAPI (480 samples) and Focusrite USB ASIO (64 samples), at 48 kHz. The final repeated run recorded two late worker blocks on each backend; the host remained responsive. The same log retains the initial failed single-block measurements. Discovery and each opt-in test have external process deadlines.
+`Tests/IsolatedAudioIntegrationTests.ps1` checks worker processing with an explicitly selected real audio device. `Tests/IsolatedRealPluginTests.ps1` covers loading, editor lifecycle, synthetic audio, state capture and restore with supplied plugins; see [Real plugin validation](real-plugin-validation.md) for commands. Reports must retain the device settings, plugin versions and build hashes used for each run.
 
-These are historical results for the builds identified in those records. A documentation refresh or package-only rebuild does not rerun them. See the [2.0.0 validation record](release-2.0.0-validation.md) for package evidence and coverage limits. Prolonged sessions and broader plugin/hardware checks are still needed to assess behavior beyond those short local runs.
+The feature remains experimental. Controlled fixtures and short integration checks do not establish long-session stability or compatibility with every plugin, driver and device. Review missed blocks, added latency and editor behavior for the intended setup.

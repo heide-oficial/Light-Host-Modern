@@ -134,11 +134,6 @@ these when available; a fresh checkout can restore pinned dependencies normally.
 Do not keep dependencies inside old build directories. Source, test scripts,
 documentation, assets and compatibility shims remain part of development.
 
-Historical validation reports identify the builds and paths used for those runs;
-their temporary files may have been removed during later workspace cleanup. Keep
-the recorded results distinct from checks performed on a new candidate. Concept
-images are retained in `docs/concepts/plugin-chain`.
-
 ## Create release artifacts
 
 ```powershell
@@ -158,7 +153,7 @@ releases\v2.0.0\SHA256SUMS.txt
 
 The MSI and versioned portable ZIP are the two application packages; no unversioned aliases are published. The manifest pair, `release-artifacts.json` and `SHA256SUMS.txt` are technical release files. GitHub provides the tag's source downloads automatically; no additional source ZIP or source-verification asset is part of this publication layout.
 
-The signed manifest pair is generated only when manifest signing is configured. Without it, packages support manual installation. `-OutputDirectory` can select a candidate directory under the workspace's `out` or `releases` tree. `portable-verification.json` and candidate review records remain local validation evidence.
+The signed manifest pair is generated only when manifest signing is configured. Without it, packages support manual installation. `-OutputDirectory` can select a staging directory under the workspace's `out` or `releases` tree. `portable-verification.json` and test reports remain local validation evidence.
 
 The MSI defaults to `%ProgramFiles%\LightHostModern` and supports an installer-selected destination. It uses a stable `UpgradeCode` and a major-upgrade relationship so newer MSI versions replace older ones. Its legacy per-user migration checks the registered location and backs up recognized payload files before removing them after installation commits; see the cleanup contract below.
 
@@ -175,15 +170,15 @@ is requested. The release script does not publish anything to GitHub. Use `Build
 for routine layout/functionality checks; create a release folder when preparing that
 public version.
 
-Authenticode signing is optional and separate from update-manifest signing. Setting `LIGHTHOST_SIGNING_THUMBPRINT` selects a trusted Windows code-signing certificate; the build signs the configured application binaries and MSI with SHA-256 and a timestamp. Without it, the packages do not identify a verified application publisher to Windows. SignPath integration has not been configured.
+Authenticode signing is optional and separate from update-manifest signing. Setting `LIGHTHOST_SIGNING_THUMBPRINT` selects a trusted Windows code-signing certificate; the build signs the configured application binaries and MSI with SHA-256 and a timestamp. Without it, the packages do not identify a verified application publisher to Windows.
 
-The update manifest uses the independent `LIGHTHOST_MANIFEST_SIGNING_THUMBPRINT`. The maintainer's RSA public key is embedded in `UpdateTrustKeys.h`; the release script resolves the certificate from the Windows store, checks that it matches this public key, signs the exact final package hashes, and verifies them using the rebuilt update helper. The maintainer confirmed an encrypted private-key backup on 2026-10-02. Private keys and backup passwords never belong in the repository or release assets.
+The update manifest uses the independent `LIGHTHOST_MANIFEST_SIGNING_THUMBPRINT`. The maintainer's RSA public key is embedded in `UpdateTrustKeys.h`; the release script resolves the certificate from the Windows store, checks that it matches this public key, signs the exact final package hashes, and verifies them using the rebuilt update helper. Private keys and backup passwords never belong in the repository or release assets.
 
 Publish `update-manifest.json` and `update-manifest.sig` together with the exact installer and ZIP whose hashes they contain, plus `release-artifacts.json` and `SHA256SUMS.txt`. Renaming, repacking or signing a package requires regenerating the matching metadata, signature and checksums. `release-artifacts.json` and local `portable-verification.json` do not replace the signed manifest. Initial migration from an older flat portable requires extracting the new distribution manually.
 
 Both distributions include `LICENSE`, `THIRD-PARTY-NOTICES.txt` and the `Licenses` directory. The portable exposes these at its root and includes a versioned copy in its verified payload. See [Licensing and corresponding source](licensing.md) for the original grant, component inventory and source-delivery workflow.
 
-For 2.0.0 package revisions, completed checks, validation limits and publication details, see the [release validation record](release-2.0.0-validation.md) and [release notes](release-2.0.0-notes.md).
+See the [release notes](release-2.0.0-notes.md) for user-facing changes and migration information.
 
 ## Building from GitHub source downloads
 
@@ -222,10 +217,6 @@ The application source and patch recipe must be committed in the release tag;
 GitHub's automatic downloads cannot include uncommitted edits. Record the resolved
 commit when comparing source to a binary. This workflow does not claim identical
 binary bytes across toolchains or build timestamps.
-
-`Build Source.py` remains available for local source snapshots and older validation
-records. Running it or uploading its output is not part of the current publication
-workflow.
 
 ## Application updates
 

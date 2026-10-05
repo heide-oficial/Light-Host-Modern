@@ -1,6 +1,6 @@
 # Update and local package contract
 
-This document describes the 2.0.0 implementation; the [release validation record](release-2.0.0-validation.md) identifies which package revisions and update paths were actually exercised.
+This document describes how LightHostModern 2.0.0 discovers, authenticates and applies application updates.
 
 ## Discovery and eligibility
 
@@ -38,13 +38,13 @@ Native payload I/O and durable descriptor replacement use normalized absolute ex
 
 Every internally applied package also needs a bounded RSA/SHA-256 signed release manifest, containing version, architecture, minimum launcher version, artifact names/sizes/digests and the portable inventory digest. Trust roots are reviewed public keys compiled into `Source/UpdateTrustKeys.h`; downloaded metadata cannot supply its own trusted key. Normal updates reject downgrades; local recovery may return to an explicitly retained previously confirmed payload. Multiple embedded keys permit rotation. The root launcher itself requires a separate manual migration when its contract changes.
 
-The development tree embeds the maintainer's public RSA-3072 update key, provisioned on 2026-10-02. Its key ID is `f8f68adf39be2eb93d3e2658c0896c7203d51b495989430ead19e6171149d700`. Only the public key is committed. The private key is held in the maintainer's `CurrentUser\My` Windows certificate store and permits encrypted recovery export, not plaintext private-key export. This pin authenticates update manifests inside LightHostModern; it is not an Authenticode identity trusted by Windows.
+The application embeds the maintainer's public RSA-3072 update key. Its key ID is `f8f68adf39be2eb93d3e2658c0896c7203d51b495989430ead19e6171149d700`. Only the public key is committed. The private key is held in the maintainer's `CurrentUser\My` Windows certificate store and permits encrypted recovery export, not plaintext private-key export. This pin authenticates update manifests inside LightHostModern; it is not an Authenticode identity trusted by Windows.
 
 `Utilities/Initialize Update Signing.ps1` bootstraps an empty trust header or verifies the existing dedicated identity. It must not be used to rotate an established key silently. `Utilities/Update Signing.ps1` signs using the certificate store without exporting private material. `LIGHTHOST_MANIFEST_SIGNING_THUMBPRINT` selects that certificate; release builds also read its persistent user setting when the current shell predates setup. The release script checks that the public key is embedded before building and validates the final manifest with the rebuilt helper. Publish `update-manifest.json` and `update-manifest.sig` alongside the exact packages whose hashes they contain.
 
-The maintainer confirmed an encrypted private-key backup on 2026-10-02. `Utilities/Backup Update Signing Key.ps1` asks for the password interactively; never put that password, a PFX, or private key in the repository, logs, release assets or chat. Keep the recovery password separately from the backup. Do not discard the original key during reinstall/migration. The certificate expiry is not a network trust mechanism: the updater validates the embedded public key directly.
+`Utilities/Backup Update Signing Key.ps1` asks for the password interactively; never put that password, a PFX, or private key in the repository, logs, release assets or chat. Keep the recovery password separately from the backup. Do not discard the original key during reinstall/migration. The certificate expiry is not a network trust mechanism: the updater validates the embedded public key directly.
 
-Clients distributed with an empty trust list need a manual bootstrap installation. The stable portable launcher also embeds trust and is not replaced during ordinary payload updates. Consequently, publishing a payload with a new key does not update old launchers: future rotation requires a compatible launcher migration or a key provisioned in that launcher in advance. Installed clients likewise need a signed transition before a new key is used. Authenticode and SignPath onboarding remain separate publication work; configuring this public key alone does not certify that full update lifecycle validation has passed.
+Clients distributed with an empty trust list need a manual bootstrap installation. The stable portable launcher also embeds trust and is not replaced during ordinary payload updates. Consequently, publishing a payload with a new key does not update old launchers: future rotation requires a compatible launcher migration or a key provisioned in that launcher in advance. Installed clients likewise need a signed transition before a new key is used. Manifest signing and Windows Authenticode signing are separate mechanisms.
 
 ## Installed application and validation
 
@@ -52,8 +52,8 @@ Installed updates run Windows Installer with `/quiet /norestart`, requesting ele
 
 The normal release workflow uses one canonical WinUI output directory, builds host/UI/scanner/plugin worker/helper/launcher, runs CTest, verifies payload contents and produces local MSI/ZIP plus SHA-256/size metadata. `-SkipBuild` and `-SkipTests` reuse outputs and omit CTest respectively; records from such a run must not claim a new compilation or test pass. Manifest signing is conditional on its configured certificate. Package inspection reads and validates packages without installing them; actual installation, upgrade, repair and removal require a disposable Windows environment. See [Build and release](build-and-release.md).
 
-## Rename compatibility
+## Installation compatibility
 
-Release package names are versioned; older updaters that depend on an unversioned alias need a manual download from the release page. Installation compatibility is separate: the MSI ProductName remains `Light Host Modern`, its UpgradeCode remains unchanged, and small legacy executables forward to the canonical app. The visible app, shortcuts, install folder and main executable use `LightHostModern`.
+The MSI ProductName remains `Light Host Modern`, its UpgradeCode remains unchanged, and small legacy executables forward to the canonical app. The visible app, shortcuts, install folder and main executable use `LightHostModern`.
 
 Package validation retains exact names, repository URLs, versions, architectures, sizes and digests. Creating local packages or editing this contract does not publish a release.

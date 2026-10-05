@@ -86,9 +86,7 @@ release commit when matching source and binaries, and compare the actual depende
 overrides used by the build with the documented pins. An archive or notice review
 alone does not prove a successful rebuild or identical output bytes.
 
-`Build Source.py` and earlier source-snapshot records remain local maintenance and
-historical evidence. They are not an extra public download requirement for this
-layout. Private signing keys, credentials, user profiles, test-plugin binaries and
+Private signing keys, credentials, user profiles, test-plugin binaries and
 build products must stay out of the tagged project source.
 
 `ThirdParty/Licenses/SOURCES.txt` records the copied-text paths, source locations

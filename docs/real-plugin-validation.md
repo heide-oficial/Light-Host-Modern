@@ -1,8 +1,8 @@
 # Real plugin validation
 
-Current 2.0.0 candidate results are recorded in [release preparation](release-2.0.0-validation.md). The commands below describe opt-in tools; the dated September results later on this page are historical and do not certify a new build. No tests or downloads were run for the 2026-10-05 documentation review.
+These opt-in tools check plugin discovery, processing, state, editors and isolated workers. The normal CTest suite does not download or load third-party plugins. Keep each report with the tested executable hashes and plugin versions; passing one fixture does not establish compatibility with every plugin or device.
 
-## Issue 7 manifest regression
+## VST3 manifest regression
 
 The opt-in `Tests/scanner-manifest-regression.py` copies a supplied VST3 bundle into a unique ignored `out/manifest-regression` directory. It exercises missing, valid, invalid and stale manifests, compares full class IDs against the actual factory, and requires final module-fingerprint verification. It never edits the installed/original plugin.
 
@@ -10,7 +10,9 @@ The opt-in `Tests/scanner-manifest-regression.py` copies a supplied VST3 bundle 
 python Tests/scanner-manifest-regression.py --scanner out/build/windows-vs2022/LightHostModern_artefacts/Release/LightHostModernScanner.exe --module out/real-plugin-test/plugins/dragonfly-reverb-3.2.10/DragonflyRoomReverb.vst3
 ```
 
-Use the actual extracted bundle path if the archive layout differs. See [the issue 7 validation report](issue-7-validation.md) for historical 1.4.x results and their plugin-coverage limits.
+Use the actual extracted bundle path if the archive layout differs.
+
+## Scanner fixture
 
 The opt-in fixture uses [Dragonfly Reverb 3.2.10 for Windows x64](https://github.com/michaelwillis/dragonfly-reverb/releases/tag/3.2.10), a free plugin suite from its official publisher repository. It tests Early Reflections, Hall, Plate and Room in VST2 and VST3 format.
 
@@ -44,7 +46,7 @@ cmake --build out/build/windows-vs2022 --config Release --target LightHostModern
 python -X utf8 Tests/real-plugin-processing.py --download
 ```
 
-The additional implementation is [Airwindows PurestGain](https://www.airwindows.com/purestgain-vst/), downloaded from the publisher's [original ZIP](https://www.airwindows.com/wp-content/uploads/2016/11/PurestGain.zip). Its pinned archive SHA-256 is `0a79f7b3c2d35fe7e3819edb64f680d6a141495bc6e7bb4bbca77e494f8fcc6e`. Only `PurestGain64.dll` is extracted. Earlier discovery and processing results are recorded in the historical section below.
+The additional implementation is [Airwindows PurestGain](https://www.airwindows.com/purestgain-vst/), downloaded from the publisher's [original ZIP](https://www.airwindows.com/wp-content/uploads/2016/11/PurestGain.zip). Its pinned archive SHA-256 is `0a79f7b3c2d35fe7e3819edb64f680d6a141495bc6e7bb4bbca77e494f8fcc6e`. Only `PurestGain64.dll` is extracted.
 
 Processing checks submit 17/64/257/1001-sample blocks, verify finite nonzero output and exact block/sample accounting, capture distinct original/duplicate states, toggle mute and global bypass, and run callbacks while coordinated state capture, reordering, preparation, editor reuse and destruction take place. VST3 parameter changes are delivered through a process boundary before state capture; synthetic bypass/program parameters are excluded. The allocation audit covers host-image C++/CRT calls, not allocations inside third-party DLLs.
 
@@ -64,30 +66,3 @@ to 120 per plugin. Reports are written to unique folders under
 synthetic audio, state capture and restore. They do not open a real audio device
 or establish long-session compatibility. See [process isolation](plugin-isolation.md)
 for its runtime limits.
-
-## Historical results
-
-The following checks apply only to the dated artifacts. Paths under `out/` may
-have been removed during cleanup. Failures and partial passes remain recorded;
-no result below was promoted to a current release pass.
-
-### Scanner result — 2026-09-07
-
-All four VST2 modules and all four VST3 modules passed discovery and restored-cache validation. Every effect reported two input and two output channels, and identities remained stable through XML serialization. The real fixture exposed two issues now covered by simulated regressions: foreign-format DLLs being considered VST2 candidates, and JUCE's inner-binary VST3 descriptions being rejected when the requested module was the outer bundle. The original JUCE binary identifier is preserved; association with the requested bundle is checked for both result validation and cache lookup.
-
-Final host/scanner Release build passed. All seven CTest suites passed (7.07 seconds while the host link was running); the eight real-format checks passed again using the final scanner executable. The existing WinUI payload was copied and hash-verified. Version remains 1.2.2; no release, tag or push was created.
-
-### Offline processing result: 2026-09-08
-
-`out/real-plugin-test/processing-results.json` records eight complete passes: Dragonfly Hall/Plate/Room VST2, all four Dragonfly VST3 modules and PurestGain VST2. Those runs reported zero host callback allocations/frees and no process failures. PurestGain exposed a host bug where requesting a native editor repeatedly recreated its generic fallback; `PluginWindow` now reuses that window.
-
-Dragonfly Early Reflections VST2 did not complete its native-editor scenario. Repeated stack samples locate the stalled UI thread inside `vm3dgl64.dll`; its audio worker continues. Evidence is in `early-vmware-stack.txt`. The [VMware OpenGL workaround](https://knowledge.broadcom.com/external/article/383994) was tried with `SVGA_ALLOW_LLVMPIPE=0` **only in the child process environment**; it also timed out, later in the scenario. `processing-vmware-no-llvmpipe-selected-results.json` preserves that failure. No global environment or graphics driver was changed.
-
-Running `--generic-editor --match DragonflyEarlyReflections-vst` passes its DSP, state, lifecycle and generic-editor checks, recorded separately in `processing-generic-editor-selected-results.json`. This does not approve its native editor. DPF also emits component/connection refcount warnings during VST3 teardown; they are retained verbatim in the reports for follow-up.
-
-After strengthening allocation attribution to include JUCE's format bridge in the
-host scope, the runner was rebuilt and all eight unaffected cases passed again
-using `--exclude DragonflyEarlyReflections-vst.dll`. The report is
-`processing-filtered-results.json`. Early Reflections VST2 passed again separately
-with `--generic-editor`; all nine reports show zero detected host callback
-allocations/frees and processing failures. The native-editor limitation remains.

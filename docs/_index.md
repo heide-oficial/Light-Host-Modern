@@ -1,6 +1,6 @@
 # LightHostModern documentation
 
-These guides describe **LightHostModern 2.0.0**, reviewed on **2026-10-05**. See the [release validation record](release-2.0.0-validation.md) for package revisions, completed checks and validation limits; a documentation review is not a new application test run.
+These guides describe **LightHostModern 2.0.0** and its development workflow.
 
 LightHostModern is a Windows audio plugin host. A JUCE host process owns the audio stream, serial List or routed Chain, persistence and notification-area lifetime. A native WinUI 3 process presents the interface and exchanges commands and snapshots with the host through a local named pipe.
 
@@ -44,13 +44,9 @@ Audio processing needs a running host and an open, usable device. Closing the in
 | [Build and release](build-and-release.md) | Dependencies, build commands, numbered development portables and release packaging. |
 | [Localization](localization.md) | Translation catalogues and fallback behavior. |
 | [Licensing and corresponding source](licensing.md) | Component notices and source-distribution requirements. |
-| [Performance validation](performance-validation.md) | Measurement tools, interpretation and separately dated historical results. |
-| [Real plugin validation](real-plugin-validation.md) | Opt-in scanner/processing fixtures and the limits of recorded results. |
+| [Performance validation](performance-validation.md) | Measurement tools, callback instrumentation and result interpretation. |
+| [Real plugin validation](real-plugin-validation.md) | Opt-in scanner, processing and isolated-worker checks with real plugins. |
 
-## Releases and history
+## Release notes
 
-- [2.0.0 release notes](release-2.0.0-notes.md): changes since **v1.4.1**, migration and experimental isolation limits.
-- [2.0.0 release validation](release-2.0.0-validation.md): artifact history, completed checks, validation limits and publication details.
-- [Historical records](historical-records.md): earlier plans, investigations and validation reports, including the 2.0.0 audit plan. Their dates, versions and original results are retained; they do not describe today's release status.
-
-Paths under `out/`, `dev-test/`, `releases/` and `VM-RESULTS/` in validation records refer to local work products. They are not committed documentation assets and are not guaranteed to exist in a fresh checkout. Current guides and source links are relative to the repository; historical local evidence is written as a path rather than a broken download link.
+See the [2.0.0 release notes](release-2.0.0-notes.md) for changes since **v1.4.1**, migration and experimental isolation limits.

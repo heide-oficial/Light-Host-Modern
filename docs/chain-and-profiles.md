@@ -186,11 +186,7 @@ move with arrows (Shift for larger steps), or use a port's **Connect to** menu.
 Visual timers stop when the canvas is hidden/minimized without stopping pending
 edit delivery. Camera values are validated before drawing the dotted background.
 
-## Validation record
-
-This guide describes LightHostModern 2.0.0. Recorded checks and hardware/VM
-validation limits are tracked in
-[2.0.0 release validation](release-2.0.0-validation.md).
+## Manual review
 
 Manual review should cover both modes, save/discard/cancel and restart-later,
 profile duplication/deletion, mono/stereo and physical channel mapping, parallel

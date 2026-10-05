@@ -1,11 +1,10 @@
 # Release performance validation
 
-This guide describes the current measurement tools, not a claim that every
-performance scenario passed for 2.0.0. Current candidate results and limitations
-are in [release preparation](release-2.0.0-validation.md). Historical 1.2.2 results
-and their old baseline paths are retained at the end of this page.
+Use these tools to measure CPU, memory, rendering and audio callback behavior.
+Results apply to the tested build, workload, device and configuration; keep that
+information with each report.
 
-## Current measurement workflow
+## Measurement workflow
 
 Build the Release host and WinUI first; see [Build and release](build-and-release.md).
 Run from the repository root using a disposable test setup and an exact output
@@ -31,13 +30,12 @@ performance; comparison, processing continuity and xrun review are still require
 `Tests/AnalyzeReleasePerformance.py BASELINE_JSON CURRENT_JSON --output REPORT`
 compares interval-weighted process CPU, median memory, endpoint memory growth,
 delivered work and per-run callback quantiles. It flags changes above five percent,
-lost work, xruns, callback allocations and minimized visual telemetry. Eight historical local
-tests passed for weighted samples, unavailable values, duration checks, regressions,
-work loss, memory/telemetry checks, mismatched window sizes and new GPU work after a zero baseline. Smoke reports remain explicitly incomplete.
-The script does not approve the overall application or substitute for the
-outstanding hardware, accessibility and installer scenarios.
+lost work, xruns, callback allocations and minimized visual telemetry. It also
+checks unavailable values, measurement duration, mismatched window sizes and GPU
+work after a zero baseline. Smoke reports remain explicitly incomplete. These
+measurements do not replace hardware, accessibility or installer checks.
 
-## Focused 2.0.0 benchmarks
+## Focused benchmarks
 
 - `Tests/CanvasResourceBenchmark.ps1` accepts `-HostExecutable`, defaults to IPC 5,
   128 nodes and 15 seconds per observation, and exercises canvas resources in an
@@ -50,10 +48,10 @@ outstanding hardware, accessibility and installer scenarios.
   reports. Check device, buffer, workload, instrumentation, measurement duration
   and executable hashes before interpreting a percentage as an improvement.
 
-The `-Variant baseline` option belongs to the historical 1.2.2 comparison and
-requires its separately reconstructed artifacts. A clean checkout does not
-contain those ignored files. Do not substitute an arbitrary executable or
-represent an unavailable baseline as a completed comparison.
+The `-Variant baseline` option requires separately prepared baseline artifacts
+at the paths expected by the runner. They are not included in a fresh checkout.
+Verify the executable hashes and configuration before using an existing baseline
+report for comparison.
 
 ## Callback measurement contract
 
@@ -101,66 +99,3 @@ not establish that third-party code is allocation-free.
 The audit is opt-in for normal distribution builds. Record whether it is enabled
 for both comparison variants; do not compare instrumented and uninstrumented CPU
 measurements as if their configurations matched.
-
-## Historical baseline and results: September 2026
-
-The following paths and results belong to the 1.2.2 investigation, not the current
-release. Generated artifacts may no longer be present after workspace cleanup.
-No historical test was rerun for this documentation update.
-
-The frozen preparation build is in `out/baselines/completion-20260908-release`.
-It has not been timed. Do not launch that binary with the production user's
-preferences: it predates complete test-profile isolation. A comparison copy must
-preserve its DSP and UI implementation and record any isolation/instrumentation
-adaptations separately. The original frozen files remain unchanged.
-
-`Tests/PrepareComparisonBaseline.py` verifies all 518 frozen artifacts and
-reconstructs the source from revision `93e7dd1097ea2730bb91ad73741972354c5c1d88`,
-the captured working-tree patch and captured untracked sources.
-`Tests/AdaptComparisonBaseline.py` records a separate diff/hash manifest for
-profile isolation, a timer forwarding to the original JUCE player, work counters
-and the same allocation auditor used by the final host. It does not replace the
-old DSP implementation or UI. The verified comparison build is under
-`out/bcmp1`; its UI is a copy of the original frozen executable. The incomplete
-first reconstruction under `out/bcmp` must not be used.
-
-### Recorded checks
-
-The deterministic callback suite passed warmup/end boundaries, exact work counts,
-histogram precision up to the maximum integer value, interrupted runs and
-concurrent progress readers. The realtime suite passed after including the JUCE
-format bridge in host attribution. The actual shared-WASAPI integration passed
-with a one-second warmup and two-second measured window: 209 delivered callbacks,
-100,320 samples, zero host allocations/frees and zero reported xruns. The report
-is `out/callback-measurement/results.json`. This short test validates the
-measurement path; it is not a performance acceptance run. The complete paired
-five-by-five-minute scenario comparison was not executed before the user ended
-additional testing on 2026-09-08.
-
-Both reconstructed-baseline and current-host two-second smoke runs passed with
-the exact same output configuration and 209 callbacks / 100,320 samples each,
-zero host allocations/frees and zero xruns. The baseline no-audio watchdog stayed
-closed for six seconds before explicit selection. Production preferences were
-unchanged. Reports: `out/performance-baseline-smoke` and
-`out/performance-current-smoke`. The old protocol can disconnect before replying
-to quit; the harness records that separately and confirms the process actually
-exited. These reports are not a five-by-five-minute comparison.
-
-The reconstructed baseline's full Dashboard series completed in
-`out/performance-full/baseline-dashboard/results.json`, with eight simulated VST3
-processors, 30 seconds of warmup and five repetitions of 300 seconds. The five
-runs delivered 30,046 / 30,031 / 29,999 / 30,000 / 30,038 callbacks and reported
-2 / 3 / 0 / 0 / 1 xruns. Every run recorded zero host allocations/frees and no
-processing failures; production preferences were unchanged. The xrun results
-are retained without an assumed cause.
-
-The matching full current-build Dashboard series and both full minimized series
-were not started. Earlier short Dashboard/minimized runs of both variants passed;
-the current minimized smoke kept its visual-telemetry count unchanged at 82.
-These short runs do not establish long-term memory/queue stability or compliance
-with the five-percent regression threshold. Performance acceptance remains
-incomplete, and no additional runs are scheduled as part of this delivery.
-
-The final local packages in `out/release-test-final-audit` retain the explicit
-Release host allocation audit. Their artifact manifest identifies the delivered
-files; they must not be described as an uninstrumented performance build.
