@@ -40,7 +40,7 @@ PayloadRef layoutFixture(const std::filesystem::path& root,const char* version) 
     juce::File((root/L"release-info.json").c_str()).replaceWithText(info);juce::File((root/L"LightHostModern.exe").c_str()).replaceWithText("stable launcher");return ref;
 }
 std::filesystem::path signedZipFixture(const TestSigningKey& key,PayloadRef& candidate) {
-    const auto content=directory();candidate=layoutFixture(content,"1.2.2");const auto operation=directory();const auto path=operation/L"LightHostModern-Portable.zip";
+    const auto content=directory();candidate=layoutFixture(content,"1.2.2");const auto operation=directory();const auto path=operation/L"LightHostModern-v1.2.2-Portable.zip";
     juce::ZipFile::Builder builder;
     for(const auto& entry:std::filesystem::recursive_directory_iterator(content))if(entry.is_regular_file())
         builder.addFile(juce::File(entry.path().c_str()),6,juce::String(entry.path().lexically_relative(content).generic_wstring().c_str()));
@@ -54,7 +54,7 @@ std::filesystem::path signedZipFixture(const TestSigningKey& key,PayloadRef& can
 void realPortablePackageScenario(scenarios::Runner& runner, const std::filesystem::path& source) {
     runner.run("Actual release ZIP prepares, activates and recovers using the production portable engine", [&] {
         TestSigningKey key; const auto operation = directory(), root = directory();
-        const auto package = operation / L"LightHostModern-Portable.zip";
+        const auto package = operation / source.filename();
         std::filesystem::copy_file(source, package);
         juce::FileInputStream input(juce::File(package.c_str())); juce::ZipFile zip(input);
         const auto read = [&](const char* name) {
@@ -64,8 +64,7 @@ void realPortablePackageScenario(scenarios::Runner& runner, const std::filesyste
         };
         const auto candidate = PayloadRef::parse(read("portable-layout.json")["initial"]);
         const auto version = read("release-info.json")["version"].toString();
-        auto artifact = forFile(package); artifact.version = ("v" + version).toWideCharPointer();
-        artifact.url = L"https://github.com/heide-oficial/Light-Host-Modern/releases/download/" + artifact.version + L"/" + artifact.name;
+        auto artifact = forFile(package, Distribution::portable, ("v" + version).toWideCharPointer());
         juce::DynamicObject::Ptr item = new juce::DynamicObject;
         item->setProperty("name", juce::String(artifact.name.c_str())); item->setProperty("size", (juce::int64)artifact.bytes); item->setProperty("digest", juce::String(artifact.digest.c_str()));
         juce::DynamicObject::Ptr manifest = new juce::DynamicObject;

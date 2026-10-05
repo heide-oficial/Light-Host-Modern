@@ -8,6 +8,8 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/HostProtocol.ps1"
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $packages = (Get-Item -LiteralPath $PackageDirectory).FullName
+if ($ExpectedVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'ExpectedVersion must contain three numeric parts.' }
+$portableName = "LightHostModern-v$ExpectedVersion-Portable.zip"
 if (!$BaselineHelper) { $BaselineHelper = Join-Path (Get-TestBuildDirectory) 'test-fixtures/Release/LightHostModernUpdateHelperBaselineFixture.exe' }
 $fixtureHelper = (Get-Item -LiteralPath $BaselineHelper).FullName
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $repo ('out/portable-update-integration-' + [guid]::NewGuid().ToString('N')) }
@@ -153,11 +155,11 @@ $productionBefore = @{}
 foreach ($file in $productionFiles) { $productionBefore[$file] = if (Test-Path -LiteralPath $file) { Hash $file } else { '' } }
 try {
     $metadata = Get-Content -LiteralPath (Join-Path $packages 'release-artifacts.json') -Raw | ConvertFrom-Json
-    $artifact = @($metadata.artifacts | Where-Object name -eq 'LightHostModern-Portable.zip')
-    Assert ($artifact.Count -eq 1 -and $artifact[0].version -eq $ExpectedVersion) 'Expected portable release artifact is missing'
+    $artifact = @($metadata.artifacts | Where-Object { $_.name -ceq $portableName -and $_.distribution -ceq 'portable' })
+    Assert ($metadata.formatVersion -eq 1 -and $artifact.Count -eq 1 -and $artifact[0].version -eq $ExpectedVersion -and $artifact[0].architecture -eq 'x64') 'Expected versioned x64 portable release artifact is missing or ambiguous'
     $artifact = $artifact[0]
-    foreach ($name in 'LightHostModern-Portable.zip','update-manifest.json','update-manifest.sig') { Copy-Item -LiteralPath (Join-Path $packages $name) -Destination (Join-Path $operation $name) }
-    $package = Join-Path $operation 'LightHostModern-Portable.zip'
+    foreach ($name in $portableName,'update-manifest.json','update-manifest.sig') { Copy-Item -LiteralPath (Join-Path $packages $name) -Destination (Join-Path $operation $name) }
+    $package = Join-Path $operation $portableName
     $packageHash = Hash $package
     Assert (('sha256:'+$packageHash) -eq $artifact.digest -and (Get-Item -LiteralPath $package).Length -eq $artifact.size) 'Copied release package differs from metadata'
     $productionHelper = Join-Path (Get-TestBuildDirectory) 'LightHostModern_artefacts/Release/LightHostModernUpdateHelper.exe'
@@ -231,7 +233,7 @@ try {
     Assert-Preserved
     Stop-Profile
     Passed 'Actual launcher recovers an interrupted candidate through previous complete payload and retains profile'
-    Assert ((Hash $package) -eq $packageHash -and (Hash (Join-Path $packages 'LightHostModern-Portable.zip')) -eq $packageHash) 'Release artifact changed during integration'
+    Assert ((Hash $package) -eq $packageHash -and (Hash (Join-Path $packages $portableName)) -eq $packageHash) 'Release artifact changed during integration'
 } catch {
     $failure = $_.Exception.Message
     $results.Add([ordered]@{name='Portable update integration';status='failed';error=$failure})

@@ -33,7 +33,7 @@ struct Sink final : Output
 };
 Artifact fixture(const std::string& bytes)
 {
-    Artifact result; result.version = L"v1.2.2"; result.name = artifactName(result.distribution);
+    Artifact result; result.version = L"v1.2.2"; result.name = versionedArtifactName(result.distribution, result.version);
     result.url = L"https://github.com/heide-oficial/Light-Host-Modern/releases/download/" + result.version + L"/" + result.name;
     Sha256 hash; hash.append(bytes.data(), bytes.size()); result.digest = L"sha256:" + hash.finish(); result.bytes = bytes.size(); return result;
 }
@@ -68,7 +68,7 @@ std::string pe(bool x64 = true)
 std::filesystem::path zipFixture(const std::filesystem::path& parent, const char* version = "1.2.2", const char* platform = "x64",
                                 bool omitHelper = false, bool wrongPe = false, bool traversal = false)
 {
-    const auto file = parent / L"LightHostModern-Portable.zip";
+    const auto file = parent / L"LightHostModern-v1.2.2-Portable.zip";
     juce::ZipFile::Builder builder;
     const auto add = [&](const juce::String& name, const std::string& contents) {
         builder.addEntry(new juce::MemoryInputStream(contents.data(), contents.size(), true), 6, name, juce::Time::getCurrentTime());
@@ -101,9 +101,10 @@ void msiFixture(const std::filesystem::path& path, const wchar_t* version = L"1.
         && MsiSummaryInfoSetPropertyW(summary.value, 7, VT_LPSTR, 0, nullptr, architecture) == ERROR_SUCCESS
         && MsiSummaryInfoPersist(summary.value) == ERROR_SUCCESS && MsiDatabaseCommit(db.value) == ERROR_SUCCESS, "MSI fixture summary failed");
 }
-Artifact forFile(const std::filesystem::path& file, Distribution distribution = Distribution::portable)
+Artifact forFile(const std::filesystem::path& file, Distribution distribution = Distribution::portable,
+                 const std::wstring& version = L"v1.2.2")
 {
-    Artifact artifact; artifact.distribution = distribution; artifact.version = L"v1.2.2"; artifact.name = artifactName(distribution);
+    Artifact artifact; artifact.distribution = distribution; artifact.version = version; artifact.name = versionedArtifactName(distribution, version);
     artifact.bytes = std::filesystem::file_size(file); artifact.digest = fileDigest(file);
     artifact.url = L"https://github.com/heide-oficial/Light-Host-Modern/releases/download/" + artifact.version + L"/" + artifact.name; return artifact;
 }
@@ -143,15 +144,50 @@ int main(int argc, char** argv)
         invalid = good; invalid.bytes = maximumPackageBytes + 1; expect("size_mismatch", [&] { invalid.validate(); });
         invalid = good; invalid.digest.clear(); expect("checksum_unavailable", [&] { invalid.validate(); });
     });
-    runner.run("Versioned installer and exact compatibility alias", [] {
-        auto artifact = fixture("package"); artifact.distribution = Distribution::installed; artifact.version = L"v1.4.0";
-        for (const auto& name : {versionedArtifactName(artifact.distribution, artifact.version), artifactName(artifact.distribution)}) {
-            artifact.name = name;
-            artifact.url = L"https://github.com/heide-oficial/Light-Host-Modern/releases/download/v1.4.0/" + name;
-            artifact.validate();
+    runner.run("Canonical versioned artifacts bind distribution, release version and download tag", [] {
+        const std::wstring base = L"https://github.com/heide-oficial/Light-Host-Modern/releases/download/";
+        for (const auto distribution : {Distribution::installed, Distribution::portable}) {
+            const std::wstring expected = distribution == Distribution::installed ? L"LightHostModern-2.0.0-Setup.msi" : L"LightHostModern-v2.0.0-Portable.zip";
+            for (const auto* tag : {L"v2.0.0", L"2.0.0", L"V2.0.0"}) {
+                scenarios::require(versionedArtifactName(distribution, tag) == expected, "Canonical artifact name changed");
+                auto artifact = fixture("package"); artifact.distribution = distribution; artifact.version = tag;
+                artifact.name = expected; artifact.url = base + tag + L"/" + expected; artifact.validate();
+                artifact.url = base + L"v2.0.1/" + expected;
+                expect("artifact_mismatch", [&] { artifact.validate(); });
+                artifact.version = L"v2.0.1";
+                expect("artifact_mismatch", [&] { artifact.validate(); });
+            }
+            expect("version_mismatch", [&] { (void)versionedArtifactName(distribution, L"2.0.0-beta"); });
+            for (const auto* name : {L"LightHostModern-Setup.msi", L"LightHostModern-Portable.zip",
+                    L"LightHostModern-2.0.1-Setup.msi", L"LightHostModern-v2.0.1-Portable.zip",
+                    L"LightHostModern-v2.0.0-Setup.msi", L"LightHostModern-2.0.0-Portable.zip",
+                    L"LightHostModern-V2.0.0-Portable.zip", L"LightHostModern-02.0.0-Setup.msi",
+                    L"LightHostModern-v02.0.0-Portable.zip", L"LightHostModern-2.0.0-Setup.msi.bak",
+                    L"LightHostModern-v2.0.0-Portable.zip.bak"}) {
+                auto artifact = fixture("package"); artifact.distribution = distribution; artifact.version = L"v2.0.0";
+                artifact.name = name; artifact.url = base + artifact.version + L"/" + name;
+                expect("artifact_mismatch", [&] { artifact.validate(); });
+            }
         }
-        artifact.name = L"LightHostModern-9.9.9-Setup.msi";
-        expect("artifact_mismatch", [&] { artifact.validate(); });
+    });
+    runner.run("Asset selection ignores aliases, wrong versions and the other distribution", [] {
+        std::vector<std::wstring> names{L"LightHostModern-Portable.zip", L"LightHostModern-Setup.msi",
+            L"LightHostModern-v9.9.9-Portable.zip", L"LightHostModern-9.9.9-Setup.msi",
+            L"LightHostModern-2.0.0-Portable.zip", L"LightHostModern-v2.0.0-Setup.msi",
+            L"LightHostModern-v2.0.0-Portable.zip", L"LightHostModern-2.0.0-Setup.msi"};
+        for (const auto distribution : {Distribution::installed, Distribution::portable}) {
+            const std::wstring expected = distribution == Distribution::installed ? L"LightHostModern-2.0.0-Setup.msi" : L"LightHostModern-v2.0.0-Portable.zip";
+            const auto accepts = [&](const std::wstring& name) { return artifactNameAllowed(distribution, L"v2.0.0", name); };
+            for (unsigned order = 0; order < 2; ++order) {
+                const auto selected = std::find_if(names.begin(), names.end(), accepts);
+                scenarios::require(selected != names.end() && *selected == expected, "Asset order selected an alias or mismatched package");
+                scenarios::require(std::count_if(names.begin(), names.end(), accepts) == 1, "Multiple artifact names are eligible");
+                std::reverse(names.begin(), names.end());
+            }
+            auto withoutCanonical = names;
+            withoutCanonical.erase(std::remove(withoutCanonical.begin(), withoutCanonical.end(), expected), withoutCanonical.end());
+            scenarios::require(std::none_of(withoutCanonical.begin(), withoutCanonical.end(), accepts), "Missing canonical asset fell back to another name");
+        }
     });
     runner.run("Bounded streaming SHA-256 and exact byte progress", [] {
         const std::string bytes(3 * transferCapacity + 43, 'x'); auto artifact = fixture(bytes);
@@ -198,6 +234,10 @@ int main(int argc, char** argv)
     });
     runner.run("Portable internal version, platform, binaries and safe archive paths", [] {
         auto valid = zipFixture(directory()); validatePackage(valid, forFile(valid));
+        for (const auto* name : {L"LightHostModern-Portable.zip", L"LightHostModern-v1.2.1-Portable.zip"}) {
+            const auto renamed = directory() / name; std::filesystem::copy_file(valid, renamed);
+            expect("artifact_mismatch", [&] { validatePackage(renamed, forFile(renamed)); });
+        }
         auto wrongVersion = zipFixture(directory(), "1.2.1"); expect("version_mismatch", [&] { validatePackage(wrongVersion, forFile(wrongVersion)); });
         auto wrongPlatform = zipFixture(directory(), "1.2.2", "arm64"); expect("architecture_mismatch", [&] { validatePackage(wrongPlatform, forFile(wrongPlatform)); });
         auto missing = zipFixture(directory(), "1.2.2", "x64", true); expect("package_incomplete", [&] { validatePackage(missing, forFile(missing)); });
@@ -205,12 +245,16 @@ int main(int argc, char** argv)
         auto escape = zipFixture(directory(), "1.2.2", "x64", false, false, true); expect("package_invalid", [&] { validatePackage(escape, forFile(escape)); });
     });
     runner.run("MSI inspection is read-only and rejects version or architecture mismatch", [] {
-        const auto valid = directory() / L"LightHostModern-Setup.msi"; msiFixture(valid);
+        const auto valid = directory() / L"LightHostModern-1.2.2-Setup.msi"; msiFixture(valid);
         const auto artifact = forFile(valid, Distribution::installed); validatePackage(valid, artifact);
         scenarios::require(fileDigest(valid) == normalizedDigest(artifact.digest), "MSI inspection modified database");
-        const auto wrongVersion = directory() / L"LightHostModern-Setup.msi"; msiFixture(wrongVersion, L"1.2.1");
+        for (const auto* name : {L"LightHostModern-Setup.msi", L"LightHostModern-1.2.1-Setup.msi"}) {
+            const auto renamed = directory() / name; std::filesystem::copy_file(valid, renamed);
+            expect("artifact_mismatch", [&] { validatePackage(renamed, forFile(renamed, Distribution::installed)); });
+        }
+        const auto wrongVersion = directory() / L"LightHostModern-1.2.2-Setup.msi"; msiFixture(wrongVersion, L"1.2.1");
         expect("version_mismatch", [&] { validatePackage(wrongVersion, forFile(wrongVersion, Distribution::installed)); });
-        const auto wrongArch = directory() / L"LightHostModern-Setup.msi"; msiFixture(wrongArch, L"1.2.2", L"Intel;1033");
+        const auto wrongArch = directory() / L"LightHostModern-1.2.2-Setup.msi"; msiFixture(wrongArch, L"1.2.2", L"Intel;1033");
         expect("architecture_mismatch", [&] { validatePackage(wrongArch, forFile(wrongArch, Distribution::installed)); });
     });
     runner.run("Installer requires arm plus both exits; timeouts and cancellation never install", [] {

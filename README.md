@@ -63,13 +63,17 @@ For detailed descriptions of the screens, workflows, and internal implementation
 
 ### Recommended installation
 
-Download `LightHostModern-<version>-Setup.msi` from the [latest GitHub release](https://github.com/heide-oficial/Light-Host-Modern/releases/latest), open it, and follow the Windows Installer steps. The application is installed under `%ProgramFiles%\LightHostModern` and receives Start menu and desktop shortcuts. Newer MSI releases upgrade the existing installation; the installer also migrates installations created by the legacy per-user setup.
+Download `LightHostModern-2.0.0-Setup.msi` from the [2.0.0 release](https://github.com/heide-oficial/Light-Host-Modern/releases/tag/v2.0.0), open it, and follow the Windows Installer steps. The application is installed under `%ProgramFiles%\LightHostModern` and receives Start menu and desktop shortcuts. Newer MSI releases upgrade the existing installation; the installer also migrates installations created by the legacy per-user setup.
 
 ### Portable version
 
-Download `LightHostModern-Portable.zip` from the [latest GitHub release](https://github.com/heide-oficial/Light-Host-Modern/releases/latest), extract it to a stable folder, and run `LightHostModern.exe`. The complete self-contained app does not extract itself on every launch or require PowerShell at runtime.
+Download `LightHostModern-v2.0.0-Portable.zip` from the [2.0.0 release](https://github.com/heide-oficial/Light-Host-Modern/releases/tag/v2.0.0), extract it to a stable folder, and run `LightHostModern.exe`. The complete self-contained app does not extract itself on every launch or require PowerShell at runtime.
 
 Starting with 2.0.0, the root executable is a stable launcher and the app lives under `versions/`. Extract the **complete** ZIP and always start the root executable. To move from a 1.x flat portable, extract 2.0.0 into a new folder once; do not copy only the new executable over the old folder. Preferences remain in the existing user profile. Internal portable updates require NTFS; other file systems use manual extraction.
+
+### Building from source
+
+Use GitHub's **Source code (zip)** or **Source code (tar.gz)** downloads for the `v2.0.0` tag. Follow [Build and release](docs/build-and-release.md#building-from-github-source-downloads) to install the tools and fetch the pinned public dependencies. The archive includes the application's dependency patches.
 
 ## 🔒 Privacy and disclosures
 

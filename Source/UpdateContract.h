@@ -41,16 +41,15 @@ inline std::optional<std::array<unsigned, 3>> parseVersion(std::wstring text)
     }
     return at == text.size() ? std::optional{result} : std::nullopt;
 }
-inline std::wstring artifactName(Distribution value)
-{ return value == Distribution::installed ? L"LightHostModern-Setup.msi" : L"LightHostModern-Portable.zip"; }
 inline std::wstring versionedArtifactName(Distribution value, std::wstring version)
 {
     require(parseVersion(version).has_value(), "version_mismatch");
     if (!version.empty() && (version.front() == L'v' || version.front() == L'V')) version.erase(0, 1);
-    return value == Distribution::installed ? L"LightHostModern-" + version + L"-Setup.msi" : artifactName(value);
+    return value == Distribution::installed ? L"LightHostModern-" + version + L"-Setup.msi"
+                                           : L"LightHostModern-v" + version + L"-Portable.zip";
 }
 inline bool artifactNameAllowed(Distribution value, const std::wstring& version, const std::wstring& name)
-{ return name == versionedArtifactName(value, version) || name == artifactName(value); }
+{ return name == versionedArtifactName(value, version); }
 inline std::wstring normalizedDigest(std::wstring value)
 {
     if (value.rfind(L"sha256:", 0) == 0) value.erase(0, 7);

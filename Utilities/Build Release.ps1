@@ -49,8 +49,7 @@ $outRoot = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } el
 $packageWorkRoot = Join-Path $repoRoot ("out\package-work\v$appVersion-" + [guid]::NewGuid().ToString('N'))
 $stageRoot = Join-Path $packageWorkRoot "payload"
 $installerMsi = Join-Path $outRoot "LightHostModern-$appVersion-Setup.msi"
-$installerAlias = Join-Path $outRoot "LightHostModern-Setup.msi"
-$portableZip = Join-Path $outRoot "LightHostModern-Portable.zip"
+$portableZip = Join-Path $outRoot "LightHostModern-v$appVersion-Portable.zip"
 $releaseIcon = Join-Path $repoRoot "Icon\logo.ico"
 
 function Resolve-CMake {
@@ -661,10 +660,8 @@ if (Test-Path -LiteralPath $legacyInstallerExe) {
 
 New-WixMsiPackage -SourceDir $stageRoot -WorkDir $installerWork -TargetMsi $installerMsi -IconPath $releaseIcon
 Sign-ReleaseFile -Path $installerMsi
-Copy-Item -LiteralPath $installerMsi -Destination $installerAlias -Force
-if ((Get-FileHash -LiteralPath $installerMsi).Hash -ne (Get-FileHash -LiteralPath $installerAlias).Hash) { throw "Installer compatibility alias differs" }
 
-$artifactMetadata = foreach ($pair in @(@($installerMsi, 'installed'), @($installerAlias, 'installed'), @($portableZip, 'portable'))) {
+$artifactMetadata = foreach ($pair in @(@($installerMsi, 'installed'), @($portableZip, 'portable'))) {
     $file = Get-Item -LiteralPath $pair[0]
     $digest = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     & (Join-Path $hostOutput 'LightHostModernUpdateHelper.exe') --mode validate --operation $outRoot --package $file.FullName --version $appVersion --size $file.Length --sha256 $digest --distribution $pair[1]
@@ -689,6 +686,26 @@ if (Test-Path -LiteralPath $legacyPortableExe) {
 }
 
 Verify-PortableArchive
+
+# Release packages always carry their version. Remove only the known obsolete
+# aliases from this validated output directory, so a later upload cannot pick
+# them up accidentally.
+foreach ($obsoleteName in 'LightHostModern-Setup.msi', 'LightHostModern-Portable.zip') {
+    $obsoletePackage = Join-Path $outRoot $obsoleteName
+    if (Test-Path -LiteralPath $obsoletePackage -PathType Leaf) {
+        Remove-Item -LiteralPath $obsoletePackage -Force
+    }
+}
+
+$checksumNames = @([IO.Path]::GetFileName($installerMsi), [IO.Path]::GetFileName($portableZip), 'release-artifacts.json')
+if ($ManifestSigningThumbprint) {
+    $checksumNames += 'update-manifest.json', 'update-manifest.sig'
+}
+$checksumLines = foreach ($name in $checksumNames | Sort-Object) {
+    $hash = (Get-FileHash -LiteralPath (Join-Path $outRoot $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+    "$hash  $name"
+}
+[IO.File]::WriteAllText((Join-Path $outRoot 'SHA256SUMS.txt'), (($checksumLines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
 
 if (!$KeepStage) {
     Remove-BuildDirectory $stageRoot

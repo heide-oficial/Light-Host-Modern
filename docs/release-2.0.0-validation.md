@@ -2,6 +2,34 @@
 
 Validation: **local release checks recorded below; background-release checks passed**. The earlier candidate passed bounded VM installer validation; the latest host revision has not been installed in that VM. The maintainer authorized the final commit, tag, release uploads and public release on **2026-10-05**. SignPath/Authenticode remains deferred. Issues are left for the maintainer to answer and close manually.
 
+## Versioned-package correction: 2026-10-05
+
+The maintainer requested an in-place correction of **v2.0.0**, retaining
+`LightHostModern-2.0.0-Setup.msi` and naming the portable
+`LightHostModern-v2.0.0-Portable.zip`. Only these two application packages are
+included in the release layout. The signed manifest, signature, artifact metadata
+and checksums refer to their exact names and bytes. The updater and package tests
+use the same version-bound names; unversioned aliases are rejected.
+
+Source downloads come from GitHub's automatic archives of the corrected release
+tag. The separately uploaded source ZIP and its verification asset are retired.
+The dependency review reproduced all ten modified JUCE files from the tracked
+patch recipe, without missing local patches. See the [build instructions](build-and-release.md#building-from-github-source-downloads).
+
+Earlier sections below retain their original package names, source ZIP records
+and hashes as historical evidence. They do not identify this corrected delivery.
+Current identities and publication evidence are in
+`releases/v2.0.0/candidate-verification.json` and
+`out/release-naming-20261005/`. The MSI installation lifecycle is not repeated in
+the VM for this package-name correction.
+
+The Release build completed successfully. **24/24 native tests passed** in
+**132.97 seconds**, including exact versioned-name selection and rejection of
+aliases and version mismatches. **6/6 package-inspection scenarios passed** for
+the two new artifacts, signed helper verification, MSI metadata, stale staging
+rejection and prepare/apply/rollback of the actual portable ZIP. These checks do
+not repeat the earlier full portable-launch integration suite or VM installation.
+
 ## Documentation checkpoint: 2026-10-05
 
 The latest manual-use portable is **build 0040**, with the recording fixtures

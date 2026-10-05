@@ -5,23 +5,31 @@ $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $root = [IO.Path]::GetFullPath($PackageDirectory)
 if (!$root.StartsWith((Join-Path $repo 'out') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Package inspection requires a workspace output directory.' }
 $metadata = Get-Content -LiteralPath (Join-Path $root 'release-artifacts.json') -Raw | ConvertFrom-Json
+if ($ExpectedVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'ExpectedVersion must contain three numeric parts.' }
+$installerName = "LightHostModern-$ExpectedVersion-Setup.msi"
+$portableName = "LightHostModern-v$ExpectedVersion-Portable.zip"
+$expectedArtifacts = [ordered]@{ installed = $installerName; portable = $portableName }
 $results = [Collections.Generic.List[object]]::new()
 function Assert([bool] $Condition, [string] $Message) { if (!$Condition) { throw $Message } }
 function Scenario([string] $Name, [scriptblock] $Work) {
     try { & $Work; $results.Add([ordered]@{ name = $Name; status = 'passed' }) }
     catch { $results.Add([ordered]@{ name = $Name; status = 'failed'; error = $_.Exception.Message }) }
 }
-Scenario 'All three local artifacts match their published size and SHA-256 metadata' {
-    Assert ($metadata.formatVersion -eq 1 -and $metadata.artifacts.Count -eq 3) 'Invalid artifact metadata'
-    foreach ($artifact in $metadata.artifacts) {
-        $file = Get-Item -LiteralPath (Join-Path $root $artifact.name)
+Scenario 'Exactly two versioned artifacts match their published identity, size and SHA-256 metadata' {
+    Assert ($metadata.formatVersion -eq 1 -and @($metadata.artifacts).Count -eq 2) 'Expected exactly one versioned MSI and one versioned portable ZIP'
+    foreach ($kind in $expectedArtifacts.Keys) {
+        $name = $expectedArtifacts[$kind]
+        $matching = @($metadata.artifacts | Where-Object { $_.name -ceq $name -and $_.distribution -ceq $kind })
+        Assert ($matching.Count -eq 1) "Missing, duplicated or incorrectly named $kind artifact: $name"
+        $artifact = $matching[0]
+        $file = Get-Item -LiteralPath (Join-Path $root $name)
         Assert ($file.Length -eq $artifact.size -and $artifact.digest -eq ('sha256:' + (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant())) 'Artifact size or digest mismatch'
         Assert ($artifact.version -eq $ExpectedVersion -and $artifact.architecture -eq 'x64') 'Unexpected version or architecture'
     }
 }
 Scenario 'Versioned portable includes verified launcher, host, worker, WinUI, scanner and helper without fixtures' {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $root 'LightHostModern-Portable.zip'))
+    $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $root $portableName))
     try {
         $names = @($zip.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
         function Read-ZipText([string]$Path) {
@@ -63,7 +71,7 @@ Scenario 'Versioned portable includes verified launcher, host, worker, WinUI, sc
 }
 Scenario 'MSI preserves machine scope, upgrade identity, shortcuts and legacy migration' {
     $installer = New-Object -ComObject WindowsInstaller.Installer
-    $database = $installer.OpenDatabase((Join-Path $root 'LightHostModern-Setup.msi'), 0)
+    $database = $installer.OpenDatabase((Join-Path $root $installerName), 0)
     function Rows([string] $Query) {
         $view = $database.OpenView($Query); [void] $view.Execute()
         try { while ($record = $view.Fetch()) { $record.StringData(1) } } finally { [void] $view.Close() }
@@ -79,7 +87,6 @@ Scenario 'MSI preserves machine scope, upgrade identity, shortcuts and legacy mi
     Assert ($features -contains 'StartMenuShortcutFeature' -and $features -contains 'DesktopShortcutFeature') 'Shortcut features changed'
     $components = @(Rows 'SELECT `Component` FROM `Component`')
     Assert ($components -notcontains 'LegacyInstallCleanupComponent') 'Unsafe recursive legacy cleanup remains'
-    Assert ((Get-FileHash -LiteralPath (Join-Path $root "LightHostModern-$ExpectedVersion-Setup.msi")).Hash -eq (Get-FileHash -LiteralPath (Join-Path $root 'LightHostModern-Setup.msi')).Hash) 'Installer alias differs from versioned artifact'
     $actions = @(Rows 'SELECT `Action` FROM `CustomAction`')
     Assert ($actions -contains 'MigrateLegacyPayload') 'Verified post-commit legacy migration is missing'
     Assert ($actions -contains 'SetARPINSTALLLOCATION') 'MSI installation location is not recorded'
@@ -92,8 +99,10 @@ Scenario 'MSI preserves machine scope, upgrade identity, shortcuts and legacy mi
 Scenario 'The actual update helper accepts signed packages and refuses unsigned automatic installation' {
     $helper=Join-Path $repo 'out/build/windows-vs2022/LightHostModern_artefacts/Release/LightHostModernUpdateHelper.exe'
     foreach($kind in @('portable','installed')){
-        $name=if($kind -eq 'portable'){'LightHostModern-Portable.zip'}else{'LightHostModern-Setup.msi'}
-        $artifact=$metadata.artifacts|Where-Object name -eq $name
+        $name=$expectedArtifacts[$kind]
+        $matching=@($metadata.artifacts|Where-Object { $_.name -ceq $name -and $_.distribution -ceq $kind })
+        Assert ($matching.Count -eq 1) "Expected one $kind artifact for helper validation"
+        $artifact=$matching[0]
         $arguments=@('--mode','validate','--operation',('"'+$root+'"'),'--package',('"'+(Join-Path $root $name)+'"'),
             '--distribution',$kind,'--version',('v'+$ExpectedVersion),'--size',[string]$artifact.size,'--sha256',$artifact.digest)
         $p=Start-Process $helper -ArgumentList $arguments -WindowStyle Hidden -PassThru
@@ -129,7 +138,7 @@ Scenario 'Staging rejects a stale WinUI record before touching its destination' 
 }
 Scenario 'Production portable engine prepares and applies the real ZIP with transient test-only trust' {
     $runner=Join-Path $repo 'out/build/windows-vs2022/Release/LightHostModernUpdateTests.exe'
-    $p=Start-Process $runner -ArgumentList ('"'+(Join-Path $root 'LightHostModern-Portable.zip')+'"') -WorkingDirectory $root -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $root 'real-portable-apply.log') -RedirectStandardError (Join-Path $root 'real-portable-apply.error.log')
+    $p=Start-Process $runner -ArgumentList ('"'+(Join-Path $root $portableName)+'"') -WorkingDirectory $root -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $root 'real-portable-apply.log') -RedirectStandardError (Join-Path $root 'real-portable-apply.error.log')
     $null=$p.Handle
     Assert ($p.WaitForExit(180000)) 'Actual ZIP prepare/apply/rollback timed out; inspect the test process and log before continuing'
     Assert ($p.ExitCode -eq 0) 'Actual ZIP failed prepare/apply/rollback; see real-portable-apply.log'

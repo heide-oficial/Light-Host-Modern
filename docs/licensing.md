@@ -32,11 +32,11 @@ their stated open-source options; it does not claim that a commercial agreement
 has been purchased. No proprietary VST2 SDK is included with the XAYMAR provider.
 Selecting the separate `LEGACY` provider requires a fresh licensing and notice review.
 
-The build modifies its own JUCE source copy using `Utilities/PatchJuce.cmake`.
-`Utilities/Build Source.py` includes that script and the patched JUCE files from
-the selected build directory. This preserves the actual adapter changes used in
-the 2.0.0 build. An unmodified upstream archive by itself does not describe the
-code used in the application.
+The build modifies its own JUCE source copy using the tracked
+`Utilities/PatchJuce.cmake`. GitHub's source download includes that patch recipe,
+and CMake applies it after obtaining the pinned JUCE source. The tracked
+`ThirdParty/XaymarVST2JuceShim` supplies the VST2 adapter headers. These project
+changes are part of the source needed to rebuild the application.
 
 Microsoft libraries are not covered by the application's GNU grant. Their notices
 must stay with the distributed binaries, which must remain unmodified except where
@@ -58,53 +58,42 @@ inventory to identify deployed files and retain the applicable copied notices.
 
 ## Source delivery for a release
 
-The source download accompanying the binary release must match the actual build,
-including local fixes that were not in the preceding public tag. The release
-preparation records that identity and creates a source archive before publication.
-It must contain:
+The release uses GitHub's automatic **Source code (zip)** and **Source code
+(tar.gz)** downloads for the `v2.0.0` tag. The two application packages are the
+versioned MSI and portable ZIP; no separately uploaded source package or
+source-verification file is part of this layout. GitHub describes these downloads
+as [snapshots of the selected tag or commit](https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives).
 
-- Application and UI source, resources, build scripts, dependency declarations,
-  license texts and the JUCE patch script.
-- The pinned open-source dependencies used by the build, including required SDK
-  submodules, or another source-delivery arrangement that meets the applicable
-  license terms. A complete source bundle avoids depending solely on upstream
-  links remaining available.
-- Build instructions and the tool/dependency versions used. Any local dependency
-  override must be identified and its actual corresponding source included.
+The tagged repository contains application and UI source, resources, build scripts,
+dependency declarations, license texts, `PatchJuce.cmake` and the VST2 compatibility
+headers. Its CMake configuration fetches the public dependency revisions listed
+above, including VST3 submodules, and applies the JUCE patches automatically. NuGet
+restores the pinned Microsoft build/runtime packages separately under their own
+terms. Follow [Building from GitHub source downloads](build-and-release.md#building-from-github-source-downloads)
+for the required tools and build command.
 
-The current source helper writes `LightHostModern-2.0.0-Source.zip` and
-`source-verification.json` to a selected workspace output directory. Its embedded
-`source-manifest.json` identifies every included file by size and SHA-256 and
-records the base Git commit without treating that commit as the complete source
-identity. The script rereads and verifies the ZIP before finalizing it. See
-[Build and release](build-and-release.md#corresponding-source-archive) for the command.
+The automatic archive does not bundle the downloaded SDK trees or local dependency
+caches. Rebuilding requires access to the pinned public sources unless those caches
+have already been populated. Keep their source locations and revisions documented,
+and retain the applicable source-access and notice obligations when distributing
+binaries. This packaging choice does not change any component's license terms.
 
-The helper expects the documented dependency trees under `out/deps` and the
-patched JUCE copy under its selected `--build-directory`. It does not discover
-arbitrary dependency overrides automatically. Verify those inputs against the
-actual build before using its output as corresponding source. Later source or
-documentation edits require a refreshed snapshot; creating the source archive
-does not compile application binaries or prove that their object files came
-from that snapshot.
+The release tag must contain every project change and dependency patch used by the
+binary. Uncommitted local fixes are absent from GitHub's archive. Any additional
+dependency changes must be represented by tracked source or a tracked patch recipe;
+a dependency URL alone does not preserve local modifications. Record the resolved
+release commit when matching source and binaries, and compare the actual dependency
+overrides used by the build with the documented pins. An archive or notice review
+alone does not prove a successful rebuild or identical output bytes.
 
-The matching source archive must be made available with the binaries, with a clear
-download link and without an additional charge for access to the corresponding
-source. GitHub's automatically generated source archive alone does not include
-fetched dependencies, external submodules or uncommitted local fixes. A URL to the
-default branch is not a substitute for identifying the exact release source.
-
-A notice inventory alone does not validate a binary/source pair. Before publication, verify the
-source archive, final package inventory and retained notices together. Do not
-include private signing keys, credentials, user profiles or test-plugin binaries
-in either public artifact. The source ZIP excludes generated application binaries
-and build intermediates. Dependency source under the archive's `out/deps` is
-intentional. Test source and regression scripts are also retained
-for rebuilding and verification; runtime test profiles and recording fixtures
-are excluded by the project-path allowlist.
+`Build Source.py` and earlier source-snapshot records remain local maintenance and
+historical evidence. They are not an extra public download requirement for this
+layout. Private signing keys, credentials, user profiles, test-plugin binaries and
+build products must stay out of the tagged project source.
 
 `ThirdParty/Licenses/SOURCES.txt` records the copied-text paths, source locations
 and SHA-256 hashes. Compare those hashes when updating the inventory, and update
-the build pins, notices and source snapshot together when a dependency changes.
+the build pins, notices and tracked patches together when a dependency changes.
 The documented Microsoft Word-to-text extraction and separate SheenBidi
 attribution retain their recorded provenance.
 

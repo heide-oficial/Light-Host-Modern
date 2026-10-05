@@ -119,14 +119,12 @@ public:
             && !json.GetNamedBoolean(L"prerelease", false);
         candidate.artifact.distribution = distribution;
         if (candidate.available)
-          for (const auto& expectedName : { update::versionedArtifactName(distribution, candidate.version), update::artifactName(distribution) })
-          {
-            if (!candidate.artifactUrl.empty()) break;
+        {
             for (const auto& value : json.GetNamedArray(L"assets", ipc::JsonArray{}))
             {
                 if (value.ValueType() != ipc::JsonValueType::Object) continue;
                 const auto asset = value.GetObject();
-                if (asset.GetNamedString(L"name", L"") != expectedName) continue;
+                if (!update::artifactNameAllowed(distribution, candidate.version, std::wstring(asset.GetNamedString(L"name", L"")))) continue;
                 try {
                 auto& artifact = candidate.artifact;
                 artifact.name = asset.GetNamedString(L"name"); artifact.version = candidate.version;

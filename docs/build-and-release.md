@@ -145,19 +145,20 @@ images are retained in `docs/concepts/plugin-chain`.
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\Utilities\Build Release.ps1"
 ```
 
-Outputs:
+Release files:
 
 ```text
 releases\v2.0.0\LightHostModern-2.0.0-Setup.msi
-releases\v2.0.0\LightHostModern-Setup.msi  # identical compatibility alias
-releases\v2.0.0\LightHostModern-Portable.zip
+releases\v2.0.0\LightHostModern-v2.0.0-Portable.zip
 releases\v2.0.0\release-artifacts.json
-releases\v2.0.0\portable-verification.json
 releases\v2.0.0\update-manifest.json
 releases\v2.0.0\update-manifest.sig
+releases\v2.0.0\SHA256SUMS.txt
 ```
 
-The signed manifest pair is generated only when manifest signing is configured. Without it, packages support manual installation. `-OutputDirectory` can select a candidate directory under the workspace's `out` or `releases` tree. The source ZIP is produced separately by `Build Source.py`; a checksum summary and candidate review record are also separate release-preparation outputs.
+The MSI and versioned portable ZIP are the two application packages; no unversioned aliases are published. The manifest pair, `release-artifacts.json` and `SHA256SUMS.txt` are technical release files. GitHub provides the tag's source downloads automatically; no additional source ZIP or source-verification asset is part of this publication layout.
+
+The signed manifest pair is generated only when manifest signing is configured. Without it, packages support manual installation. `-OutputDirectory` can select a candidate directory under the workspace's `out` or `releases` tree. `portable-verification.json` and candidate review records remain local validation evidence.
 
 The MSI defaults to `%ProgramFiles%\LightHostModern` and supports an installer-selected destination. It uses a stable `UpgradeCode` and a major-upgrade relationship so newer MSI versions replace older ones. Its legacy per-user migration checks the registered location and backs up recognized payload files before removing them after installation commits; see the cleanup contract below.
 
@@ -178,36 +179,53 @@ Authenticode signing is optional and separate from update-manifest signing. Sett
 
 The update manifest uses the independent `LIGHTHOST_MANIFEST_SIGNING_THUMBPRINT`. The maintainer's RSA public key is embedded in `UpdateTrustKeys.h`; the release script resolves the certificate from the Windows store, checks that it matches this public key, signs the exact final package hashes, and verifies them using the rebuilt update helper. The maintainer confirmed an encrypted private-key backup on 2026-10-02. Private keys and backup passwords never belong in the repository or release assets.
 
-Publish `update-manifest.json` and `update-manifest.sig` together with the exact installer and ZIP whose hashes they contain. Repacking or signing a package afterward invalidates those hashes. `release-artifacts.json` and `portable-verification.json` record local verification; they do not replace the signed manifest. Initial migration from an older flat portable requires extracting the new distribution manually.
+Publish `update-manifest.json` and `update-manifest.sig` together with the exact installer and ZIP whose hashes they contain, plus `release-artifacts.json` and `SHA256SUMS.txt`. Renaming, repacking or signing a package requires regenerating the matching metadata, signature and checksums. `release-artifacts.json` and local `portable-verification.json` do not replace the signed manifest. Initial migration from an older flat portable requires extracting the new distribution manually.
 
 Both distributions include `LICENSE`, `THIRD-PARTY-NOTICES.txt` and the `Licenses` directory. The portable exposes these at its root and includes a versioned copy in its verified payload. See [Licensing and corresponding source](licensing.md) for the original grant, component inventory and source-delivery workflow.
 
 For 2.0.0 package revisions, completed checks, validation limits and publication details, see the [release validation record](release-2.0.0-validation.md) and [release notes](release-2.0.0-notes.md).
 
-## Corresponding-source archive
+## Building from GitHub source downloads
 
-After building the final candidate, prepare its source delivery with Python 3.9+:
+Download **Source code (zip)** or **Source code (tar.gz)** from the
+[`v2.0.0` release](https://github.com/heide-oficial/Light-Host-Modern/releases/tag/v2.0.0)
+and extract it into a writable folder. These are GitHub-generated snapshots of the
+tagged repository, including application/UI source, build scripts, notices and
+`Utilities/PatchJuce.cmake`. They do not contain the local `out/deps` cache, build
+products or Git history. See GitHub's [source archive documentation](https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives).
+
+Install the [requirements](#requirements), including Git, both Windows SDKs and
+the Visual Studio C++/WinUI/NuGet components. Open PowerShell in the extracted
+repository root and run:
 
 ```powershell
-python ".\Utilities\Build Source.py" --output-directory "out\source-release-2.0.0"
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\Utilities\Build Windows.ps1" -Configuration Release -EnableVst2 ON -Vst2Provider XAYMAR
 ```
 
-The script archives the actual working-tree source, resources, scripts and notices,
-plus JUCE, ASIO, VST3 (including its submodules) and Xaymar sources. It takes JUCE
-from the build-owned patched source directory and includes `PatchJuce.cmake` so
-local changes are retained. `source-manifest.json` records every file's size and
-SHA-256; the ZIP is reread and verified before it is finalized. The native sources
-are placed under `out/deps` in the extracted archive for the build helpers to find.
-Microsoft tools and NuGet packages are acquired separately under their own terms.
+A fresh extraction needs network access. CMake fetches JUCE, VST3 and ASIO at
+the commit IDs recorded in [Licensing and corresponding source](licensing.md),
+including the VST3 SDK's submodules. Xaymar v0.4.0 is fetched as an archive and
+checked against its pinned SHA-256. The WinUI helper restores the exact NuGet
+versions in `packages.config`. A Git checkout of LightHostModern itself is not
+required; Git is used to obtain the dependencies.
 
-The source ZIP captures working-tree contents, including uncommitted changes; a Git
-commit alone may not describe the packaged source. It excludes the local Git store,
-application profiles, private-key files and generated application binaries. Build
-timestamps/toolchains can affect output bytes, so this archive does not claim
-bit-for-bit reproducible executables. Publish the matching source ZIP beside the
-binary downloads and rebuild the snapshot if its source changes before publication.
+The CMake configuration applies the versioned `Utilities/PatchJuce.cmake` to its
+build-owned JUCE copy for both downloaded and cached sources. The tracked
+`ThirdParty/XaymarVST2JuceShim` supplies the VST2 adapter headers. There is no manual
+patch-copying step. Do not substitute an unpatched JUCE tree for the configured
+build copy. Existing `out/deps` caches are optional and take precedence when present;
+use a fresh extraction to avoid inheriting local dependency overrides.
 
-`Build Source.py` records the current worktree, not the time at which each object file was compiled. Build the application from the intended source first, and account for any later documentation-only changes when comparing candidates. The script refuses an existing source ZIP or partial ZIP in the selected output directory; choose a new candidate directory for a new snapshot. Use `--build-directory` when the patched JUCE tree belongs to a non-default native build.
+Use `Build Dev.ps1` for a runnable numbered portable, or install WiX and run
+`Build Release.ps1` to create the MSI and portable packages as described above.
+The application source and patch recipe must be committed in the release tag;
+GitHub's automatic downloads cannot include uncommitted edits. Record the resolved
+commit when comparing source to a binary. This workflow does not claim identical
+binary bytes across toolchains or build timestamps.
+
+`Build Source.py` remains available for local source snapshots and older validation
+records. Running it or uploading its output is not part of the current publication
+workflow.
 
 ## Application updates
 

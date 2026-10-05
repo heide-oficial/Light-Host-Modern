@@ -41,10 +41,14 @@ Changes compared with **v1.4.1**.
 
 ### 🔄 Migrating from 1.x to 2.0.0
 
-- **Installed version:** install the 2.0.0 MSI over your existing installation. Your settings are retained.
-- **Portable version:** extract the complete 2.0.0 ZIP into a new folder and launch the root `LightHostModern.exe`. Keep `versions/` intact; do not overwrite only the executable in the old portable folder. Settings remain in the existing user profile.
+- **Installed version:** install `LightHostModern-2.0.0-Setup.msi` over your existing installation. Your settings are retained.
+- **Portable version:** extract the complete `LightHostModern-v2.0.0-Portable.zip` into a new folder and launch the root `LightHostModern.exe`. Keep `versions/` intact; do not overwrite only the executable in the old portable folder. Settings remain in the existing user profile.
 - **Existing setup:** your current plugins become a **My plugins** profile. List keeps the familiar serial workflow; a new Chain starts without wires and needs connections before it passes audio.
 - Back up your settings before upgrading. New profiles and channel configurations cannot all be read by older versions; reinstalling an older app does not convert those settings back.
+
+If you downloaded the original unversioned 2.0.0 portable ZIP, download and extract the versioned package once. Its corrected updater recognizes the versioned packages used by future releases; the application version remains 2.0.0.
+
+For source, use GitHub's automatic **Source code (zip)** or **Source code (tar.gz)** downloads for this tag. The [build guide](https://github.com/heide-oficial/Light-Host-Modern/blob/v2.0.0/docs/build-and-release.md#building-from-github-source-downloads) explains the required tools, pinned dependency downloads and automatically applied JUCE patches.
 
 ### 🧪 Experimental process isolation
 

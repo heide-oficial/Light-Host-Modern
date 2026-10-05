@@ -2,6 +2,14 @@ param([string] $PackageDirectory = 'out/release-test-completion-g', [string] $Ou
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\Tests\HostProtocol.ps1"
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$packageMetadata = Get-Content -LiteralPath (Join-Path $PackageDirectory 'release-artifacts.json') -Raw | ConvertFrom-Json
+$portableArtifacts = @($packageMetadata.artifacts | Where-Object distribution -CEQ 'portable')
+if ($packageMetadata.formatVersion -ne 1 -or $portableArtifacts.Count -ne 1) { throw 'Expected one portable release artifact in package metadata.' }
+$portableArtifact = $portableArtifacts[0]
+$packageVersion = [string]$portableArtifact.version
+if ($packageVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'Portable release version must contain three numeric parts.' }
+$portableName = "LightHostModern-v$packageVersion-Portable.zip"
+if ($portableArtifact.name -cne $portableName -or $portableArtifact.architecture -ne 'x64') { throw 'Unexpected versioned portable artifact identity.' }
 $root = Join-Path $repo 'out\test-profiles'
 $testProfileName = 'ui-update-' + [guid]::NewGuid().ToString('N')
 $profile = Join-Path $root $testProfileName
@@ -9,18 +17,18 @@ $temp = Join-Path $profile 'Temp'
 $sourceDir = Join-Path $temp 'Source'
 New-Item -ItemType Directory -Path $sourceDir -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
-$sourceZip = Join-Path $sourceDir 'LightHostModern-Portable.zip'
-Copy-Item -LiteralPath (Join-Path $PackageDirectory 'LightHostModern-Portable.zip') -Destination $sourceZip
+$sourceZip = Join-Path $sourceDir $portableName
+Copy-Item -LiteralPath (Join-Path $PackageDirectory $portableName) -Destination $sourceZip
 $sourceInfo = Get-Item -LiteralPath $sourceZip
 $sourceDigest = 'sha256:' + (Get-FileHash -LiteralPath $sourceZip -Algorithm SHA256).Hash.ToLowerInvariant()
-$packageVersion = (Get-Content -LiteralPath (Join-Path $PackageDirectory 'release-artifacts.json') -Raw | ConvertFrom-Json).artifacts[0].version
+if ($sourceInfo.Length -ne $portableArtifact.size -or $sourceDigest -cne $portableArtifact.digest) { throw 'Portable package differs from release metadata.' }
 function Write-Fixture([bool] $CorruptDigest = $false) {
     $digest = if ($CorruptDigest) { 'sha256:' + ('0' * 64) } else { $sourceDigest }
     [ordered]@{
         tag_name = "v$packageVersion"; html_url = "https://github.com/heide-oficial/Light-Host-Modern/releases/tag/v$packageVersion"
         reportedCurrentVersion = '0.0.0'; localPackage = $sourceZip; chunkDelayMs = 20
-        assets = @(@{ name = 'LightHostModern-Portable.zip'; size = $sourceInfo.Length; digest = $digest
-            browser_download_url = "https://github.com/heide-oficial/Light-Host-Modern/releases/download/v$packageVersion/LightHostModern-Portable.zip" })
+        assets = @(@{ name = $portableName; size = $sourceInfo.Length; digest = $digest
+            browser_download_url = "https://github.com/heide-oficial/Light-Host-Modern/releases/download/v$packageVersion/$portableName" })
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $temp 'update-fixture.json') -Encoding UTF8
 }
 Write-Fixture
@@ -95,7 +103,7 @@ Scenario 'Completed ZIP is validated, offered to the user and keeps host and UI 
     UI @('wait-for', 'CancelUpdate', '--gone', '-t', '45000') | Out-Null
     $label = UI @('get-property', 'InstallUpdate', '-p', 'Name')
     if (($label | ConvertTo-Json) -notmatch 'Show downloaded ZIP') { throw 'Verified portable package was not offered.' }
-    $package = Get-ChildItem -LiteralPath (Join-Path $temp 'Updates') -Recurse -File -Filter 'LightHostModern-Portable.zip' | Select-Object -Last 1
+    $package = Get-ChildItem -LiteralPath (Join-Path $temp 'Updates') -Recurse -File -Filter $portableName | Select-Object -Last 1
     if (!$package -or ('sha256:' + (Get-FileHash -LiteralPath $package.FullName -Algorithm SHA256).Hash.ToLowerInvariant()) -ne $sourceDigest) { throw 'Downloaded ZIP content differs.' }
     $validation = Get-Content -LiteralPath (Join-Path $package.DirectoryName 'update-result.json') -Raw | ConvertFrom-Json
     if ($validation.state -ne 'validated') { throw 'Helper did not validate the ZIP.' }
